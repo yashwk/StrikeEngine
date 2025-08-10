@@ -1,0 +1,20 @@
+{
+  "name": "Target-Drone-A1",
+  "description": "Final profile with integrated signature definition.",
+  "simulation": {
+	"components_to_add": [
+	  "transform", "velocity", "mass", "inertia", "target_signature", "force_accumulator"
+	]
+  },
+  "mass_properties": {
+	"initial_kg": 500.0, "dry_kg": 500.0,
+	"inertia_tensor": [[100,0,0], [0,100,0], [0,0,100]]
+  },
+  "initial_state": {
+	"transform": {"position": [20000, 6381010, 0], "orientation": [0.7071,0,-0.7071,0]},
+	"velocity": {"linear": [-250,0,0], "angular": [0,0,0]}
+  },
+  "target_signature": {
+	"rcs_m2": 1.5
+  }
+}

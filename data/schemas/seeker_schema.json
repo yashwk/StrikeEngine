@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StrikeEngine Seeker Profile Schema",
+  "type": "object",
+  "properties": {
+	"part_id": { "type": "string" },
+	"name": { "type": "string" },
+	"description": { "type": "string" },
+	"properties": {
+	  "type": "object",
+	  "properties": {
+		"type": {
+		  "type": "string",
+		  "enum": ["RF", "IR", "IMAGING_INFRARED", "ACTIVE_LASER"]
+		},
+		"mode": {
+		  "type": "string",
+		  "enum": ["INACTIVE", "ACTIVE", "SEMI_ACTIVE", "PASSIVE"]
+		},
+		"field_of_view_deg": { "type": "number", "minimum": 0 },
+		"gimbal_limit_deg": { "type": "number", "minimum": 0 },
+		"gimbal_rate_limit_deg_per_sec": { "type": "number", "minimum": 0 },
+		"max_range_m": { "type": "number", "minimum": 0 },
+		"power_watts": { "type": "number", "minimum": 0 },
+		"antenna_gain_db": { "type": "number" },
+		"noise_figure_db": { "type": "number" },
+		"detection_threshold_db": { "type": "number" },
+		"radome_error_profile_id": { "type": "string" }
+	  },
+	  "required": [
+		"type", "mode", "field_of_view_deg", "max_range_m", "power_watts",
+		"antenna_gain_db", "noise_figure_db", "detection_threshold_db"
+	  ]
+	}
+  },
+  "required": ["part_id", "name", "properties"]
+}

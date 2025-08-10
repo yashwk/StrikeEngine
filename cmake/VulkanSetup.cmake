@@ -1,0 +1,4 @@
+find_package(Vulkan REQUIRED)
+
+set(VULKAN_INCLUDE_DIR ${Vulkan_INCLUDE_DIRS})
+set(VULKAN_LIBRARIES ${Vulkan_LIBRARIES})

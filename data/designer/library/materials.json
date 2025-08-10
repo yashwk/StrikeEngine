@@ -1,0 +1,31 @@
+{
+  "name": "StrikeEngine Standard Material Library",
+  "version": 1,
+  "materials": [
+	{
+	  "id": "aluminum_7075_t6",
+	  "name": "Aluminum 7075-T6",
+	  "density_kg_m3": 2810
+	},
+	{
+	  "id": "steel_4130",
+	  "name": "Steel, AISI 4130",
+	  "density_kg_m3": 7850
+	},
+	{
+	  "id": "titanium_6al_4v",
+	  "name": "Titanium Ti-6Al-4V",
+	  "density_kg_m3": 4430
+	},
+	{
+	  "id": "carbon_fiber_standard",
+	  "name": "Carbon Fiber Composite",
+	  "density_kg_m3": 1600
+	},
+	{
+	  "id": "polystyrene",
+	  "name": "Polystyrene",
+	  "density_kg_m3": 1050
+	}
+  ]
+}

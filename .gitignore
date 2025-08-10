@@ -1,0 +1,27 @@
+    # CMake build files and cache
+    cmake-build-*/
+    CMakeCache.txt
+    CMakeFiles/
+    Makefile
+    install_manifest.txt
+    compile_commands.json
+
+    # CLion IDE files
+    .idea/
+
+    # Visual Studio files
+    *.sln
+    *.vcxproj*
+    .vs/
+
+    # Compiled output
+    *.exe
+    *.dll
+    *.so
+    *.a
+    *.lib
+    *.obj
+    *.pdb
+
+    # Generated data files
+    *.bin

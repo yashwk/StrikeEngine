@@ -1,0 +1,53 @@
+{
+  "description": "U.S. Standard Atmosphere 1976 Model Layers",
+  "layers": [
+    {
+      "altitude_base": 0.0,
+      "temperature_base": 288.15,
+      "pressure_base": 101325.0,
+      "lapse_rate": -0.0065
+    },
+    {
+      "altitude_base": 11000.0,
+      "temperature_base": 216.65,
+      "pressure_base": 22632.1,
+      "lapse_rate": 0.0
+    },
+    {
+      "altitude_base": 20000.0,
+      "temperature_base": 216.65,
+      "pressure_base": 5474.89,
+      "lapse_rate": 0.001
+    },
+    {
+      "altitude_base": 32000.0,
+      "temperature_base": 228.65,
+      "pressure_base": 868.02,
+      "lapse_rate": 0.0028
+    },
+    {
+      "altitude_base": 47000.0,
+      "temperature_base": 270.65,
+      "pressure_base": 110.91,
+      "lapse_rate": 0.0
+    },
+    {
+      "altitude_base": 51000.0,
+      "temperature_base": 270.65,
+      "pressure_base": 66.94,
+      "lapse_rate": -0.0028
+    },
+    {
+      "altitude_base": 71000.0,
+      "temperature_base": 214.65,
+      "pressure_base": 3.96,
+      "lapse_rate": -0.002
+    },
+    {
+      "altitude_base": 84852.0,
+      "temperature_base": 186.95,
+      "pressure_base": 0.3734,
+      "lapse_rate": 0.0
+    }
+  ]
+}

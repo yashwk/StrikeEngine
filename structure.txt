@@ -1,0 +1,95 @@
+StrikeEngine/
+├── apps/
+│   ├── MissionCLI/
+│   ├── StrikeDesigner/
+│   └── StrikeSim/
+│
+├── cmake/
+│   └── VulkanSetup.cmake
+│
+├── data/
+│   ├── actuators/
+│   ├── aero/
+│   ├── config/
+│   ├── profiles/
+│   ├── propulsion/
+│   ├── scenarios/
+│   └── seekers/
+│
+├── docs/
+│
+├── external/
+│   ├── glm/
+│   └── nlohmann/
+│
+├── include/
+│   └── strikeengine/
+│       ├── atmosphere/
+│       │   ├── AtmosphereManager.hpp
+│       │   └── AtmosphereModel.hpp
+│       ├── components/  <-- MOVED HERE
+│       │   ├── guidance/
+│       │   │   ├── AutopilotCommandComponent.hpp
+│       │   │   ├── AutopilotStateComponent.hpp
+│       │   │   └── GuidanceComponent.hpp
+│       │   ├── physics/
+│       │   │   ├── AerodynamicProfileComponent.hpp
+│       │   │   ├── ControlSurfaceComponent.hpp
+│       │   │   ├── ForceAccumulatorComponent.hpp
+│       │   │   ├── IMUComponent.hpp
+│       │   │   ├── InertiaComponent.hpp
+│       │   │   ├── MassComponent.hpp
+│       │   │   ├── NavigationStateComponent.hpp
+│       │   │   ├── ThrustComponent.hpp
+│       │   │   └── VelocityComponent.hpp
+│       │   └── transform/
+│       │       └── TransformComponent.hpp
+│       ├── core/
+│       │   ├── Engine.hpp
+│       │   └── Profiler.hpp
+│       ├── ecs/
+│       │   ├── Component.hpp
+│       │   ├── Entity.hpp
+│       │   ├── Registry.hpp
+│       │   └── System.hpp
+│       ├── flight/
+│       │   └── AerodynamicsDatabase.hpp
+│       ├── simulation/
+│       │   ├── EntityFactory.hpp
+│       │   └── ScenarioRunner.hpp
+│       ├── systems/  <-- MOVED HERE
+│       │   ├── guidance/
+│       │   │   ├── ControlSystem.hpp
+│       │   │   └── GuidanceSystem.hpp
+│       │   └── physics/
+│       │       ├── AerodynamicsSystem.hpp
+│       │       ├── GravitySystem.hpp
+│       │       ├── IntegrationSystem.hpp
+│       │       └── PropulsionSystem.hpp
+│       └── utils/
+│           └── JsonGlm.hpp
+│
+├── src/
+│   ├── CMakeLists.txt
+│   └── strikeengine/
+│       ├── atmosphere/
+│       │   ├── AtmosphereManager.cpp
+│       │   └── AtmosphereModel.cpp
+│       ├── flight/
+│       │   └── AerodynamicsDatabase.cpp
+│       ├── simulation/
+│       │   ├── EntityFactory.cpp
+│       │   └── ScenarioRunner.cpp
+│       └── systems/
+│           ├── guidance/
+│           │   ├── ControlSystem.cpp
+│           │   └── GuidanceSystem.cpp
+│           └── physics/
+│               ├── AerodynamicsSystem.cpp
+│               ├── GravitySystem.cpp
+│               ├── IntegrationSystem.cpp
+│               └── PropulsionSystem.cpp
+│
+├── tests/
+│
+└── tools/

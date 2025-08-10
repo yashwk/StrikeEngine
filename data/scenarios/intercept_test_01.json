@@ -1,0 +1,22 @@
+{
+  "scenarioName": "High-Fidelity Intercept Test",
+  "description": "A single SAM with navigation error modeling attempts to intercept a non-maneuvering target drone.",
+  "simulation": {
+	"duration_s": 60.0,
+	"time_step_hz": 100.0
+  },
+  "entities": [
+	{
+	  "name": "Interceptor",
+	  "profile": "data/profiles/sa_missile_mk1.json"
+	},
+	{
+	  "name": "Target",
+	  "profile": "data/profiles/target_drone.json"
+	}
+  ],
+  "engagement": {
+	"shooter": "Interceptor",
+	"target": "Target"
+  }
+}

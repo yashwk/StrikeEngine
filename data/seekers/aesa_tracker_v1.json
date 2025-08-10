@@ -1,0 +1,18 @@
+{
+  "part_id": "aesa_tracker_v1",
+  "name": "AESA Tracking Seeker Model 1",
+  "description": "A standard X-band active electronically-scanned array seeker head.",
+  "properties": {
+	"type": "RF",
+	"mode": "ACTIVE",
+	"field_of_view_deg": 12.0,
+	"gimbal_limit_deg": 65.0,
+	"gimbal_rate_limit_deg_per_sec": 200.0,
+	"max_range_m": 30000.0,
+	"power_watts": 1200.0,
+	"antenna_gain_db": 32.0,
+	"noise_figure_db": 4.5,
+	"detection_threshold_db": 13.0,
+	"radome_error_profile_id": "radome_standard_mk1"
+  }
+}

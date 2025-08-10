@@ -1,0 +1,40 @@
+{
+  "name": "SA-Missile-Mk1-D (Nav-Enabled)",
+  "description": "Final profile with integrated seeker and IMU error model.",
+  "simulation": {
+	"components_to_add": [
+	  "transform", "mass", "inertia", "velocity", "propulsion", "aerodynamics",
+	  "guidance", "control_surfaces", "force_accumulator", "autopilot_command",
+	  "autopilot_state", "seeker", "imu", "navigation_state"
+	]
+  },
+  "mass_properties": {
+	"initial_kg": 150.0, "dry_kg": 50.0,
+	"inertia_tensor": [[10,0,0], [0,10,0], [0,0,0.5]]
+  },
+  "initial_state": {
+	"transform": {"position": [0, 6371010, 0], "orientation": [1,0,0,0]},
+	"velocity": {"linear": [0,0,0], "angular": [0,0,0]}
+  },
+  "aerodynamics": {
+	"profile_id": "sa_missile_mk1_aero", "reference_area_m2": 0.04
+  },
+  "propulsion": {
+	"stages": [
+	  {"name": "Booster", "stage_mass_kg": 70, "thrust_newtons": 40000, "burn_time_seconds": 3.5, "specific_impulse_seconds": 250},
+	  {"name": "Sustainer", "stage_mass_kg": 30, "thrust_newtons": 8000, "burn_time_seconds": 15, "specific_impulse_seconds": 220}
+	]
+  },
+  "guidance": {
+	"law": "ProportionalNavigation", "navigation_constant": 4.0
+  },
+  "seeker": {
+	"type": "RF", "field_of_view_deg": 10.0, "gimbal_limit_deg": 60.0, "max_range_m": 25000.0
+  },
+  "imu": {
+	"gyro_bias_drift_rate_deg_per_hr": 0.1,
+	"gyro_noise_density_deg_per_sqrt_hr": 0.01,
+	"accelerometer_bias_milli_g": 1.0,
+	"accelerometer_noise_density_g_per_sqrt_hz": 0.001
+  }
+}

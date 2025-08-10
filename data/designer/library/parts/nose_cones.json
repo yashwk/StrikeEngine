@@ -1,0 +1,28 @@
+{
+  "name": "Standard Nose Cone Library",
+  "version": 1,
+  "parts": [
+	{
+	  "part_id": "nc_ogive_50mm",
+	  "name": "50mm Ogive Nose Cone",
+	  "type": "NoseConePart",
+	  "material_id": "polystyrene",
+	  "geometry": {
+		"length": 0.2,
+		"base_radius": 0.025,
+		"shape": "OGIVE"
+	  }
+	},
+	{
+	  "part_id": "nc_conical_100mm_alu",
+	  "name": "100mm Conical Nose Cone (Aluminum)",
+	  "type": "NoseConePart",
+	  "material_id": "aluminum_7075_t6",
+	  "geometry": {
+		"length": 0.45,
+		"base_radius": 0.05,
+		"shape": "CONICAL"
+	  }
+	}
+  ]
+}
