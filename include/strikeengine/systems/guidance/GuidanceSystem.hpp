@@ -2,27 +2,58 @@
 
 #include "strikeengine/ecs/System.hpp"
 
-namespace StrikeEngine {
-    class Registry;
-}
+#include <glm/glm.hpp>
 
 namespace StrikeEngine {
-    /**
-     * @brief Implements guidance laws to steer entities towards their targets.
-     *
-     * This system is the core of an entity's autonomous decision-making. It reads
-     * the entity's current state, its target's state, and uses a specified
-     * guidance law (e.g., Proportional Navigation) to calculate a required
-     * acceleration command. This command is then written to the
-     * AutopilotCommandComponent for the ControlSystem to execute.
-     */
+
     class GuidanceSystem final : public System {
     public:
-        /**
-         * @brief Updates the system, calculating guidance commands for all guided entities.
-         * @param registry A reference to the ECS registry to access components.
-         * @param dt The time elapsed since the last frame (delta time), in seconds.
-         */
         void update(Registry& registry, double dt) override;
+
+    private:
+
+        /**
+         * @brief Calculates the acceleration command using Proportional Navigation (PN).
+         * @param missile_position The position of the missile.
+         * @param missile_velocity The velocity of the missile.
+         * @param target_position The position of the target.
+         * @param target_velocity The velocity of the target.
+         * @param navigation_constant The navigation gain (N).
+         * @return The commanded acceleration vector.
+         */
+        glm::dvec3 calculateProportionalNavigation(
+            const glm::dvec3& missile_position, const glm::dvec3& missile_velocity,
+            const glm::dvec3& target_position, const glm::dvec3& target_velocity,
+            double navigation_constant
+        );
+
+        /**
+         * @brief Calculates the acceleration command using Augmented Proportional Navigation (APN).
+         * @param missile_position The position of the missile.
+         * @param missile_velocity The velocity of the missile.
+         * @param target_position The position of the target.
+         * @param target_velocity The velocity of the target.
+         * @param target_acceleration The acceleration of the target.
+         * @param navigation_constant The navigation gain (N).
+         * @return The commanded acceleration vector.
+         */
+        glm::dvec3 calculateAugmentedProportionalNavigation(
+            const glm::dvec3& missile_position, const glm::dvec3& missile_velocity,
+            const glm::dvec3& target_position, const glm::dvec3& target_velocity, const glm::dvec3& target_acceleration,
+            double navigation_constant
+        );
+
+        /**
+         * @brief Calculates the acceleration command using Pure Pursuit (PP).
+         * @param missile_position The position of the missile.
+         * @param missile_velocity The velocity of the missile.
+         * @param target_position The position of the target.
+         * @return The commanded acceleration vector.
+         */
+        glm::dvec3 calculatePurePursuit(
+            const glm::dvec3& missile_position, const glm::dvec3& missile_velocity,
+            const glm::dvec3& target_position
+        );
     };
+
 } // namespace StrikeEngine

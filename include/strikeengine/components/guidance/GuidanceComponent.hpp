@@ -2,23 +2,26 @@
 
 #include "strikeengine/ecs/Component.hpp"
 #include "strikeengine/ecs/Entity.hpp"
-#include <string>
-
 namespace StrikeEngine {
+    enum class GuidanceLaw {
+        ProportionalNavigation,
+        AugmentedProportionalNavigation,
+        PurePursuit
+    };
 
     /**
      * @brief Configures and stores the state for a guided entity.
      *
      * This component identifies an entity as being capable of guidance and holds
      * the necessary parameters, such as its current target and the specific
-     * guidance law to employ.
+     * guidance law to be used.
      */
     struct GuidanceComponent final : public Component {
         /** @brief The unique ID of the entity this component is trying to intercept. */
         Entity targetEntity = NULL_ENTITY;
 
         /** @brief A string identifier for the guidance law (e.g., "ProportionalNavigation"). */
-        std::string law = "ProportionalNavigation";
+        GuidanceLaw law = GuidanceLaw::ProportionalNavigation;
 
         /**
          * @brief The navigation constant (N) for Proportional Navigation.

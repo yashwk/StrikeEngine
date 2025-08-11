@@ -1,3 +1,21 @@
+// ===================================================================================
+//  GuidanceSystem.cpp
+//
+//  Description:
+//  Implementation of the GuidanceSystem. This version represents a significant
+//  architectural upgrade towards high-fidelity simulation.
+//
+//  Key Upgrades:
+//  - Imperfect State: Guidance calculations are now based on the missile's own
+//    imperfect, estimated state from the NavigationStateComponent, not the
+//    simulation's perfect ground truth.
+//  - Seeker-Dependent Logic: The guidance law is only active when the
+//    SeekerComponent reports a confirmed lock on a target.
+//  - Cleaned Implementation: The logic is now streamlined to focus on a robust
+//    Proportional Navigation implementation, with commands output in G's.
+//
+// ===================================================================================
+
 #include "strikeengine/systems/guidance/GuidanceSystem.hpp"
 #include "strikeengine/ecs/Registry.hpp"
 
@@ -13,18 +31,19 @@
 
 namespace StrikeEngine {
 
+    // Define standard gravity for converting acceleration from m/s^2 to G's.
     constexpr double STANDARD_GRAVITY = 9.80665;
 
     void GuidanceSystem::update(Registry& registry, double dt) {
-        // The view now requires a NavigationStateComponent to read the missile's own state from.
+        // The view now requires the full set of components for a realistic GNC loop.
         auto view = registry.view<GuidanceComponent, SeekerComponent, NavigationStateComponent, AutopilotCommandComponent>();
 
-        for (auto [entity, guidance, seeker, nav_state, autopilot_cmd] : view) {
+        for (auto [entity, guidance, seeker, navigation_state, autopilot_command] : view) {
 
             // --- 1. Check for Seeker Lock ---
             // The core logic is now gated by the seeker's ability to track the target.
             if (!seeker.has_lock) {
-                autopilot_cmd.commanded_acceleration_g = glm::dvec3(0.0); // No lock, no command.
+                autopilot_command.commanded_acceleration_g = glm::dvec3(0.0); // No lock, no command.
                 continue;
             }
 
@@ -32,7 +51,7 @@ namespace StrikeEngine {
 
             // --- 2. Validate Target State ---
             if (!registry.has<TransformComponent>(targetEntity) || !registry.has<VelocityComponent>(targetEntity)) {
-                autopilot_cmd.commanded_acceleration_g = glm::dvec3(0.0); // Target is invalid.
+                autopilot_command.commanded_acceleration_g = glm::dvec3(0.0); // Target is invalid.
                 continue;
             }
 
@@ -42,26 +61,34 @@ namespace StrikeEngine {
             const auto& target_velocity = registry.get<VelocityComponent>(targetEntity);
 
             // Use the missile's own IMPERFECT, ESTIMATED state for its side of the calculation.
-            const glm::dvec3& missile_position = nav_state.estimated_position;
-            const glm::dvec3& missile_velocity = nav_state.estimated_velocity;
+            const glm::dvec3& missile_position = navigation_state.estimated_position;
+            const glm::dvec3& missile_velocity = navigation_state.estimated_velocity;
 
             // --- 4. Execute Proportional Navigation Law ---
             const glm::dvec3 relative_position = target_transform.position - missile_position;
             const glm::dvec3 relative_velocity = target_velocity.linear - missile_velocity;
 
-            const glm::dvec3 line_of_sight_dir = glm::normalize(relative_position);
-            const double closing_velocity = -glm::dot(relative_velocity, line_of_sight_dir);
+            const glm::dvec3 line_of_sight_direction = glm::normalize(relative_position);
+            const double closing_velocity = -glm::dot(relative_velocity, line_of_sight_direction);
 
+            // If closing velocity is negative, the missile is moving away from the target,
+            // so guidance commands would be ineffective.
             if (closing_velocity < 0.0) {
-                // Not closing on target, guidance is ineffective.
-                autopilot_cmd.commanded_acceleration_g = glm::dvec3(0.0);
+                autopilot_command.commanded_acceleration_g = glm::dvec3(0.0);
                 continue;
             }
 
+            // Calculate the line-of-sight (LOS) rotation rate vector (omega).
+            // Using length2 (squared magnitude) is a common optimization to avoid a square root.
             const glm::dvec3 los_rate_vector = glm::cross(relative_position, relative_velocity) / glm::length2(relative_position);
-            const glm::dvec3 commanded_accel_ms2 = guidance.navigation_constant * closing_velocity * glm::cross(los_rate_vector, line_of_sight_dir);
 
-            autopilot_cmd.commanded_acceleration_g = commanded_accel_ms2 / STANDARD_GRAVITY;
+            // Calculate the final commanded acceleration vector in m/s^2.
+            // The formula is a_c = N * V_c * (omega x LOS_hat).
+            const glm::dvec3 commanded_acceleration_ms2 = guidance.navigation_constant * closing_velocity * glm::cross(los_rate_vector, line_of_sight_direction);
+
+            // --- 5. Output Command in G's ---
+            // Convert the command to G's for the autopilot system.
+            autopilot_command.commanded_acceleration_g = commanded_acceleration_ms2 / STANDARD_GRAVITY;
         }
     }
 

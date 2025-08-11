@@ -1,9 +1,25 @@
+// ===================================================================================
+//  EntityFactory.cpp
+//
+//  Description:
+//  This file provides the implementation for the EntityFactory class. The primary
+//  responsibility of this factory is to parse JSON profile files and construct
+//  fully formed entities within the ECS registry. It acts as the central hub for
+//  translating data-driven definitions into live simulation objects, attaching
+//  all specified components and configuring their initial parameters.
+//
+//  This modular approach allows the engine to be highly extensible; new
+//  component types can be handled by simply adding a new parsing block to this
+//  factory without altering the core simulation logic.
+//
+// ===================================================================================
+
 #include "strikeengine/simulation/EntityFactory.hpp"
 #include "strikeengine/ecs/Registry.hpp"
 #include "strikeengine/utils/JsonGlm.hpp"
 #include "nlohmann/json.hpp"
 
-// Include all possible component headers
+// --- Include all component headers that the factory can create ---
 #include "strikeengine/components/transform/TransformComponent.hpp"
 #include "strikeengine/components/physics/MassComponent.hpp"
 #include "strikeengine/components/physics/InertiaComponent.hpp"
@@ -104,7 +120,16 @@ namespace StrikeEngine {
             else if (compName == "guidance") {
                 const auto& c = data.at("guidance");
                 GuidanceComponent guidance;
-                guidance.law = c.at("law").get<std::string>();
+
+                auto lawString = c.at("law").get<std::string>();
+                if (lawString == "AugmentedProportionalNavigation") {
+                    guidance.law = GuidanceLaw::AugmentedProportionalNavigation;
+                } else if (lawString == "PurePursuit") {
+                    guidance.law = GuidanceLaw::PurePursuit;
+                } else {
+                    guidance.law = GuidanceLaw::ProportionalNavigation;
+                }
+
                 guidance.navigation_constant = c.at("navigation_constant").get<double>();
                 _registry.add<GuidanceComponent>(newEntity, guidance);
             }
