@@ -1,88 +1,71 @@
 #include "strikeengine/systems/guidance/ControlSystem.hpp"
-#include "strikeengine/ecs/Registry.hpp"
 
-// Components needed for the autopilot
 #include "strikeengine/components/guidance/AutopilotCommandComponent.hpp"
 #include "strikeengine/components/guidance/AutopilotStateComponent.hpp"
 #include "strikeengine/components/physics/ControlSurfaceComponent.hpp"
-#include "strikeengine/components/physics/ForceAccumulatorComponent.hpp" // To get current acceleration
-#include "strikeengine/components/physics/MassComponent.hpp"
+#include "strikeengine/components/physics/NavigationStateComponent.hpp"
+#include "strikeengine/components/transform/TransformComponent.hpp"
+
+#include <glm/glm.hpp>
+#include <algorithm>
+
+#include "strikeengine/ecs/Registry.hpp"
 
 namespace StrikeEngine {
 
-    // PID Controller Gains (these would be loaded from a profile in a real system)
-    constexpr double Kp = 0.8;  // Proportional gain
-    constexpr double Ki = 0.2;  // Integral gain
-    constexpr double Kd = 0.1;  // Derivative gain
-
-    // Actuator Limits (also would be loaded from a profile)
-    constexpr double MAX_DEFLECTION_RAD = 0.35; // ~20 degrees
-    constexpr double MAX_RATE_RAD_PER_SEC = 5.0;
-
     void ControlSystem::update(Registry& registry, double dt) {
-        if (dt <= 0.0) return;
+        auto view = registry.view<AutopilotCommandComponent, AutopilotStateComponent, ControlSurfaceComponent, NavigationStateComponent, TransformComponent>();
 
+        for (auto [entity, command, state, fins, navigation, transform] : view) {
 
-        auto view = registry.view<AutopilotCommandComponent, AutopilotStateComponent, ControlSurfaceComponent, ForceAccumulatorComponent, MassComponent>();
+            // --- 1. Convert Commanded Acceleration to Body Frame ---
+            // The guidance command is in the world frame, but the autopilot works in the
+            // missile's local pitch/yaw frame. We must rotate the command vector.
+            glm::dvec3 commanded_accel_world = command.commanded_acceleration_g * 9.80665; // to m/s^2
+            glm::dvec3 commanded_accel_body = glm::inverse(transform.orientation) * commanded_accel_world;
 
-        for (auto [entity, cmd, state, fins, accumulator, mass] : view) {
+            // --- 2. Get Current State from Navigation ---
+            // We use the missile's own estimated acceleration as feedback for the PID loop.
+            glm::dvec3 current_accel_world = navigation.estimated_acceleration;
+            glm::dvec3 current_accel_body = glm::inverse(transform.orientation) * current_accel_world;
 
-            // --- 1. Calculate Current State & Error ---
+            // --- 3. PID Controller Logic (for Pitch and Yaw axes) ---
 
-            // Get the acceleration achieved in the *previous* frame from the force accumulator.
-            // This is our feedback signal. A = F/m
-            glm::dvec3 current_acceleration_g = (accumulator.totalForce * mass.inverseMass) / 9.80665;
+            // PITCH AXIS (controls vertical acceleration, body Y-axis)
+            double error_pitch = commanded_accel_body.y - current_accel_body.y;
+            state.integral_error_pitch += error_pitch * dt;
+            double derivative_pitch = (error_pitch - state.previous_error_pitch) / dt;
+            double pid_output_pitch = (state.kp * error_pitch) + (state.ki * state.integral_error_pitch) + (state.kd * derivative_pitch);
+            state.previous_error_pitch = error_pitch;
 
-            // The error is the difference between what guidance commanded and what we achieved.
-            glm::dvec3 error = cmd.commanded_acceleration_g - current_acceleration_g;
+            // YAW AXIS (controls horizontal acceleration, body Z-axis)
+            double error_yaw = commanded_accel_body.z - current_accel_body.z;
+            state.integral_error_yaw += error_yaw * dt;
+            double derivative_yaw = (error_yaw - state.previous_error_yaw) / dt;
+            double pid_output_yaw = (state.kp * error_yaw) + (state.ki * state.integral_error_yaw) + (state.kd * derivative_yaw);
+            state.previous_error_yaw = error_yaw;
 
-            // --- 2. PID Controller Logic ---
+            // The PID output is the *desired* fin deflection angle.
+            double desired_deflection_pitch = pid_output_pitch;
+            double desired_deflection_yaw = pid_output_yaw;
 
-            // Proportional term
-            glm::dvec3 p_term = Kp * error;
+            // --- 4. Apply Actuator Physical Limits ---
 
-            // Integral term (update stored integral error)
-            state.integral_error += error * dt;
-            glm::dvec3 i_term = Ki * state.integral_error;
+            // A. Clamp to Maximum Deflection Angle
+            desired_deflection_pitch = std::clamp(desired_deflection_pitch, -fins.max_deflection_rad, fins.max_deflection_rad);
+            desired_deflection_yaw = std::clamp(desired_deflection_yaw, -fins.max_deflection_rad, fins.max_deflection_rad);
 
-            // Derivative term (for now, we can simplify and omit this)
-            // A full implementation would need to store the previous error.
-            auto d_term = glm::dvec3(0.0);
+            // B. Clamp to Maximum Rate of Change
+            double max_change = fins.max_rate_rad_per_sec * dt;
 
-            // Total PID output
-            glm::dvec3 output = p_term + i_term + d_term;
+            double current_pitch = fins.current_deflection_rad_pitch;
+            fins.current_deflection_rad_pitch = std::clamp(desired_deflection_pitch, current_pitch - max_change, current_pitch + max_change);
 
-            // --- 3. Map PID Output to Fin Deflections ---
+            double current_yaw = fins.current_deflection_rad_yaw;
+            fins.current_deflection_rad_yaw = std::clamp(desired_deflection_yaw, current_yaw - max_change, current_yaw + max_change);
 
-            // This is a highly simplified mapping. A real autopilot would have complex
-            // logic to map desired pitch/yaw acceleration to specific fin movements.
-            // Here, we'll map Y-axis acceleration to a pitch fin and X-axis to a yaw fin.
-            glm::dvec4 desired_deflections_rad;
-            desired_deflections_rad.x = -output.y; // Pitch command
-            desired_deflections_rad.y = output.x;  // Yaw command
-            desired_deflections_rad.z = 0.0;       // Roll command (not implemented)
-            desired_deflections_rad.w = 0.0;
-
-            // Clamp the desired deflections to the physical limits of the fins.
-            desired_deflections_rad.x = std::clamp(desired_deflections_rad.x, -MAX_DEFLECTION_RAD, MAX_DEFLECTION_RAD);
-            desired_deflections_rad.y = std::clamp(desired_deflections_rad.y, -MAX_DEFLECTION_RAD, MAX_DEFLECTION_RAD);
-
-            // --- 4. Write to the ControlSurfaceComponent ---
-            // The ControlSystem writes the *target* deflections. It does not update the
-            // current deflections directly, as that would be instantaneous. Another system
-            // or this one would then have to model the actuator moving at a max rate.
-            // For now, we set the commanded deflections.
-            fins.commandedDeflections_rad = desired_deflections_rad;
-
-            // A more advanced implementation would also update the `currentDeflections_rad`
-            // by moving it towards the `commandedDeflections_rad` at the `MAX_RATE_RAD_PER_SEC`.
-            // For example:
-            glm::dvec4 delta = fins.commandedDeflections_rad - fins.currentDeflections_rad;
-            double max_change = MAX_RATE_RAD_PER_SEC * dt;
-            if (glm::length(delta) > max_change) {
-                delta = glm::normalize(delta) * max_change;
-            }
-            fins.currentDeflections_rad += delta;
+            // The AerodynamicsSystem will now read these final, limited deflection values
+            // to calculate the forces and torques on the airframe.
         }
     }
 

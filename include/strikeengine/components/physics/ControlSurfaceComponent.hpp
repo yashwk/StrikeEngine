@@ -1,30 +1,36 @@
 #pragma once
 
 #include "strikeengine/ecs/Component.hpp"
-#include <glm/glm.hpp>
 
 namespace StrikeEngine {
 
     /**
-     * @brief Stores the real-time state of an entity's control surface actuators.
-     *
-     * This component is intentionally lean, containing only the data that changes
-     * tick-by-tick. The physical limitations of the actuators (e.g., max deflection,
-     * max rate) are defined in data profiles and are managed by the ControlSystem.
-     * This keeps the component universal and applicable to any entity with actuators.
+     * @brief Holds the state and physical properties of an entity's control surfaces.
      */
-    struct ControlSurfaceComponent : public Component {
+    struct ControlSurfaceComponent final : public Component {
         /**
-         * @brief The current, actual deflection angle for each control surface, in radians.
-         * This value is updated by the ControlSystem to move towards the commanded state.
+         * @brief The maximum physical deflection angle of the control surfaces, in radians.
+         * This value is typically loaded from a vehicle's JSON profile.
          */
-        glm::dvec4 currentDeflections_rad{0.0};
+        double max_deflection_rad = 0.349; // Default to ~20 degrees
 
         /**
-         * @brief The target deflection angles commanded by the guidance logic, in radians.
-         * The ControlSystem reads this value and drives the currentDeflections towards it.
+         * @brief The maximum rotational speed of the control surface actuators, in radians per second.
+         * This value is typically loaded from a vehicle's JSON profile.
          */
-        glm::dvec4 commandedDeflections_rad{0.0};
+        double max_rate_rad_per_sec = 5.236; // Default to ~300 deg/s
+
+        /**
+         * @brief The current, actual deflection of the pitch control surface, in radians.
+         * This value is updated by the ControlSystem each frame.
+         */
+        double current_deflection_rad_pitch = 0.0;
+
+        /**
+         * @brief The current, actual deflection of the yaw control surface, in radians.
+         * This value is updated by the ControlSystem each frame.
+         */
+        double current_deflection_rad_yaw = 0.0;
     };
 
 } // namespace StrikeEngine

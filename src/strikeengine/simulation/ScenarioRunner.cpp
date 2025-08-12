@@ -14,7 +14,6 @@
 // Include the necessary components for setup
 #include "strikeengine/components/guidance/GuidanceComponent.hpp"
 #include "strikeengine/components/transform/TransformComponent.hpp" // For logging
-
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -27,6 +26,7 @@ namespace StrikeEngine {
         // Pre-initialize managers. This ensures they are ready before any system needs them.
         if (!_atmosphereManager.loadTable("data/atmosphere_table.bin")) {
             throw std::runtime_error("ScenarioRunner: CRITICAL - Failed to load atmosphere table on initialization.");
+
         }
     }
 

@@ -4,34 +4,46 @@
 #include <glm/glm.hpp>
 
 namespace StrikeEngine {
-
     /**
-     * @brief A temporary container to sum up all forces and torques applied to an
-     * entity within a single simulation tick.
+     * @brief Accumulates all forces and torques acting on an entity over a single frame.
      *
-     * This component is central to the force-based physics model. Each physics system
-     * (Gravity, Thrust, Drag, etc.) calculates its respective forces and torques
-     * and adds them to this component. The IntegrationSystem then reads the final
-     * totals to calculate the resulting linear and angular acceleration.
-     *
-     * The values in this component are cleared to zero at the end of each tick
-     * by the IntegrationSystem after the physics state has been updated.
+     * Physics systems (like Gravity, Propulsion, Aerodynamics, etc.) add their calculated
+     * forces and torques to this component. The IntegrationSystem then reads the
+     * final sum to calculate the accelerations for the frame.
      */
-    struct ForceAccumulatorComponent : public Component {
-        /** @brief The vector sum of all forces applied this tick, in Newtons (N). */
+    struct ForceAccumulatorComponent final : public Component {
+        /** @brief The vector sum of all linear forces acting on the entity's center of mass. */
         glm::dvec3 totalForce{0.0};
 
-        /** @brief The vector sum of all torques applied this tick, in Newton meters (N·m). */
+        /** @brief The vector sum of all torques acting on the entity. */
         glm::dvec3 totalTorque{0.0};
 
         /**
-         * @brief Resets the accumulated forces and torques to zero.
-         * Called by the IntegrationSystem at the end of a physics update.
+         * @brief Adds a linear force to the accumulator.
+         * @param force The force vector to add, in Newtons.
          */
-        void clear() {
+        void addForce(const glm::dvec3& force)
+        {
+            totalForce += force;
+        }
+
+        /**
+         * @brief Adds a torque to the accumulator.
+         * @param torque The torque vector to add, in Newton meters.
+         */
+        void addTorque(const glm::dvec3& torque)
+        {
+            totalTorque += torque;
+        }
+
+        /**
+         * @brief Resets both the total force and total torque to zero.
+         * This should be called by the IntegrationSystem at the end of each frame.
+         */
+        void clear()
+        {
             totalForce = glm::dvec3(0.0);
             totalTorque = glm::dvec3(0.0);
         }
     };
-
 } // namespace StrikeEngine

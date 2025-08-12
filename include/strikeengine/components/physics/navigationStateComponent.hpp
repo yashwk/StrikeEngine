@@ -16,6 +16,7 @@ namespace StrikeEngine {
     struct NavigationStateComponent final : public Component {
         glm::dvec3 estimated_position{0.0};
         glm::dvec3 estimated_velocity{0.0};
+        glm::dvec3 estimated_acceleration{0.0};
         glm::dquat estimated_orientation{1.0, 0.0, 0.0, 0.0};
 
         bool is_initialized = false;

@@ -1,66 +1,86 @@
 #include "strikeengine/systems/physics/PropulsionSystem.hpp"
-#include "strikeengine/ecs/Registry.hpp"
+#include "strikeengine/atmosphere/AtmosphereManager.hpp"
 #include "strikeengine/components/physics/PropulsionComponent.hpp"
-#include "strikeengine/components/physics/MassComponent.hpp"
 #include "strikeengine/components/transform/TransformComponent.hpp"
 #include "strikeengine/components/physics/ForceAccumulatorComponent.hpp"
+#include "strikeengine/components/physics/MassComponent.hpp"
 
-#include <glm/gtc/quaternion.hpp>
-#include <iostream>
+#include <algorithm>
 
 namespace StrikeEngine {
 
-    constexpr double STANDARD_GRAVITY = 9.80665; // m/s^2
+    // Helper function to perform linear interpolation on the thrust curve
+    double getThrustFromCurve(double currentTime, const std::vector<ThrustDataPoint>& curve) {
+        if (curve.empty()) return 0.0;
+        if (currentTime <= curve.front().first) return curve.front().second;
+        if (currentTime >= curve.back().first) return curve.back().second;
+
+        auto it = std::lower_bound(curve.begin(), curve.end(), currentTime,
+            [](const ThrustDataPoint& p, double time) { return p.first < time; });
+
+        const auto& p2 = *it;
+        const auto& p1 = *(--it);
+
+        double t1 = p1.first, thrust1 = p1.second;
+        double t2 = p2.first, thrust2 = p2.second;
+        double fraction = (currentTime - t1) / (t2 - t1);
+        return thrust1 + fraction * (thrust2 - thrust1);
+    }
+
+    PropulsionSystem::PropulsionSystem(const AtmosphereManager& atmosphereManager)
+        : _atmosphereManager(atmosphereManager) {}
+
+    PropulsionSystem::~PropulsionSystem() = default;
 
     void PropulsionSystem::update(Registry& registry, double dt) {
-        auto view = registry.view<PropulsionComponent, MassComponent, TransformComponent, ForceAccumulatorComponent>();
+        if (!_atmosphereManager.isLoaded()) { return; }
 
-        for (auto [entity, propulsion, mass, transform, accumulator] : view) {
-            if (!propulsion.active) {
+        auto view = registry.view<PropulsionComponent, TransformComponent, ForceAccumulatorComponent, MassComponent>();
+
+        for (auto [entity, propulsion, transform, accumulator, mass] : view) {
+            if (!propulsion.active || propulsion.currentStageIndex < 0 || propulsion.currentStageIndex >= propulsion.stages.size()) {
                 continue;
             }
 
-            // --- 1. Handle Stage Activation ---
-            if (propulsion.currentStageIndex == -1) {
-                propulsion.currentStageIndex = 0; // Activate the first stage
-                std::cout << "Activating stage 0: " << propulsion.stages[0].name << std::endl;
-            }
-
-            if (propulsion.currentStageIndex >= propulsion.stages.size()) {
-                propulsion.active = false; // All stages have been burned
-                continue;
-            }
-
-            // --- 2. Process Active Stage ---
             auto& currentStage = propulsion.stages[propulsion.currentStageIndex];
-            propulsion.timeInCurrentStage_seconds += dt;
 
-            // Check for burnout
-            if (propulsion.timeInCurrentStage_seconds > currentStage.burnTime_seconds) {
-                // Stage is spent. Jettison its mass (casing).
-                // A more complex model would distinguish between propellant and casing mass.
-                // For now, we assume the entire stage mass is gone.
+            if (propulsion.timeInCurrentStage_seconds >= currentStage.burnTime_seconds) {
                 mass.currentMass_kg -= currentStage.stage_mass_kg;
                 mass.updateInverseMass();
-                std::cout << "Stage " << currentStage.name << " burnout. Jettisoning mass." << std::endl;
-
-                // Advance to the next stage
                 propulsion.currentStageIndex++;
                 propulsion.timeInCurrentStage_seconds = 0.0;
-                continue; // Continue to the next frame to process the new stage
+                if (propulsion.currentStageIndex >= propulsion.stages.size()) {
+                    propulsion.active = false;
+                }
+                continue;
             }
 
-            // --- 3. Apply Thrust and Consume Fuel ---
-            glm::dvec3 thrust_direction_world = transform.orientation * glm::dvec3(0, 0, 1);
-            glm::dvec3 thrust_force = glm::normalize(thrust_direction_world) * currentStage.thrust_newtons;
-            accumulator.totalForce += thrust_force;
+            double currentThrust = getThrustFromCurve(propulsion.timeInCurrentStage_seconds, currentStage.thrust_curve);
 
-            if (currentStage.specificImpulse_seconds > 1e-6) {
-                double mass_flow_rate = currentStage.thrust_newtons / (currentStage.specificImpulse_seconds * STANDARD_GRAVITY);
-                double mass_consumed = mass_flow_rate * dt;
-                mass.currentMass_kg -= mass_consumed;
-                mass.updateInverseMass();
+            if (currentThrust > 0.0) {
+                glm::dvec3 thrustDirection = transform.orientation * glm::dvec3(1.0, 0.0, 0.0); // Assuming X is forward
+                glm::dvec3 thrustForce = thrustDirection * currentThrust;
+                accumulator.addForce(thrustForce);
+
+                // --- NEW: Calculate Fuel Consumption with Atmospheric Effects ---
+                const double altitude = glm::length(transform.position); // Approximation
+                const double ambient_pressure_pa = _atmosphereManager.getProperties(altitude).pressure;
+                const double sea_level_pressure_pa = 101325.0;
+
+                // Interpolate Isp based on pressure
+                double pressure_fraction = std::clamp(ambient_pressure_pa / sea_level_pressure_pa, 0.0, 1.0);
+                double current_isp = currentStage.isp_vacuum_s + (currentStage.isp_sea_level_s - currentStage.isp_vacuum_s) * pressure_fraction;
+
+                // Fuel flow rate = Thrust / (Isp * g0)
+                const double g0 = 9.80665;
+                if (current_isp > 0) {
+                    double fuelFlowRate = currentThrust / (current_isp * g0);
+                    mass.currentMass_kg -= fuelFlowRate * dt;
+                    mass.updateInverseMass();
+                }
             }
+
+            propulsion.timeInCurrentStage_seconds += dt;
         }
     }
 

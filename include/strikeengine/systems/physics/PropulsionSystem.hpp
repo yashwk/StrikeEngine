@@ -1,23 +1,40 @@
+// ===================================================================================
+//  PropulsionSystem.hpp
+//
+//  Description:
+//  This header defines the PropulsionSystem.
+//
+//  Architectural Upgrade:
+//  The system now requires an AtmosphereManager to calculate atmospheric effects
+//  on engine performance (Isp).
+//
+// ===================================================================================
+
 #pragma once
 
 #include "strikeengine/ecs/System.hpp"
+#include "strikeengine/ecs/Registry.hpp"
 
+// Forward declaration
 namespace StrikeEngine {
-    class Registry;
+    class AtmosphereManager;
 }
 
 namespace StrikeEngine {
 
-    /**
-     * @brief Manages multi-stage propulsion, stage transitions, and fuel consumption.
-     *
-     * This system handles the complex logic of multi-stage engines. It activates
-     * stages in sequence, applies the correct thrust for the active stage, models
-     * fuel consumption, and handles the jettisoning of mass when a stage is spent.
-     */
     class PropulsionSystem final : public System {
     public:
+        /**
+         * @brief Constructs the system, requiring an atmosphere manager.
+         * @param atmosphereManager A reference to the simulation's atmosphere manager.
+         */
+        PropulsionSystem(const AtmosphereManager& atmosphereManager);
+        ~PropulsionSystem() override;
+
         void update(Registry& registry, double dt) override;
+
+    private:
+        const AtmosphereManager& _atmosphereManager;
     };
 
 } // namespace StrikeEngine
