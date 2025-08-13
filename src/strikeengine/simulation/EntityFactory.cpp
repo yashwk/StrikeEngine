@@ -29,6 +29,19 @@ namespace StrikeEngine {
 
     using json = nlohmann::json;
 
+    // Helper function to parse a single GainSchedule from a JSON object
+    void parseGainSchedule(const json& j, GainSchedule& schedule) {
+        if (j.contains("mach_breakpoints")) {
+            j.at("mach_breakpoints").get_to(schedule.mach_breakpoints);
+        }
+        if (j.contains("dynamic_pressure_breakpoints_pa")) {
+            j.at("dynamic_pressure_breakpoints_pa").get_to(schedule.dynamic_pressure_breakpoints_pa);
+        }
+        if (j.contains("gain_table")) {
+            j.at("gain_table").get_to(schedule.gain_table);
+        }
+    }
+
     EntityFactory::EntityFactory(Registry& registry) : _registry(registry) {}
 
     Entity EntityFactory::createFromProfile(const std::string& profilePath) {
@@ -50,6 +63,7 @@ namespace StrikeEngine {
         const auto& componentsToAdd = data.at("simulation").at("components_to_add");
 
         for (const std::string& componentName : componentsToAdd) {
+            // ... (All other component parsing logic remains the same) ...
             if (componentName == "transform") {
                 const auto& c = data.at("initial_state").at("transform");
                 TransformComponent transform;
@@ -83,17 +97,13 @@ namespace StrikeEngine {
             else if (componentName == "propulsion") {
                 const auto& c = data.at("propulsion");
                 auto& propulsion = _registry.add<PropulsionComponent>(newEntity);
-
                 for (const auto& stage_data : c.at("stages")) {
                     PropulsionStage stage;
                     stage.name = stage_data.at("name").get<std::string>();
                     stage.stage_mass_kg = stage_data.at("stage_mass_kg").get<double>();
                     stage.burnTime_seconds = stage_data.at("burnTime_seconds").get<double>();
-
-                    // --- NEW: Parse the sea-level and vacuum Isp values ---
                     stage.isp_sea_level_s = stage_data.value("isp_sea_level_s", 0.0);
                     stage.isp_vacuum_s = stage_data.value("isp_vacuum_s", 0.0);
-
                     if (stage_data.contains("thrust_curve")) {
                         for (const auto& point : stage_data.at("thrust_curve")) {
                             if (point.is_array() && point.size() == 2) {
@@ -103,7 +113,6 @@ namespace StrikeEngine {
                     }
                     propulsion.stages.push_back(stage);
                 }
-
                 propulsion.active = c.value("active", false);
                 if (propulsion.active && !propulsion.stages.empty()) {
                     propulsion.currentStageIndex = 0;
@@ -119,7 +128,7 @@ namespace StrikeEngine {
             else if (componentName == "guidance") {
                 const auto& c = data.at("guidance");
                 GuidanceComponent guidance;
-                std::string lawString = c.at("law").get<std::string>();
+                auto lawString = c.at("law").get<std::string>();
                 if (lawString == "AugmentedProportionalNavigation") {
                     guidance.law = GuidanceLaw::AugmentedProportionalNavigation;
                 } else if (lawString == "PurePursuit") {
@@ -174,10 +183,18 @@ namespace StrikeEngine {
             const auto& autopilot_data = data.at("autopilot");
             if (_registry.has<AutopilotStateComponent>(newEntity)) {
                 auto& autopilot_state = _registry.get<AutopilotStateComponent>(newEntity);
-                autopilot_state.kp = autopilot_data.value("kp", 0.8);
-                autopilot_state.ki = autopilot_data.value("ki", 0.2);
-                autopilot_state.kd = autopilot_data.value("kd", 0.1);
+
+                if (autopilot_data.contains("kp_schedule")) {
+                    parseGainSchedule(autopilot_data.at("kp_schedule"), autopilot_state.kp_schedule);
+                }
+                if (autopilot_data.contains("ki_schedule")) {
+                    parseGainSchedule(autopilot_data.at("ki_schedule"), autopilot_state.ki_schedule);
+                }
+                if (autopilot_data.contains("kd_schedule")) {
+                    parseGainSchedule(autopilot_data.at("kd_schedule"), autopilot_state.kd_schedule);
+                }
             }
+
             if (_registry.has<ControlSurfaceComponent>(newEntity)) {
                 auto& control_surface = _registry.get<ControlSurfaceComponent>(newEntity);
                 double max_deflection_deg = autopilot_data.value("max_deflection_deg", 20.0);
