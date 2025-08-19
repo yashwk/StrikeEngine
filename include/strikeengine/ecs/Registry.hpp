@@ -4,7 +4,7 @@
 #include "Entity.hpp"
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
+#include <unordered_set> // Swapped from vector for performance
 #include <memory>
 #include <typeindex>
 #include <stdexcept>
@@ -15,12 +15,14 @@
 
 namespace StrikeEngine {
 
+    // --- Component Pool Interface (unchanged) ---
     class IComponentPool {
     public:
         virtual ~IComponentPool() = default;
         virtual void removeFor(Entity entity) = 0;
     };
 
+    // --- Templated Component Pool (unchanged) ---
     template<typename T>
     class ComponentPool final : public IComponentPool {
     public:
@@ -69,21 +71,26 @@ namespace StrikeEngine {
         std::unordered_map<size_t, Entity> _indexToEntityMap{};
     };
 
+    // --- Registry (Updated) ---
     class Registry {
     public:
         Entity createEntity() {
             const Entity newEntity{_nextEntityId++};
-            _active_entities.insert(newEntity);
+            _active_entities.insert(newEntity); // Use insert for set
             return newEntity;
         }
 
         void destroyEntity(const Entity entity) {
+            // Notify pools to remove components
             for (const auto &pool: _componentPools | std::views::values) {
                 pool->removeFor(entity);
             }
+            // Erase from the set (much faster than std::erase on vector)
             _active_entities.erase(entity);
         }
 
+        // --- NEW METHOD ---
+        // Checks if an entity handle is currently active and valid.
         [[nodiscard]] bool isValid(Entity entity) const {
             return _active_entities.contains(entity);
         }
@@ -130,7 +137,9 @@ namespace StrikeEngine {
         template<typename... ComponentTypes>
         auto view() {
             std::vector<std::tuple<Entity, ComponentTypes&...>> result;
+            // Iterate over the set of active entities
             for (const auto entity : _active_entities) {
+                // The fold expression `(... && ...)` checks if all components exist for the entity
                 if ((has<ComponentTypes>(entity) && ...)) {
                     result.emplace_back(entity, get<ComponentTypes>(entity)...);
                 }
@@ -156,7 +165,7 @@ namespace StrikeEngine {
         }
 
         uint32_t _nextEntityId = 0;
-        std::unordered_set<Entity> _active_entities;
+        std::unordered_set<Entity> _active_entities; // Changed from vector
         std::unordered_map<std::type_index, std::unique_ptr<IComponentPool>> _componentPools;
     };
 
