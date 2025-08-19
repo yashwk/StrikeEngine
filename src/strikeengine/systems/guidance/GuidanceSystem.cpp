@@ -1,21 +1,3 @@
-// ===================================================================================
-//  GuidanceSystem.cpp
-//
-//  Description:
-//  Implementation of the GuidanceSystem. This version represents a significant
-//  architectural upgrade towards high-fidelity simulation.
-//
-//  Key Upgrades:
-//  - Imperfect State: Guidance calculations are now based on the missile's own
-//    imperfect, estimated state from the NavigationStateComponent, not the
-//    simulation's perfect ground truth.
-//  - Seeker-Dependent Logic: The guidance law is only active when the
-//    SeekerComponent reports a confirmed lock on a target.
-//  - Cleaned Implementation: The logic is now streamlined to focus on a robust
-//    Proportional Navigation implementation, with commands output in G's.
-//
-// ===================================================================================
-
 #include "strikeengine/systems/guidance/GuidanceSystem.hpp"
 #include "strikeengine/ecs/Registry.hpp"
 
@@ -68,8 +50,8 @@ namespace StrikeEngine {
             const glm::dvec3 relative_position = target_transform.position - missile_position;
             const glm::dvec3 relative_velocity = target_velocity.linear - missile_velocity;
 
-            const glm::dvec3 line_of_sight_direction = glm::normalize(relative_position);
-            const double closing_velocity = -glm::dot(relative_velocity, line_of_sight_direction);
+            const glm::dvec3 los_direction = glm::normalize(relative_position);
+            const double closing_velocity = -glm::dot(relative_velocity, los_direction);
 
             // If closing velocity is negative, the missile is moving away from the target,
             // so guidance commands would be ineffective.
@@ -84,7 +66,7 @@ namespace StrikeEngine {
 
             // Calculate the final commanded acceleration vector in m/s^2.
             // The formula is a_c = N * V_c * (omega x LOS_hat).
-            const glm::dvec3 commanded_acceleration_ms2 = guidance.navigation_constant * closing_velocity * glm::cross(los_rate_vector, line_of_sight_direction);
+            const glm::dvec3 commanded_acceleration_ms2 = guidance.navigation_constant * closing_velocity * glm::cross(los_rate_vector, los_direction);
 
             // --- 5. Output Command in G's ---
             // Convert the command to G's for the autopilot system.

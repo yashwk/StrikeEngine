@@ -20,7 +20,7 @@ namespace StrikeEngine {
         /**
          * @brief The reference area (in m^2) used in aerodynamic force calculations.
          */
-        double referenceArea_m2 = 1.0;
+        double reference_area_m2 = 1.0;
 
         /**
          * @brief The wingspan of the vehicle (in meters), used for ground effect calculations.
@@ -33,17 +33,17 @@ namespace StrikeEngine {
         /**
          * @brief The current angle of attack (AoA) in radians.
          */
-        double currentAngleOfAttack_rad = 0.0;
+        double current_angle_of_attack_rad = 0.0;
 
         /**
          * @brief The current sideslip angle (Beta) in radians.
          */
-        double currentSideslipAngle_rad = 0.0;
+        double current_sideslip_angle_rad = 0.0;
 
         /**
          * @brief The current Mach number (speed / speed of sound).
          */
-        double currentMachNumber = 0.0;
+        double current_mach_number = 0.0;
     };
 
 } // namespace StrikeEngine

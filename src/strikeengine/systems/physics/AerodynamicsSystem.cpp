@@ -42,8 +42,8 @@ namespace StrikeEngine {
          // --- 2. Calculate Current Flight Conditions ---
          if (glm::length2(velocity.linear) < 1e-6)
          {
-            aero.currentAngleOfAttack_rad = 0.0;
-            aero.currentMachNumber = 0.0;
+            aero.current_angle_of_attack_rad = 0.0;
+            aero.current_mach_number = 0.0;
             continue;
          }
 
@@ -53,15 +53,15 @@ namespace StrikeEngine {
          const double altitude_from_center = glm::length(transform.position);
          const AtmosphereProperties atmosphere = _atmosphereManager.getProperties(altitude_from_center);
          const double speed = glm::length(velocity.linear);
-         aero.currentMachNumber = speed / atmosphere.speedOfSound;
+         aero.current_mach_number = speed / atmosphere.speedOfSound;
 
-         const glm::dvec3 velocity_dir = glm::normalize(velocity.linear);
-         const glm::dvec3 body_forward_dir = glm::normalize(transform.orientation * glm::dvec3(0, 0, 1));
-         aero.currentAngleOfAttack_rad = acos(
-            glm::clamp(glm::dot(velocity_dir, body_forward_dir), -1.0, 1.0));
+         const glm::dvec3 velocity_direction = glm::normalize(velocity.linear);
+         const glm::dvec3 body_forward_direction = glm::normalize(transform.orientation * glm::dvec3(0, 0, 1));
+         aero.current_angle_of_attack_rad = acos(
+            glm::clamp(glm::dot(velocity_direction, body_forward_direction), -1.0, 1.0));
 
          // --- 3. Look Up Base Aerodynamic Coefficients ---
-         auto [base_Cl, base_Cd] = aeroDB->getCoefficients(aero.currentMachNumber, aero.currentAngleOfAttack_rad);
+         auto [base_Cl, base_Cd] = aeroDB->getCoefficients(aero.current_mach_number, aero.current_angle_of_attack_rad);
 
          // --- 4. Ground Effect Calculation ---
          double lift_multiplier = 1.0;
@@ -70,7 +70,7 @@ namespace StrikeEngine {
          const double altitude_agl = transform.position.y; // Approximation for AGL
          const double wingspan = aero.wingspan_m;
 
-         // Ground effect is significant when altitude is less than twice the wingspan.
+         // The ground effect is significant when altitude is less than twice the wingspan.
          if (altitude_agl > 0 && altitude_agl < (2.0 * wingspan))
          {
             // Use a standard engineering approximation for ground effect.
@@ -85,20 +85,20 @@ namespace StrikeEngine {
 
          // --- 5. Calculate Final Forces ---
          const double dynamic_pressure = 0.5 * atmosphere.density * speed * speed;
-         const double lift_magnitude = final_Cl * dynamic_pressure * aero.referenceArea_m2;
-         const double drag_magnitude = final_Cd * dynamic_pressure * aero.referenceArea_m2;
+         const double lift_magnitude = final_Cl * dynamic_pressure * aero.reference_area_m2;
+         const double drag_magnitude = final_Cd * dynamic_pressure * aero.reference_area_m2;
 
-         glm::dvec3 drag_force = -velocity_dir * drag_magnitude;
+         glm::dvec3 drag_force = -velocity_direction * drag_magnitude;
 
          // This is a correct calculation for the lift vector direction
-         glm::dvec3 body_up_dir = glm::normalize(transform.orientation * glm::dvec3(0, 1, 0));
-         glm::dvec3 lift_dir = glm::normalize(
-            glm::cross(glm::cross(velocity_dir, body_up_dir), velocity_dir));
-         glm::dvec3 lift_force = lift_dir * lift_magnitude;
+         glm::dvec3 body_up_direction = glm::normalize(transform.orientation * glm::dvec3(0, 1, 0));
+         glm::dvec3 lift_direction = glm::normalize(
+            glm::cross(glm::cross(velocity_direction, body_up_direction), velocity_direction));
+         glm::dvec3 lift_force = lift_direction * lift_magnitude;
 
          // --- 6. Add Forces to Accumulator ---
-         accumulator.totalForce += drag_force;
-         accumulator.totalForce += lift_force;
+         accumulator.addForce(drag_force);
+         accumulator.addForce(lift_force);
       }
    }
 } // namespace StrikeEngine

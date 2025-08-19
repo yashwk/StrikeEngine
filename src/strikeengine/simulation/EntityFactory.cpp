@@ -1,3 +1,16 @@
+// ===================================================================================
+//  EntityFactory.cpp
+//
+//  Description:
+//  This file provides the full implementation for the EntityFactory class.
+//
+//  Architectural Upgrade:
+//  The factory has been updated to parse the new components required for the
+//  infrared (IR/IIR) sensor simulation: InfraredSeekerComponent and
+//  InfraredSignatureComponent.
+//
+// ===================================================================================
+
 #include "strikeengine/simulation/EntityFactory.hpp"
 #include "strikeengine/ecs/Registry.hpp"
 #include "strikeengine/utils/JsonGlm.hpp"
@@ -20,6 +33,10 @@
 #include "strikeengine/components/metadata/TargetComponent.hpp"
 #include "strikeengine/components/physics/IMUComponent.hpp"
 #include "strikeengine/components/physics/NavigationStateComponent.hpp"
+#include "strikeengine/components/metadata/RCSProfileComponent.hpp"
+#include "strikeengine/components/guidance/AntennaComponent.hpp"
+#include "strikeengine/components/sensors/InfraredSeekerComponent.hpp"
+#include "strikeengine/components/metadata/InfraredSignatureComponent.hpp"
 
 #include <fstream>
 #include <stdexcept>
@@ -63,7 +80,6 @@ namespace StrikeEngine {
         const auto& componentsToAdd = data.at("simulation").at("components_to_add");
 
         for (const std::string& componentName : componentsToAdd) {
-            // ... (All other component parsing logic remains the same) ...
             if (componentName == "transform") {
                 const auto& c = data.at("initial_state").at("transform");
                 TransformComponent transform;
@@ -128,7 +144,7 @@ namespace StrikeEngine {
             else if (componentName == "guidance") {
                 const auto& c = data.at("guidance");
                 GuidanceComponent guidance;
-                auto lawString = c.at("law").get<std::string>();
+                std::string lawString = c.at("law").get<std::string>();
                 if (lawString == "AugmentedProportionalNavigation") {
                     guidance.law = GuidanceLaw::AugmentedProportionalNavigation;
                 } else if (lawString == "PurePursuit") {
@@ -147,6 +163,39 @@ namespace StrikeEngine {
                 seeker.gimbal_limit_deg = c.at("gimbal_limit_deg").get<double>();
                 seeker.max_range_m = c.at("max_range_m").get<double>();
                 _registry.add<SeekerComponent>(newEntity, seeker);
+            }
+            else if (componentName == "rcs_profile") {
+                if (data.contains("rcs_profile")) {
+                    const auto& c = data.at("rcs_profile");
+                    auto& rcs = _registry.add<RCSProfileComponent>(newEntity);
+                    rcs.profile_path = c.at("profile_path").get<std::string>();
+                }
+            }
+            else if (componentName == "antenna") {
+                if (data.contains("antenna")) {
+                    const auto& c = data.at("antenna");
+                    auto& antenna = _registry.add<AntennaComponent>(newEntity);
+                    antenna.transmitter_power_W = c.value("transmitter_power_W", 10000.0);
+                    antenna.antenna_gain_dB = c.value("antenna_gain_dB", 30.0);
+                    antenna.wavelength_m = c.value("wavelength_m", 0.03);
+                    antenna.noise_floor_W = c.value("noise_floor_W", 1e-12);
+                    antenna.snr_threshold_dB = c.value("snr_threshold_dB", 13.0);
+                }
+            }
+            else if (componentName == "infrared_seeker") {
+                if (data.contains("infrared_seeker")) {
+                    const auto& c = data.at("infrared_seeker");
+                    auto& ir_seeker = _registry.add<InfraredSeekerComponent>(newEntity);
+                    ir_seeker.sensitivity_W = c.value("sensitivity_W", 1e-15);
+                    ir_seeker.field_of_view_deg = c.value("field_of_view_deg", 4.0);
+                }
+            }
+            else if (componentName == "infrared_signature") {
+                if (data.contains("infrared_signature")) {
+                    const auto& c = data.at("infrared_signature");
+                    auto& ir_sig = _registry.add<InfraredSignatureComponent>(newEntity);
+                    ir_sig.profile_path = c.at("profile_path").get<std::string>();
+                }
             }
             else if (componentName == "target_signature") {
                 const auto& c = data.at("target_signature");
@@ -183,7 +232,6 @@ namespace StrikeEngine {
             const auto& autopilot_data = data.at("autopilot");
             if (_registry.has<AutopilotStateComponent>(newEntity)) {
                 auto& autopilot_state = _registry.get<AutopilotStateComponent>(newEntity);
-
                 if (autopilot_data.contains("kp_schedule")) {
                     parseGainSchedule(autopilot_data.at("kp_schedule"), autopilot_state.kp_schedule);
                 }
@@ -194,7 +242,6 @@ namespace StrikeEngine {
                     parseGainSchedule(autopilot_data.at("kd_schedule"), autopilot_state.kd_schedule);
                 }
             }
-
             if (_registry.has<ControlSurfaceComponent>(newEntity)) {
                 auto& control_surface = _registry.get<ControlSurfaceComponent>(newEntity);
                 double max_deflection_deg = autopilot_data.value("max_deflection_deg", 20.0);

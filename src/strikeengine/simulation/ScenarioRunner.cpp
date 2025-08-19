@@ -2,7 +2,6 @@
 #include "strikeengine/simulation/EntityFactory.hpp"
 #include "nlohmann/json.hpp"
 
-// Include all systems required for a full simulation
 #include "strikeengine/systems/guidance/SensorSystem.hpp"
 #include "strikeengine/systems/guidance/GuidanceSystem.hpp"
 #include "strikeengine/systems/guidance/ControlSystem.hpp"
@@ -11,9 +10,8 @@
 #include "strikeengine/systems/physics/AerodynamicsSystem.hpp"
 #include "strikeengine/systems/physics/IntegrationSystem.hpp"
 
-// Include the necessary components for setup
 #include "strikeengine/components/guidance/GuidanceComponent.hpp"
-#include "strikeengine/components/transform/TransformComponent.hpp" // For logging
+#include "strikeengine/components/transform/TransformComponent.hpp"
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -30,11 +28,10 @@ namespace StrikeEngine {
         }
     }
 
-    ScenarioRunner::~ScenarioRunner() {}
+    ScenarioRunner::~ScenarioRunner() = default;
 
     void ScenarioRunner::initializeSystems() {
         _systems.clear();
-        // The order in which systems are added is CRITICAL for correct data flow.
         // 1. GNC systems run first to generate commands for the current frame.
         _systems.push_back(std::make_unique<SensorSystem>());
         _systems.push_back(std::make_unique<GuidanceSystem>());

@@ -1,17 +1,3 @@
-// ===================================================================================
-//  NavigationSystem.cpp
-//
-//  Description:
-//  Final implementation of the NavigationSystem with a GPS/INS Kalman filter.
-//
-//  Architectural Upgrade:
-//  This version resolves the final TODOs by implementing:
-//  1. A full noise and bias simulation for the IMU measurements.
-//  2. A process noise matrix (Q) in the Kalman filter's predict step to
-//     prevent filter overconfidence and improve robustness.
-//
-// ===================================================================================
-
 #include "strikeengine/systems/guidance/NavigationSystem.hpp"
 #include "strikeengine/components/physics/IMUComponent.hpp"
 #include "strikeengine/components/sensors/GPSComponent.hpp"
@@ -55,13 +41,13 @@ namespace StrikeEngine {
             return result;
         }
         glm::dmat3 invert(const glm::dmat3& m) {
-            double det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-            if (std::abs(det) < 1e-10) { throw std::runtime_error("Matrix is singular and cannot be inverted."); }
-            double invdet = 1.0 / det;
+            double determinant = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+            if (std::abs(determinant) < 1e-10) { throw std::runtime_error("Matrix is singular and cannot be inverted."); }
+            double  inverse_determinant = 1.0 / determinant;
             glm::dmat3 inv;
-            inv[0][0] = (m[1][1] * m[2][2] - m[2][1] * m[1][2]) * invdet; inv[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * invdet; inv[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * invdet;
-            inv[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * invdet; inv[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * invdet; inv[1][2] = (m[1][0] * m[0][2] - m[0][0] * m[1][2]) * invdet;
-            inv[2][0] = (m[1][0] * m[2][1] - m[2][0] * m[1][1]) * invdet; inv[2][1] = (m[2][0] * m[0][1] - m[0][0] * m[2][1]) * invdet; inv[2][2] = (m[0][0] * m[1][1] - m[1][0] * m[0][1]) * invdet;
+            inv[0][0] = (m[1][1] * m[2][2] - m[2][1] * m[1][2]) *  inverse_determinant; inv[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) *  inverse_determinant; inv[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) *  inverse_determinant;
+            inv[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) *  inverse_determinant; inv[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) *  inverse_determinant; inv[1][2] = (m[1][0] * m[0][2] - m[0][0] * m[1][2]) *  inverse_determinant;
+            inv[2][0] = (m[1][0] * m[2][1] - m[2][0] * m[1][1]) *  inverse_determinant; inv[2][1] = (m[2][0] * m[0][1] - m[0][0] * m[2][1]) *  inverse_determinant; inv[2][2] = (m[0][0] * m[1][1] - m[1][0] * m[0][1]) *  inverse_determinant;
             return inv;
         }
     }
@@ -82,13 +68,13 @@ namespace StrikeEngine {
         std::random_device rd;
         std::mt19937 gen(rd());
 
-        for (auto [entity, imu, nav_state, transform, accumulator, mass] : view) {
+        for (auto [entity, imu, navigation_state, transform, accumulator, mass] : view) {
 
             // --- 1. Simulate and Process IMU Data ---
             // Get the "perfect" ground truth acceleration for this frame.
             glm::dvec3 ground_truth_acceleration = accumulator.totalForce * mass.inverseMass;
 
-            const double g_to_ms2 = 9.80665;
+            constexpr double g_to_ms2 = 9.80665;
             double accel_noise_std_dev = imu.accelerometer_noise_density_g_per_sqrt_hz * g_to_ms2 / sqrt(dt);
             std::normal_distribution<> accel_noise_dist(0, accel_noise_std_dev);
 
@@ -115,10 +101,10 @@ namespace StrikeEngine {
             }
 
             // --- 4. Update the NavigationStateComponent ---
-            nav_state.estimated_position = {_state_estimate[0], _state_estimate[1], _state_estimate[2]};
-            nav_state.estimated_velocity = {_state_estimate[3], _state_estimate[4], _state_estimate[5]};
+            navigation_state.estimated_position = {_state_estimate[0], _state_estimate[1], _state_estimate[2]};
+            navigation_state.estimated_velocity = {_state_estimate[3], _state_estimate[4], _state_estimate[5]};
             // The estimated acceleration is the last (noisy) measurement from the IMU
-            nav_state.estimated_acceleration = imu_measured_acceleration;
+            navigation_state.estimated_acceleration = imu_measured_acceleration;
         }
     }
 
@@ -145,7 +131,7 @@ namespace StrikeEngine {
         double dt2 = dt * dt;
         double dt3 = dt2 * dt;
         double dt4 = dt3 * dt;
-        double noise_variance = 0.1; // This is a tuning parameter
+        double noise_variance = 0.1; // tunable
 
         KalmanCovarianceMatrix Q{};
         Q[0][0] = Q[1][1] = Q[2][2] = dt4 / 4.0 * noise_variance;
@@ -159,7 +145,6 @@ namespace StrikeEngine {
     }
 
     void NavigationSystem::update(const glm::dvec3& gps_position, double gps_error) {
-        // ... (The update step remains the same as before) ...
         std::array<std::array<double, 6>, 3> H{};
         H[0][0] = H[1][1] = H[2][2] = 1.0;
         glm::dmat3 R = glm::dmat3(1.0) * (gps_error * gps_error);

@@ -4,6 +4,7 @@
 #include "Entity.hpp"
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <typeindex>
 #include <stdexcept>
@@ -72,7 +73,7 @@ namespace StrikeEngine {
     public:
         Entity createEntity() {
             const Entity newEntity{_nextEntityId++};
-            _entities.push_back(newEntity);
+            _active_entities.insert(newEntity);
             return newEntity;
         }
 
@@ -80,35 +81,44 @@ namespace StrikeEngine {
             for (const auto &pool: _componentPools | std::views::values) {
                 pool->removeFor(entity);
             }
-            std::erase(_entities, entity);
+            _active_entities.erase(entity);
+        }
+
+        [[nodiscard]] bool isValid(Entity entity) const {
+            return _active_entities.contains(entity);
         }
 
         template<typename T, typename... Args>
         T& add(Entity entity, Args&&... args) {
+            assert(isValid(entity) && "Attempting to add component to an invalid entity.");
             static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
             return getPool<T>().add(entity, T{std::forward<Args>(args)...});
         }
 
         template<typename T>
         void remove(Entity entity) {
+            assert(isValid(entity) && "Attempting to remove component from an invalid entity.");
             static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
             getPool<T>().removeFor(entity);
         }
 
         template<typename T>
         T& get(Entity entity) {
+            assert(isValid(entity) && "Attempting to get component from an invalid entity.");
             static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
             return getPool<T>().get(entity);
         }
 
         template<typename T>
         const T& get(Entity entity) const {
+            assert(isValid(entity) && "Attempting to get component from an invalid entity.");
             static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
             return getPool<T>().get(entity);
         }
 
         template<typename T>
         [[nodiscard]] bool has(Entity entity) const {
+            if (!isValid(entity)) return false;
             static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
             const auto it = _componentPools.find(std::type_index(typeid(T)));
             if (it == _componentPools.end()) return false;
@@ -120,7 +130,7 @@ namespace StrikeEngine {
         template<typename... ComponentTypes>
         auto view() {
             std::vector<std::tuple<Entity, ComponentTypes&...>> result;
-            for (const auto entity : _entities) {
+            for (const auto entity : _active_entities) {
                 if ((has<ComponentTypes>(entity) && ...)) {
                     result.emplace_back(entity, get<ComponentTypes>(entity)...);
                 }
@@ -146,7 +156,7 @@ namespace StrikeEngine {
         }
 
         uint32_t _nextEntityId = 0;
-        std::vector<Entity> _entities;
+        std::unordered_set<Entity> _active_entities;
         std::unordered_map<std::type_index, std::unique_ptr<IComponentPool>> _componentPools;
     };
 

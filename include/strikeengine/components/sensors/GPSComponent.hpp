@@ -18,7 +18,7 @@ namespace StrikeEngine {
          * @brief The accuracy of the GPS position fix, in meters. This represents
          * the 1-sigma standard deviation of the position error.
          */
-        double position_error_m = 3.0;
+        double position_error_m = 0.1;
 
         /**
          * @brief An internal timer used by the NavigationSystem to track when the

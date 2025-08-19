@@ -1,11 +1,11 @@
 #pragma once
 
 #include "strikeengine/atmosphere/AtmosphereModel.hpp"
+#include "strikeengine/components/sensors/InfraredSeekerComponent.hpp" // For IRWavelengthBand enum
 #include <string>
 #include <vector>
 
 namespace StrikeEngine {
-
     /**
      * @brief Manages loading and querying of atmospheric data.
      *
@@ -32,13 +32,22 @@ namespace StrikeEngine {
         [[nodiscard]] AtmosphereProperties getProperties(double altitude) const;
 
         /**
+         * @brief Gets the atmospheric transmissivity for a given path.
+         * @param range_m The length of the path through the atmosphere.
+         * @param altitude_m The altitude of the sensor.
+         * @param band The IR wavelength band of the sensor.
+         * @return The transmissivity factor (0.0 to 1.0).
+         */
+        [[nodiscard]] static double getTransmissivity(double range_m, double altitude_m, IRWavelengthBand band) ;
+
+        /**
          * @brief Checks if the data table has been successfully loaded.
          * @return True if the table is loaded and ready for use.
          */
-         [[nodiscard]] bool isLoaded() const;
+        [[nodiscard]] bool isLoaded() const;
 
     private:
         std::vector<AtmosphereProperties> _table;
+        // Future: Add data structures to hold transmissivity lookup tables.
     };
-
 } // namespace StrikeEngine
