@@ -1,48 +1,62 @@
 #pragma once
 
-#include "Component.hpp"
 #include "Entity.hpp"
+#include <utility>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set> // Swapped from vector for performance
 #include <memory>
-#include <typeindex>
+#include <typeinfo>
 #include <stdexcept>
-#include <algorithm>
-#include <cassert>
+#include <iostream>
+#include <deque>
 #include <ranges>
-#include <tuple>
 
 namespace StrikeEngine {
 
-    // --- Component Pool Interface (unchanged) ---
+    // --- Component Pool (Interface) ---
     class IComponentPool {
     public:
         virtual ~IComponentPool() = default;
-        virtual void removeFor(Entity entity) = 0;
+        virtual void onEntityDestroyed(Entity entity) = 0;
     };
 
-    // --- Templated Component Pool (unchanged) ---
+    // --- Component Pool (Implementation) ---
     template<typename T>
     class ComponentPool final : public IComponentPool {
     public:
-        T& add(const Entity entity, T component) {
-            assert(!_entityToIndexMap.contains(entity) && "Component already exists on entity.");
-            const size_t newIndex = _components.size();
+        T& add(Entity entity, T component) {
+            if (_entityToIndexMap.contains(entity)) {
+                _components[_entityToIndexMap[entity]] = component;
+                return _components[_entityToIndexMap[entity]];
+            }
+            size_t newIndex = _components.size();
             _entityToIndexMap[entity] = newIndex;
             _indexToEntityMap[newIndex] = entity;
-            _components.push_back(std::move(component));
+            _components.push_back(component);
             return _components.back();
         }
 
-        void removeFor(const Entity entity) override {
-            if (!_entityToIndexMap.contains(entity)) return;
+        T& get(Entity entity) {
+            if (!_entityToIndexMap.contains(entity)) {
+                throw std::runtime_error("Component not found for entity.");
+            }
+            return _components[_entityToIndexMap[entity]];
+        }
 
-            size_t indexOfRemoved = _entityToIndexMap.at(entity);
+        [[nodiscard]] bool has(Entity entity) const {
+            return _entityToIndexMap.contains(entity);
+        }
+
+        void onEntityDestroyed(Entity entity) override {
+            if (!_entityToIndexMap.contains(entity)) {
+                return;
+            }
+            // Efficiently remove a component by swapping with the last element
+            size_t indexOfRemoved = _entityToIndexMap[entity];
             size_t indexOfLast = _components.size() - 1;
-            const Entity entityOfLast = _indexToEntityMap.at(indexOfLast);
+            Entity entityOfLast = _indexToEntityMap[indexOfLast];
 
-            _components[indexOfRemoved] = std::move(_components[indexOfLast]);
+            _components[indexOfRemoved] = _components[indexOfLast];
             _entityToIndexMap[entityOfLast] = indexOfRemoved;
             _indexToEntityMap[indexOfRemoved] = entityOfLast;
 
@@ -51,122 +65,147 @@ namespace StrikeEngine {
             _components.pop_back();
         }
 
-        T& get(const Entity entity) {
-            assert(_entityToIndexMap.contains(entity) && "Component does not exist on entity.");
-            return _components.at(_entityToIndexMap.at(entity));
-        }
-
-        const T& get(const Entity entity) const {
-             assert(_entityToIndexMap.contains(entity) && "Component does not exist on entity.");
-            return _components.at(_entityToIndexMap.at(entity));
-        }
-
-        [[nodiscard]] bool has(const Entity entity) const {
-            return _entityToIndexMap.contains(entity);
+        [[nodiscard]] std::vector<Entity> getEntities() const {
+            std::vector<Entity> entities;
+            entities.reserve(_entityToIndexMap.size());
+            for(const auto& entity : _entityToIndexMap | std::views::keys) {
+                entities.push_back(entity);
+            }
+            return entities;
         }
 
     private:
         std::vector<T> _components;
-        std::unordered_map<Entity, size_t> _entityToIndexMap{};
-        std::unordered_map<size_t, Entity> _indexToEntityMap{};
+        std::unordered_map<Entity, size_t> _entityToIndexMap;
+        std::unordered_map<size_t, Entity> _indexToEntityMap;
     };
 
-    // --- Registry (Updated) ---
+
+    // --- Registry ---
     class Registry {
     public:
-        Entity createEntity() {
-            const Entity newEntity{_nextEntityId++};
-            _active_entities.insert(newEntity); // Use insert for set
-            return newEntity;
-        }
-
-        void destroyEntity(const Entity entity) {
-            // Notify pools to remove components
-            for (const auto &pool: _componentPools | std::views::values) {
-                pool->removeFor(entity);
+        Entity create() {
+            uint32_t index;
+            if (!_freeList.empty()) {
+                index = _freeList.front();
+                _freeList.pop_front();
+            } else {
+                index = _nextEntityIndex++;
+                if (index >= _entityVersions.size()) {
+                    _entityVersions.resize(index + 1, 1);
+                }
             }
-            // Erase from the set (much faster than std::erase on vector)
-            _active_entities.erase(entity);
+            return {index, _entityVersions[index]};
         }
 
-        // --- NEW METHOD ---
-        // Checks if an entity handle is currently active and valid.
-        [[nodiscard]] bool isValid(Entity entity) const {
-            return _active_entities.contains(entity);
+        void destroy(Entity entity) {
+            uint32_t index = entity.index();
+            if (index >= _entityVersions.size() || _entityVersions[index] != entity.version()) {
+                return; // Entity is already invalid
+            }
+            _entityVersions[index]++; // Invalidate all existing handles
+            _freeList.push_back(index);
+
+            // Notify all component pools to remove their data for this entity
+            for (const auto& pool : _componentPools | std::views::values) {
+                pool->onEntityDestroyed(entity);
+            }
+        }
+
+        [[nodiscard]] bool isAlive(Entity entity) const {
+            uint32_t index = entity.index();
+            return index < _entityVersions.size() && _entityVersions[index] == entity.version();
         }
 
         template<typename T, typename... Args>
         T& add(Entity entity, Args&&... args) {
-            assert(isValid(entity) && "Attempting to add component to an invalid entity.");
-            static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-            return getPool<T>().add(entity, T{std::forward<Args>(args)...});
-        }
-
-        template<typename T>
-        void remove(Entity entity) {
-            assert(isValid(entity) && "Attempting to remove component from an invalid entity.");
-            static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-            getPool<T>().removeFor(entity);
+            if (!isAlive(entity)) {
+                throw std::runtime_error("Cannot add component to a dead entity.");
+            }
+            return getComponentPool<T>()->add(entity, T{std::forward<Args>(args)...});
         }
 
         template<typename T>
         T& get(Entity entity) {
-            assert(isValid(entity) && "Attempting to get component from an invalid entity.");
-            static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-            return getPool<T>().get(entity);
-        }
-
-        template<typename T>
-        const T& get(Entity entity) const {
-            assert(isValid(entity) && "Attempting to get component from an invalid entity.");
-            static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-            return getPool<T>().get(entity);
-        }
-
-        template<typename T>
-        [[nodiscard]] bool has(Entity entity) const {
-            if (!isValid(entity)) return false;
-            static_assert(std::is_base_of_v<Component, T>, "T must inherit from Component");
-            const auto it = _componentPools.find(std::type_index(typeid(T)));
-            if (it == _componentPools.end()) return false;
-
-            const auto* pool = static_cast<const ComponentPool<T>*>(it->second.get());
-            return pool->has(entity);
-        }
-
-        template<typename... ComponentTypes>
-        auto view() {
-            std::vector<std::tuple<Entity, ComponentTypes&...>> result;
-            // Iterate over the set of active entities
-            for (const auto entity : _active_entities) {
-                // The fold expression `(... && ...)` checks if all components exist for the entity
-                if ((has<ComponentTypes>(entity) && ...)) {
-                    result.emplace_back(entity, get<ComponentTypes>(entity)...);
-                }
+            if (!isAlive(entity)) {
+                throw std::runtime_error("Cannot get component from a dead entity.");
             }
-            return result;
+            return getComponentPool<T>()->get(entity);
+        }
+
+        template<typename T>
+        bool has(Entity entity) {
+            if (!isAlive(entity)) {
+                return false;
+            }
+            const char* typeName = typeid(T).name();
+            if (!_componentPools.contains(typeName)) {
+                return false;
+            }
+            return getComponentPool<T>()->has(entity);
+        }
+
+        template<typename... Components>
+        class View {
+        public:
+            explicit View(Registry& registry) : _registry(registry) {
+                _entities = findEntitiesWithComponents();
+            }
+
+            struct Iterator {
+                Iterator(Registry& registry, std::vector<Entity>::const_iterator it)
+                    : _registry(registry), _it(std::move(it)) {}
+                Entity operator*() const { return *_it; }
+                Iterator& operator++() { ++_it; return *this; }
+                bool operator!=(const Iterator& other) const { return _it != other._it; }
+            private:
+                Registry& _registry;
+                std::vector<Entity>::const_iterator _it;
+            };
+
+            Iterator begin() { return Iterator(_registry, _entities.begin()); }
+            Iterator end() { return Iterator(_registry, _entities.end()); }
+
+            template<typename T>
+            T& get(Entity entity) { return _registry.get<T>(entity); }
+        private:
+            Registry& _registry;
+            std::vector<Entity> _entities;
+
+            auto findEntitiesWithComponents() {
+                std::vector<Entity> result;
+                if constexpr (sizeof...(Components) > 0) {
+                    // --- FIX: Changed auto& to auto ---
+                    auto pool = _registry.getComponentPool<std::tuple_element_t<0, std::tuple<Components...>>>();
+                    auto initialEntities = pool->getEntities();
+                    for (Entity entity : initialEntities) {
+                        if ((_registry.has<Components>(entity) && ...)) {
+                            result.push_back(entity);
+                        }
+                    }
+                }
+                return result;
+            }
+        };
+
+        template<typename... Components>
+        View<Components...> view() {
+            return View<Components...>(*this);
         }
 
     private:
         template<typename T>
-        ComponentPool<T>& getPool() {
-            const auto typeId = std::type_index(typeid(T));
-            if (!_componentPools.contains(typeId)) {
-                _componentPools[typeId] = std::make_unique<ComponentPool<T>>();
+        std::shared_ptr<ComponentPool<T>> getComponentPool() {
+            const char* typeName = typeid(T).name();
+            if (!_componentPools.contains(typeName)) {
+                _componentPools[typeName] = std::make_shared<ComponentPool<T>>();
             }
-            return *static_cast<ComponentPool<T>*>(_componentPools.at(typeId).get());
+            return std::static_pointer_cast<ComponentPool<T>>(_componentPools[typeName]);
         }
 
-        template<typename T>
-        const ComponentPool<T>& getPool() const {
-            const auto typeId = std::type_index(typeid(T));
-            assert(_componentPools.contains(typeId) && "Requesting non-existent component pool from const registry.");
-            return *static_cast<const ComponentPool<T>*>(_componentPools.at(typeId).get());
-        }
-
-        uint32_t _nextEntityId = 0;
-        std::unordered_set<Entity> _active_entities; // Changed from vector
-        std::unordered_map<std::type_index, std::unique_ptr<IComponentPool>> _componentPools;
+        uint32_t _nextEntityIndex = 0;
+        std::deque<uint32_t> _freeList;
+        std::vector<uint32_t> _entityVersions;
+        std::unordered_map<const char*, std::shared_ptr<IComponentPool>> _componentPools;
     };
-
-} // namespace StrikeEngine
+}

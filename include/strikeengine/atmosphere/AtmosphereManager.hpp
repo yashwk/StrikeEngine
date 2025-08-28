@@ -1,7 +1,7 @@
 #pragma once
 
 #include "strikeengine/atmosphere/AtmosphereModel.hpp"
-#include "strikeengine/components/sensors/InfraredSeekerComponent.hpp" // For IRWavelengthBand enum
+#include "strikeengine/components/sensors/InfraredSeekerComponent.hpp"
 #include <string>
 #include <vector>
 

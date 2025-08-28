@@ -10,7 +10,7 @@
 namespace StrikeEngine {
 
     struct TransformComponent final : public Component {
-        glm::dvec3 position{0.0};
+        glm::dvec3 position{0,0,0};
         glm::dquat orientation{1.0, 0.0, 0.0, 0.0};
         glm::dvec3 scale{1.0};
 

@@ -5,6 +5,7 @@
 #include "strikeengine/components/transform/TransformComponent.hpp"
 
 #include <cmath>
+#include <numbers>
 
 namespace StrikeEngine {
 
@@ -17,24 +18,29 @@ namespace StrikeEngine {
         auto radar_view = registry.view<AntennaComponent, SeekerComponent, TransformComponent>();
         auto target_view = registry.view<RCSProfileComponent, TransformComponent>();
 
-        for (auto [radar_entity, antenna, seeker, radar_transform] : radar_view) {
+        for (auto radar_entity: radar_view) {
+            auto& antenna = radar_view.get<AntennaComponent>(radar_entity);
+            auto& seeker = radar_view.get<SeekerComponent>(radar_entity);
+            auto& radar_transform = radar_view.get<TransformComponent>(radar_entity);
 
             // For now, assume the seeker is always looking for the first available target.
             // A more advanced implementation would have target selection logic.
             bool lock_maintained = false;
 
-            for (auto [target_entity, rcs_profile, target_transform] : target_view) {
+            for (auto target_entity : target_view) {
+                auto& rcs_profile = target_view.get<RCSProfileComponent>(target_entity);
+                auto& target_transform = target_view.get<TransformComponent>(target_entity);
 
                 // --- 1. Load RCS Database (if not already cached) ---
-                if (!_rcs_database_cache.contains(rcs_profile.profilePath)) {
+                if (!_rcs_database_cache.contains(rcs_profile.profile_path)) {
                     auto db = std::make_unique<RCSDatabase>();
-                    if (db->loadProfile(rcs_profile.profilePath)) {
-                        _rcs_database_cache[rcs_profile.profilePath] = std::move(db);
+                    if (db->loadProfile(rcs_profile.profile_path)) {
+                        _rcs_database_cache[rcs_profile.profile_path] = std::move(db);
                     } else {
                         continue; // Skip the target if its profile cannot be loaded
                     }
                 }
-                const auto& rcs_db = _rcs_database_cache.at(rcs_profile.profilePath);
+                const auto& rcs_db = _rcs_database_cache.at(rcs_profile.profile_path);
 
                 // --- 2. Calculate Geometry & Aspect Angles ---
                 glm::dvec3 range_vec = target_transform.position - radar_transform.position;
@@ -54,10 +60,10 @@ namespace StrikeEngine {
                 double transmitter_power = antenna.transmitter_power_W;
                 double antenna_gain = dbToRatio(antenna.antenna_gain_dB);
                 double lambda = antenna.wavelength_m;
-
+                
                 // Pr = (P_t * G^2 * lambda^2 * sigma) / ((4pi)^3 * R^4)
                 double received_power = (transmitter_power * antenna_gain * antenna_gain * lambda * lambda * rcs_m2) /
-                                      (std::pow(4.0 * M_PI, 3.0) * std::pow(range, 4.0));
+                                      (std::pow(4.0 * std::numbers::pi, 3.0) * std::pow(range, 4.0));
 
                 // --- 5. Calculate SNR ---
                 double snr_linear = received_power / antenna.noise_floor_W;

@@ -11,11 +11,11 @@ namespace StrikeEngine {
      * It tracks the initial (wet) mass, the final (dry) mass, and the current mass,
      * which allows systems like the ThrustSystem to model fuel usage realistically.
      */
-    struct MassComponent : public Component {
+    struct MassComponent final : public Component {
         /** @brief The initial mass of the entity at launch, including all fuel (in kg). */
         double initialMass_kg{1.0};
 
-        /** @brief The mass of the entity after all propellant is consumed (in kg). */
+        /** @brief The mass of the entity after all the propellant is consumed (in kg). */
         double dryMass_kg{1.0};
 
         /** @brief The current mass of the entity at the current simulation tick (in kg). */

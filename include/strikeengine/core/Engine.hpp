@@ -8,11 +8,31 @@
 #include <memory>
 #include <vector>
 
+#include "strikeengine/atmosphere/AtmosphereManager.hpp"
+
 namespace StrikeEngine {
 
     class Engine {
     public:
         Engine();
+        /**
+         * @brief Runs the simulation for a single time step.
+         * @param dt The delta time for the frame.
+         */
+        void update(double dt);
+
+        /**
+         * @brief Provides access to the simulation's entity-component registry.
+         */
+        Registry& getRegistry() { return _registry; }
+
+        /**
+         * @brief Provides access to the factory for creating entities from profiles.
+         */
+        EntityFactory& getEntityFactory() { return _entity_factory; }
+
+
+        // --- EXISTING METHOD ---
 
         /**
          * @brief Runs the main simulation loop for a specified duration.
@@ -29,12 +49,11 @@ namespace StrikeEngine {
 
         Registry _registry;
         EntityFactory _entity_factory;
+        AtmosphereManager _atmosphere_manager;
 
-        // The new multi-threading and dependency management systems.
         JobSystem _job_system;
         SystemGraph _system_graph;
 
-        // Stores the calculated parallel execution stages.
         std::vector<std::vector<System*>> _execution_order;
     };
 

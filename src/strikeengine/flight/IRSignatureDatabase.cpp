@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include "glm/glm.hpp"
+#include "glm/trigonometric.hpp"
+
 namespace StrikeEngine {
 
     bool IRSignatureDatabase::loadProfile(const std::string& file_path) {
@@ -23,12 +26,12 @@ namespace StrikeEngine {
 
         _name = data.value("name", "Unnamed IR Signature Profile");
 
-        std::vector<double> az_deg = data.at("azimuth_breakpoints_deg").get<std::vector<double>>();
+        auto az_deg = data.at("azimuth_breakpoints_deg").get<std::vector<double>>();
         for (double deg : az_deg) {
             _azimuth_breakpoints_rad.push_back(glm::radians(deg));
         }
 
-        std::vector<double> el_deg = data.at("elevation_breakpoints_deg").get<std::vector<double>>();
+        auto el_deg = data.at("elevation_breakpoints_deg").get<std::vector<double>>();
         for (double deg : el_deg) {
             _elevation_breakpoints_rad.push_back(glm::radians(deg));
         }
@@ -45,12 +48,12 @@ namespace StrikeEngine {
 
         // --- Bilinear Interpolation Logic ---
 
-        auto it_az = std::lower_bound(_azimuth_breakpoints_rad.begin(), _azimuth_breakpoints_rad.end(), azimuth_rad);
+        auto it_az = std::ranges::lower_bound(_azimuth_breakpoints_rad, azimuth_rad);
         int j = std::distance(_azimuth_breakpoints_rad.begin(), it_az);
         if (j >= _azimuth_breakpoints_rad.size()) j = _azimuth_breakpoints_rad.size() - 1;
         if (j == 0) j = 1;
 
-        auto it_el = std::lower_bound(_elevation_breakpoints_rad.begin(), _elevation_breakpoints_rad.end(), elevation_rad);
+        auto it_el = std::ranges::lower_bound(_elevation_breakpoints_rad, elevation_rad);
         int i = std::distance(_elevation_breakpoints_rad.begin(), it_el);
         if (i >= _elevation_breakpoints_rad.size()) i = _elevation_breakpoints_rad.size() - 1;
         if (i == 0) i = 1;

@@ -3,8 +3,7 @@
 #include "strikeengine/components/sensors/GPSComponent.hpp"
 #include "strikeengine/components/physics/NavigationStateComponent.hpp"
 #include "strikeengine/components/transform/TransformComponent.hpp"
-#include "strikeengine/components/physics/VelocityComponent.hpp"
-#include "strikeengine/components/physics/ForceAccumulatorComponent.hpp" // To get ground truth acceleration
+#include "strikeengine/components/physics/ForceAccumulatorComponent.hpp"
 #include "strikeengine/components/physics/MassComponent.hpp"
 
 #include <random>
@@ -12,9 +11,7 @@
 
 namespace StrikeEngine {
 
-    // --- Matrix Math Helper Functions (as defined previously) ---
     namespace KalmanMath {
-        // ... (All the helper functions for 6x6 matrix math remain here) ...
         KalmanStateVector multiply(const KalmanCovarianceMatrix& m, const KalmanStateVector& v) {
             KalmanStateVector result{};
             for (int i = 0; i < 6; ++i) { for (int j = 0; j < 6; ++j) { result[i] += m[i][j] * v[j]; } }
@@ -68,11 +65,16 @@ namespace StrikeEngine {
         std::random_device rd;
         std::mt19937 gen(rd());
 
-        for (auto [entity, imu, navigation_state, transform, accumulator, mass] : view) {
+        for (auto entity : view) {
+            auto& imu = view.get<IMUComponent>(entity);
+            auto& navigation_state = view.get<NavigationStateComponent>(entity);
+            auto& transform = view.get<TransformComponent>(entity);
+            auto& accumulator = view.get<ForceAccumulatorComponent>(entity);
+            auto& mass = view.get<MassComponent>(entity);
 
             // --- 1. Simulate and Process IMU Data ---
             // Get the "perfect" ground truth acceleration for this frame.
-            glm::dvec3 ground_truth_acceleration = accumulator.totalForce * mass.inverseMass;
+            glm::dvec3 ground_truth_acceleration = accumulator.getTotalForce() * mass.inverseMass;
 
             constexpr double g_to_ms2 = 9.80665;
             double accel_noise_std_dev = imu.accelerometer_noise_density_g_per_sqrt_hz * g_to_ms2 / sqrt(dt);

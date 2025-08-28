@@ -28,16 +28,20 @@ namespace StrikeEngine {
     }
 
     PropulsionSystem::PropulsionSystem(const AtmosphereManager& atmosphereManager)
-        : _atmosphereManager(atmosphereManager) {}
+        : _atmosphere_manager(atmosphereManager) {}
 
     PropulsionSystem::~PropulsionSystem() = default;
 
     void PropulsionSystem::update(Registry& registry, double dt) {
-        if (!_atmosphereManager.isLoaded()) { return; }
+        if (!_atmosphere_manager.isLoaded()) { return; }
 
         auto view = registry.view<PropulsionComponent, TransformComponent, ForceAccumulatorComponent, MassComponent>();
 
-        for (auto [entity, propulsion, transform, accumulator, mass] : view) {
+        for (auto entity: view) {
+            auto& propulsion = view.get<PropulsionComponent>(entity);
+            auto& transform = view.get<TransformComponent>(entity);
+            auto& accumulator = view.get<ForceAccumulatorComponent>(entity);
+            auto& mass = view.get<MassComponent>(entity);
             if (!propulsion.active || propulsion.currentStageIndex < 0 || propulsion.currentStageIndex >= propulsion.stages.size()) {
                 continue;
             }
@@ -64,8 +68,8 @@ namespace StrikeEngine {
 
                 // --- NEW: Calculate Fuel Consumption with Atmospheric Effects ---
                 const double altitude = glm::length(transform.position); // Approximation
-                const double ambient_pressure_pa = _atmosphereManager.getProperties(altitude).pressure;
-                const double sea_level_pressure_pa = 101325.0;
+                const double ambient_pressure_pa = _atmosphere_manager.getProperties(altitude).pressure;
+                constexpr double sea_level_pressure_pa = 101325.0;
 
                 // Interpolate Isp based on pressure
                 double pressure_fraction = std::clamp(ambient_pressure_pa / sea_level_pressure_pa, 0.0, 1.0);

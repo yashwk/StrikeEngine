@@ -13,7 +13,7 @@ namespace StrikeEngine {
          * @brief Adds a system to the graph.
          * @param system A unique pointer to the system to be added.
          */
-        void addSystem(std::unique_ptr<System> system);
+        System* addSystem(std::unique_ptr<System> system);
 
         /**
          * @brief Defines a dependency between two systems.

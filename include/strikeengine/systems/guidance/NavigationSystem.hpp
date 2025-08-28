@@ -23,10 +23,10 @@ namespace StrikeEngine {
         // --- Kalman Filter State ---
 
         // State vector [position(3), velocity(3)].
-        KalmanStateVector _state_estimate;
+        KalmanStateVector _state_estimate{};
 
         // Error covariance matrix.
-        KalmanCovarianceMatrix _covariance;
+        KalmanCovarianceMatrix _covariance{};
 
         /**
          * @brief Performs the Kalman filter's PREDICT step using IMU data.

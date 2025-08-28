@@ -1,19 +1,6 @@
-// ===================================================================================
-//  SensorSystem.cpp
-//
-//  Description:
-//  Implementation of the multi-modal SensorSystem.
-//
-//  Architectural Upgrade:
-//  The IR sensor logic has been upgraded to model atmospheric transmissivity,
-//  correctly calculating the loss of thermal energy over distance.
-//
-// ===================================================================================
-
 #include "strikeengine/systems/guidance/SensorSystem.hpp"
 #include "strikeengine/atmosphere/AtmosphereManager.hpp"
 
-// --- Include ALL sensor and signature components ---
 #include "strikeengine/components/guidance/SeekerComponent.hpp"
 #include "strikeengine/components/guidance/AntennaComponent.hpp"
 #include "strikeengine/components/metadata/RCSProfileComponent.hpp"
@@ -26,10 +13,8 @@
 
 namespace StrikeEngine {
 
-    // A placeholder for a real atmosphere manager service
     extern AtmosphereManager g_atmosphere_manager;
 
-    // --- Private Helper Declarations ---
     void processRadarSeeker(Entity entity, Registry& registry, std::unordered_map<std::string, std::unique_ptr<RCSDatabase>>& cache);
     void processIRSeeker(Entity entity, Registry& registry, std::unordered_map<std::string, std::unique_ptr<IRSignatureDatabase>>& cache);
 
@@ -37,8 +22,9 @@ namespace StrikeEngine {
     void SensorSystem::update(Registry& registry, double dt) {
         auto view = registry.view<SeekerComponent>();
 
-        for (auto [entity, seeker] : view) {
-            if (seeker.type == "RADAR") {
+        for (auto entity : view) {
+            auto& seeker = view.get<SeekerComponent>(entity);
+            if (seeker.type == "RF") {
                 processRadarSeeker(entity, registry, _rcs_database_cache);
             }
             else if (seeker.type == "IR") {
@@ -58,7 +44,12 @@ namespace StrikeEngine {
         auto& radar_transform = registry.get<TransformComponent>(entity);
 
         bool lock_maintained = false;
-        for (const auto& [target_entity, rcs_profile, target_transform] : registry.view<RCSProfileComponent, TransformComponent>()) {
+         auto target_view = registry.view<RCSProfileComponent, TransformComponent>();
+        for ( auto target_entity : target_view) {
+            auto& rcs_profile = target_view.get<RCSProfileComponent>(target_entity);
+            auto& target_transform = target_view.get<TransformComponent>(target_entity);
+
+
             if (!cache.contains(rcs_profile.profile_path)) {
                 auto db = std::make_unique<RCSDatabase>();
                 if (db->loadProfile(rcs_profile.profile_path)) {
@@ -100,7 +91,10 @@ namespace StrikeEngine {
         auto& seeker_transform = registry.get<TransformComponent>(entity);
 
         bool lock_maintained = false;
-        for (const auto& [target_entity, ir_profile, target_transform] : registry.view<InfraredSignatureComponent, TransformComponent>()) {
+        auto target_view = registry.view<InfraredSignatureComponent, TransformComponent>();
+        for (auto target_entity : target_view) {
+            auto& ir_profile = target_view.get<InfraredSignatureComponent>(target_entity);
+            auto& target_transform = target_view.get<TransformComponent>(target_entity);
             if (!cache.contains(ir_profile.profile_path)) {
                 auto db = std::make_unique<IRSignatureDatabase>();
                 if (db->loadProfile(ir_profile.profile_path)) {

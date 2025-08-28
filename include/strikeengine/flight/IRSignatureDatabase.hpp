@@ -2,7 +2,6 @@
 
 #include <string>
 #include <vector>
-#include <glm/glm.hpp>
 
 namespace StrikeEngine {
 
@@ -21,7 +20,7 @@ namespace StrikeEngine {
          * @param elevation_rad The elevation angle, in radians.
          * @return The interpolated Radiant Intensity value in Watts per steradian (W/sr).
          */
-        double getRadiantIntensity(double azimuth_rad, double elevation_rad) const;
+        [[nodiscard]] double getRadiantIntensity(double azimuth_rad, double elevation_rad) const;
 
     private:
         std::string _name;

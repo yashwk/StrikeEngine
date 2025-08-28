@@ -29,7 +29,7 @@ namespace StrikeEngine {
         {
             std::unique_lock<std::mutex> lock(_queue_mutex);
             _job_queue.push(std::move(job));
-            _pending_jobs++;
+            ++_pending_jobs;
         }
         // Notify one waiting worker thread that a new job is available.
         _condition.notify_one();
@@ -70,7 +70,7 @@ namespace StrikeEngine {
             // Decrement the job counter and notify the main thread if all jobs are done.
             {
                 std::unique_lock<std::mutex> lock(_queue_mutex);
-                _pending_jobs--;
+                --_pending_jobs;
             }
             _condition.notify_all(); // Use notify_all to be safe, especially for the wait() function.
         }

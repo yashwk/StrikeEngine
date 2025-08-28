@@ -7,10 +7,12 @@
       <w>dmat</w>
       <w>dquat</w>
       <w>dvec</w>
+      <w>friis</w>
       <w>lwir</w>
       <w>mwir</w>
       <w>srtm</w>
       <w>strikeengine</w>
+      <w>swapchain</w>
       <w>yashwanth</w>
     </words>
   </dictionary>

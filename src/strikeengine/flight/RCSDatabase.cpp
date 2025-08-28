@@ -1,14 +1,3 @@
-// ===================================================================================
-//  RCSDatabase.cpp
-//
-//  Description:
-//  Implementation of the RCSDatabase class. Contains the logic for parsing the
-//  RCS JSON file and performing bilinear interpolation on the data table.
-//
-//  Associated Plan: "Upgrade Plan: Level 2 Radar Simulation" (Step 2)
-//
-// ===================================================================================
-
 #include "strikeengine/flight/RCSDatabase.hpp"
 #include "nlohmann/json.hpp"
 #include <fstream>
@@ -16,7 +5,9 @@
 #include <algorithm>
 #include <cmath>
 
-#include "glm/detail/func_trigonometric.inl"
+#include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
+#include <glm/trigonometric.hpp>
 
 namespace StrikeEngine {
 

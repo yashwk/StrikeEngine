@@ -3,12 +3,12 @@
 #include <stdexcept>
 
 namespace StrikeEngine {
-
-    void SystemGraph::addSystem(std::unique_ptr<System> system) {
+    System* SystemGraph::addSystem(std::unique_ptr<System> system) {
         System* system_ptr = system.get();
         _systems.push_back(std::move(system));
         _adjacency_list[system_ptr] = {};
         _in_degree[system_ptr] = 0;
+        return system_ptr;
     }
 
     void SystemGraph::addDependency(System* dependent, System* prerequisite) {
@@ -26,9 +26,9 @@ namespace StrikeEngine {
         // --- Kahn's Algorithm for Topological Sort ---
 
         // 1. Initialize the queue with all nodes that have an in-degree of 0 (no prerequisites).
-        for (const auto& pair : _in_degree) {
-            if (pair.second == 0) {
-                q.push(pair.first);
+        for (const auto& [first, second] : _in_degree) {
+            if (second == 0) {
+                q.push(first);
             }
         }
 

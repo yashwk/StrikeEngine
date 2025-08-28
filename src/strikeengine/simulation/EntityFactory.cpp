@@ -1,22 +1,8 @@
-// ===================================================================================
-//  EntityFactory.cpp
-//
-//  Description:
-//  This file provides the full implementation for the EntityFactory class.
-//
-//  Architectural Upgrade:
-//  The factory has been updated to parse the new components required for the
-//  infrared (IR/IIR) sensor simulation: InfraredSeekerComponent and
-//  InfraredSignatureComponent.
-//
-// ===================================================================================
-
 #include "strikeengine/simulation/EntityFactory.hpp"
 #include "strikeengine/ecs/Registry.hpp"
 #include "strikeengine/utils/JsonGlm.hpp"
 #include "nlohmann/json.hpp"
 
-// --- Include all component headers that the factory can create ---
 #include "strikeengine/components/transform/TransformComponent.hpp"
 #include "strikeengine/components/physics/MassComponent.hpp"
 #include "strikeengine/components/physics/InertiaComponent.hpp"
@@ -74,8 +60,8 @@ namespace StrikeEngine {
             throw std::runtime_error("EntityFactory: Failed to parse JSON profile '" + profilePath + "': " + e.what());
         }
 
-        Entity newEntity = _registry.createEntity();
-        std::cout << "Creating entity '" << data.at("name").get<std::string>() << "' with ID " << newEntity.id << std::endl;
+        Entity newEntity = _registry.create();
+        std::cout << "Creating entity '" << data.at("name").get<std::string>() << "' with ID " << newEntity.index() << " (v" << newEntity.version() << ")" << std::endl;
 
         const auto& componentsToAdd = data.at("simulation").at("components_to_add");
 
@@ -99,15 +85,14 @@ namespace StrikeEngine {
             else if (componentName == "inertia") {
                 const auto& c = data.at("mass_properties");
                 InertiaComponent inertia;
-                inertia.inertiaTensor = c.at("inertia_tensor").get<glm::dmat3>();
-                inertia.updateInverseTensor();
+                inertia.setInertiaTensor(c.at("inertia_tensor").get<glm::dmat3>());
                 _registry.add<InertiaComponent>(newEntity, inertia);
             }
             else if (componentName == "velocity") {
                 const auto& c = data.at("initial_state").at("velocity");
                 VelocityComponent velocity;
-                velocity.linear = c.at("linear").get<glm::dvec3>();
-                velocity.angular = c.at("angular").get<glm::dvec3>();
+                velocity.setLinear(c.at("linear").get<glm::dvec3>());
+                velocity.setAngular(c.at("angular").get<glm::dvec3>());
                 _registry.add<VelocityComponent>(newEntity, velocity);
             }
             else if (componentName == "propulsion") {
@@ -123,7 +108,7 @@ namespace StrikeEngine {
                     if (stage_data.contains("thrust_curve")) {
                         for (const auto& point : stage_data.at("thrust_curve")) {
                             if (point.is_array() && point.size() == 2) {
-                                stage.thrust_curve.push_back({point[0].get<double>(), point[1].get<double>()});
+                                stage.thrust_curve.emplace_back(point[0].get<double>(), point[1].get<double>());
                             }
                         }
                     }
@@ -138,13 +123,13 @@ namespace StrikeEngine {
                 const auto& c = data.at("aerodynamics");
                 auto& aero = _registry.add<AerodynamicProfileComponent>(newEntity);
                 aero.profileID = c.at("profile_id").get<std::string>();
-                aero.referenceArea_m2 = c.at("reference_area_m2").get<double>();
+                aero.reference_area_m2 = c.at("reference_area_m2").get<double>();
                 aero.wingspan_m = c.value("wingspan_m", 1.0);
             }
             else if (componentName == "guidance") {
                 const auto& c = data.at("guidance");
                 GuidanceComponent guidance;
-                std::string lawString = c.at("law").get<std::string>();
+                auto lawString = c.at("law").get<std::string>();
                 if (lawString == "AugmentedProportionalNavigation") {
                     guidance.law = GuidanceLaw::AugmentedProportionalNavigation;
                 } else if (lawString == "PurePursuit") {

@@ -36,7 +36,8 @@ namespace StrikeEngine {
         return aggregate_properties;
     }
 
-    void MassPropertiesCalculator::processPart(const DesignPart* part, MassProperties& props) const {
+    void MassPropertiesCalculator::processPart(const DesignPart* part, MassProperties& props)
+    {
         const double part_mass = part->getMass();
         const glm::dvec3& part_pos = part->getRelativePosition();
 

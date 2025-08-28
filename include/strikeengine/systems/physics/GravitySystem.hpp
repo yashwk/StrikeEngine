@@ -17,7 +17,7 @@ namespace StrikeEngine {
      * The calculated gravitational force is added to each entity's
      * ForceAccumulatorComponent each tick.
      */
-    class GravitySystem : public System {
+    class GravitySystem final : public System {
     public:
         /**
          * @brief Updates the system, applying gravitational force to all relevant entities.

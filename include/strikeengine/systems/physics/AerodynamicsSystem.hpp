@@ -16,17 +16,17 @@ namespace StrikeEngine {
 	 * @brief Calculates and applies aerodynamic forces (lift and drag) to entities.
 	 */
 	class AerodynamicsSystem final : public System {
-		public:
-			explicit AerodynamicsSystem ( const AtmosphereManager &atmosphereManager );
+	public:
+		explicit AerodynamicsSystem(const AtmosphereManager& atmosphereManager);
 
-			~AerodynamicsSystem () override;
+		~AerodynamicsSystem() override;
 
 
-			void update ( Registry &registry , double dt ) override;
+		void update(Registry& registry, double dt) override;
 
-		private:
-			const AtmosphereManager &_atmosphereManager;
+	private:
+		const AtmosphereManager& _atmosphere_manager;
 
-			std::map < std::string , std::unique_ptr < AerodynamicsDatabase > > _aeroDatabases;
+		std::map<std::string, std::unique_ptr<AerodynamicsDatabase>> _aeroDatabases;
 	};
 } // namespace StrikeEngine

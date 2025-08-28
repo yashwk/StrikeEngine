@@ -17,7 +17,7 @@ namespace StrikeEngine {
          * @param num_threads The number of worker threads to create. Defaults to the
          * hardware concurrency if not specified.
          */
-        JobSystem(size_t num_threads = 0);
+        explicit JobSystem(size_t num_threads = 0);
 
         /**
          * @brief Destructor. Waits for all threads to finish and joins them.

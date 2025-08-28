@@ -28,13 +28,13 @@ namespace StrikeEngine {
          * @brief Constructs the system, requiring an atmosphere manager.
          * @param atmosphereManager A reference to the simulation's atmosphere manager.
          */
-        PropulsionSystem(const AtmosphereManager& atmosphereManager);
+        explicit PropulsionSystem(const AtmosphereManager& atmosphereManager);
         ~PropulsionSystem() override;
 
         void update(Registry& registry, double dt) override;
 
     private:
-        const AtmosphereManager& _atmosphereManager;
+        const AtmosphereManager& _atmosphere_manager;
     };
 
 } // namespace StrikeEngine

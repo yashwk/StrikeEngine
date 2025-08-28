@@ -34,7 +34,7 @@ namespace StrikeEngine {
 
     private:
         // A recursive helper function to traverse the part hierarchy.
-        void processPart(const DesignPart* part, MassProperties& props) const;
+        static void processPart(const DesignPart* part, MassProperties& props);
     };
 
 } // namespace StrikeEngine

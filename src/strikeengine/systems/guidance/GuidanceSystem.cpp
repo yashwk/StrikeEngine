@@ -20,7 +20,11 @@ namespace StrikeEngine {
         // The view now requires the full set of components for a realistic GNC loop.
         auto view = registry.view<GuidanceComponent, SeekerComponent, NavigationStateComponent, AutopilotCommandComponent>();
 
-        for (auto [entity, guidance, seeker, navigation_state, autopilot_command] : view) {
+        for (auto entity : view) {
+            auto& guidance = view.get<GuidanceComponent>(entity);
+            auto& seeker = view.get<SeekerComponent>(entity);
+            auto& navigation_state = view.get<NavigationStateComponent>(entity);
+            auto& autopilot_command = view.get<AutopilotCommandComponent>(entity);
 
             // --- 1. Check for Seeker Lock ---
             // The core logic is now gated by the seeker's ability to track the target.
@@ -48,7 +52,7 @@ namespace StrikeEngine {
 
             // --- 4. Execute Proportional Navigation Law ---
             const glm::dvec3 relative_position = target_transform.position - missile_position;
-            const glm::dvec3 relative_velocity = target_velocity.linear - missile_velocity;
+            const glm::dvec3 relative_velocity = target_velocity.getLinear() - missile_velocity;
 
             const glm::dvec3 los_direction = glm::normalize(relative_position);
             const double closing_velocity = -glm::dot(relative_velocity, los_direction);

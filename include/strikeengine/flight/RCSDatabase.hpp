@@ -20,7 +20,7 @@ namespace StrikeEngine {
          * @param elevation_rad The elevation angle, in radians.
          * @return The interpolated RCS value in square meters (m^2).
          */
-        double getRCS(double azimuth_rad, double elevation_rad) const;
+        [[nodiscard]] double getRCS(double azimuth_rad, double elevation_rad) const;
 
     private:
         std::string _name;

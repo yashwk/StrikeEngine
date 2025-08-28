@@ -7,7 +7,6 @@
 #include "strikeengine/components/metadata/RCSProfileComponent.hpp"
 #include "strikeengine/components/metadata/InfraredSignatureComponent.hpp"
 
-#include <cmath>
 #include <numbers>
 
 namespace StrikeEngine {
@@ -18,10 +17,15 @@ namespace StrikeEngine {
         auto jammer_view = registry.view<JammerComponent, TransformComponent>();
         auto receiver_view = registry.view<AntennaComponent, TransformComponent>();
 
-        for (auto [receiver_entity, antenna, receiver_transform] : receiver_view) {
+        for (auto receiver_entity : receiver_view) {
+            auto& antenna = receiver_view.get<AntennaComponent>(receiver_entity);
+            auto& receiver_transform = receiver_view.get<TransformComponent>(receiver_entity);
             double total_jamming_power_W = 0.0;
 
-            for (auto [jammer_entity, jammer, jammer_transform] : jammer_view) {
+            for (auto jammer_entity : jammer_view) {
+                auto& jammer = jammer_view.get<JammerComponent>(jammer_entity);
+                auto& jammer_transform = jammer_view.get<TransformComponent>(jammer_entity);
+
                 if (!jammer.active) continue;
 
                 // Calculate range between jammer and receiver
@@ -47,7 +51,9 @@ namespace StrikeEngine {
 
         // --- 2. Process Countermeasure Deployment ---
         auto dispenser_view = registry.view<CountermeasureDispenserComponent, TransformComponent>();
-        for (auto [entity, dispenser, transform] : dispenser_view) {
+        for (auto entity : dispenser_view) {
+            auto& dispenser = dispenser_view.get<CountermeasureDispenserComponent>(entity);
+            auto& transform = dispenser_view.get<TransformComponent>(entity);
 
             // Deploy Chaff
             if (dispenser.deploy_chaff_command && dispenser.chaff_canisters > 0) {
@@ -55,7 +61,7 @@ namespace StrikeEngine {
                 dispenser.deploy_chaff_command = false;
 
                 // Create a new entity to represent the chaff cloud
-                Entity chaff_cloud = registry.createEntity();
+                Entity chaff_cloud = registry.create();
                 // Place it at the same position as the deploying aircraft
                 registry.add<TransformComponent>(chaff_cloud, transform);
                 // Give it a very large, non-aspect-dependent radar signature
@@ -69,7 +75,7 @@ namespace StrikeEngine {
                 dispenser.deploy_flare_command = false;
 
                 // Create a new entity to represent the flare
-                Entity flare = registry.createEntity();
+                Entity flare = registry.create();
                 registry.add<TransformComponent>(flare, transform);
                 auto& ir_sig = registry.add<InfraredSignatureComponent>(flare);
                 ir_sig.profile_path = "data/ir/flare_generic.json";
