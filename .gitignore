@@ -5,6 +5,7 @@
     Makefile
     install_manifest.txt
     compile_commands.json
+    structure.txt
 
     # CLion IDE files
     .idea/
@@ -25,3 +26,5 @@
 
     # Generated data files
     *.bin
+    /data/atmosphere_table.bin
+    docs/cem

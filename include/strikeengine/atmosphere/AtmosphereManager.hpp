@@ -38,7 +38,7 @@ namespace StrikeEngine {
          * @param band The IR wavelength band of the sensor.
          * @return The transmissivity factor (0.0 to 1.0).
          */
-        [[nodiscard]] static double getTransmissivity(double range_m, double altitude_m, IRWavelengthBand band) ;
+        [[nodiscard]] static double getTransmissivity(double range_m, double altitude_m, IRWavelengthBand band);
 
         /**
          * @brief Checks if the data table has been successfully loaded.

@@ -175,7 +175,6 @@ namespace StrikeEngine {
             auto findEntitiesWithComponents() {
                 std::vector<Entity> result;
                 if constexpr (sizeof...(Components) > 0) {
-                    // --- FIX: Changed auto& to auto ---
                     auto pool = _registry.getComponentPool<std::tuple_element_t<0, std::tuple<Components...>>>();
                     auto initialEntities = pool->getEntities();
                     for (Entity entity : initialEntities) {

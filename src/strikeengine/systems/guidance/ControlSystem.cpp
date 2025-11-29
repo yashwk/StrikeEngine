@@ -14,10 +14,10 @@
 #include <vector>
 
 namespace StrikeEngine {
-
     extern AtmosphereManager g_atmosphere_manager;
 
-    double interpolateGain(const GainSchedule& schedule, double mach, double dynamic_pressure) {
+    double interpolateGain(const GainSchedule& schedule, double mach, double dynamic_pressure)
+    {
         auto it_mach = std::ranges::lower_bound(schedule.mach_breakpoints, mach);
         int j = std::distance(schedule.mach_breakpoints.begin(), it_mach);
         if (j >= schedule.mach_breakpoints.size()) j = schedule.mach_breakpoints.size() - 1;
@@ -25,7 +25,8 @@ namespace StrikeEngine {
 
         auto it_pressure = std::ranges::lower_bound(schedule.dynamic_pressure_breakpoints_pa, dynamic_pressure);
         int i = std::distance(schedule.dynamic_pressure_breakpoints_pa.begin(), it_pressure);
-        if (i >= schedule.dynamic_pressure_breakpoints_pa.size()) i = schedule.dynamic_pressure_breakpoints_pa.size() - 1;
+        if (i >= schedule.dynamic_pressure_breakpoints_pa.size()) i = schedule.dynamic_pressure_breakpoints_pa.size() -
+            1;
         if (i == 0) i = 1;
 
         // Get the four corner points for interpolation
@@ -49,10 +50,13 @@ namespace StrikeEngine {
     }
 
 
-    void ControlSystem::update(Registry& registry, double dt) {
-        auto view = registry.view<AutopilotCommandComponent, AutopilotStateComponent, ControlSurfaceComponent, NavigationStateComponent, TransformComponent, VelocityComponent>();
+    void ControlSystem::update(Registry& registry, double dt)
+    {
+        auto view = registry.view<AutopilotCommandComponent, AutopilotStateComponent, ControlSurfaceComponent,
+                                  NavigationStateComponent, TransformComponent, VelocityComponent>();
 
-        for (auto entity : view) {
+        for (auto entity : view)
+        {
             auto& command = view.get<AutopilotCommandComponent>(entity);
             auto& state = view.get<AutopilotStateComponent>(entity);
             auto& fins = view.get<ControlSurfaceComponent>(entity);
@@ -97,17 +101,20 @@ namespace StrikeEngine {
             double desired_deflection_yaw = pid_output_yaw;
 
             // --- 6. Apply Actuator Physical Limits ---
-            desired_deflection_pitch = std::clamp(desired_deflection_pitch, -fins.max_deflection_rad, fins.max_deflection_rad);
-            desired_deflection_yaw = std::clamp(desired_deflection_yaw, -fins.max_deflection_rad, fins.max_deflection_rad);
+            desired_deflection_pitch = std::clamp(desired_deflection_pitch, -fins.max_deflection_rad,
+                                                  fins.max_deflection_rad);
+            desired_deflection_yaw = std::clamp(desired_deflection_yaw, -fins.max_deflection_rad,
+                                                fins.max_deflection_rad);
 
             double max_change = fins.max_rate_rad_per_sec * dt;
 
             double current_pitch = fins.current_deflection_rad_pitch;
-            fins.current_deflection_rad_pitch = std::clamp(desired_deflection_pitch, current_pitch - max_change, current_pitch + max_change);
+            fins.current_deflection_rad_pitch = std::clamp(desired_deflection_pitch, current_pitch - max_change,
+                                                           current_pitch + max_change);
 
             double current_yaw = fins.current_deflection_rad_yaw;
-            fins.current_deflection_rad_yaw = std::clamp(desired_deflection_yaw, current_yaw - max_change, current_yaw + max_change);
+            fins.current_deflection_rad_yaw = std::clamp(desired_deflection_yaw, current_yaw - max_change,
+                                                         current_yaw + max_change);
         }
     }
-
 } // namespace StrikeEngine

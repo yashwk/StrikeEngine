@@ -1,95 +1,186 @@
-StrikeEngine/
-├── apps/
-│   ├── MissionCLI/
-│   ├── StrikeDesigner/
-│   └── StrikeSim/
-│
-├── cmake/
-│   └── VulkanSetup.cmake
-│
-├── data/
-│   ├── actuators/
-│   ├── aero/
-│   ├── config/
-│   ├── profiles/
-│   ├── propulsion/
-│   ├── scenarios/
-│   └── seekers/
-│
-├── docs/
-│
-├── external/
-│   ├── glm/
-│   └── nlohmann/
-│
-├── include/
-│   └── strikeengine/
-│       ├── atmosphere/
-│       │   ├── AtmosphereManager.hpp
-│       │   └── AtmosphereModel.hpp
-│       ├── components/  <-- MOVED HERE
-│       │   ├── guidance/
-│       │   │   ├── AutopilotCommandComponent.hpp
-│       │   │   ├── AutopilotStateComponent.hpp
-│       │   │   └── GuidanceComponent.hpp
-│       │   ├── physics/
-│       │   │   ├── AerodynamicProfileComponent.hpp
-│       │   │   ├── ControlSurfaceComponent.hpp
-│       │   │   ├── ForceAccumulatorComponent.hpp
-│       │   │   ├── IMUComponent.hpp
-│       │   │   ├── InertiaComponent.hpp
-│       │   │   ├── MassComponent.hpp
-│       │   │   ├── NavigationStateComponent.hpp
-│       │   │   ├── ThrustComponent.hpp
-│       │   │   └── VelocityComponent.hpp
-│       │   └── transform/
-│       │       └── TransformComponent.hpp
-│       ├── core/
-│       │   ├── Engine.hpp
-│       │   └── Profiler.hpp
-│       ├── ecs/
-│       │   ├── Component.hpp
-│       │   ├── Entity.hpp
-│       │   ├── Registry.hpp
-│       │   └── System.hpp
-│       ├── flight/
-│       │   └── AerodynamicsDatabase.hpp
-│       ├── simulation/
-│       │   ├── EntityFactory.hpp
-│       │   └── ScenarioRunner.hpp
-│       ├── systems/  <-- MOVED HERE
-│       │   ├── guidance/
-│       │   │   ├── ControlSystem.hpp
-│       │   │   └── GuidanceSystem.hpp
-│       │   └── physics/
-│       │       ├── AerodynamicsSystem.hpp
-│       │       ├── GravitySystem.hpp
-│       │       ├── IntegrationSystem.hpp
-│       │       └── PropulsionSystem.hpp
-│       └── utils/
-│           └── JsonGlm.hpp
-│
-├── src/
-│   ├── CMakeLists.txt
-│   └── strikeengine/
-│       ├── atmosphere/
-│       │   ├── AtmosphereManager.cpp
-│       │   └── AtmosphereModel.cpp
-│       ├── flight/
-│       │   └── AerodynamicsDatabase.cpp
-│       ├── simulation/
-│       │   ├── EntityFactory.cpp
-│       │   └── ScenarioRunner.cpp
-│       └── systems/
-│           ├── guidance/
-│           │   ├── ControlSystem.cpp
-│           │   └── GuidanceSystem.cpp
-│           └── physics/
-│               ├── AerodynamicsSystem.cpp
-│               ├── GravitySystem.cpp
-│               ├── IntegrationSystem.cpp
-│               └── PropulsionSystem.cpp
-│
-├── tests/
-│
-└── tools/
+.
+|-- CMakeLists.txt
+|-- LICENSE
+|-- README.md
+|-- apps
+|   |-- CMakeLists.txt
+|   |-- MissionCLI
+|   |   |-- CMakeLists.txt
+|   |   `-- main.cpp
+|   |-- StrikeDesigner
+|   |   |-- CMakeLists.txt
+|   |   `-- main.cpp
+|   `-- StrikeSim
+|       |-- App.hpp
+|       |-- CMakeLists.txt
+|       |-- ScenarioLoader.hpp
+|       `-- main.cpp
+|-- cmake
+|   `-- VulkanSetup.cmake
+|-- data
+|   |-- actuators
+|   |-- aero
+|   |   `-- sa_missile_mk1_aero.json
+|   |-- atmosphere_table.bin
+|   |-- config
+|   |   |-- atmosphere_layers.json
+|   |   `-- simulation_settings.json
+|   |-- designer
+|   |   `-- library
+|   |       |-- materials.json
+|   |       `-- parts
+|   |           `-- nose_cones.json
+|   |-- profiles
+|   |   |-- aesa_tracker_v1.json
+|   |   |-- sa_missile_mk1.json
+|   |   `-- target_drone.json
+|   |-- propulsion
+|   |-- scenarios
+|   |   `-- intercept_test_01.json
+|   |-- schemas
+|   |   `-- seeker_schema.json
+|   |-- seekers
+|   |   `-- aesa_tracker_v1.json
+|   `-- terrain
+|-- docs
+|   |-- architecture.md
+|   |-- cem
+|   |   |-- 3methods.md
+|   |   |-- abc.md
+|   |   |-- diff_solvers.md
+|   |   |-- doc1unf.md
+|   |   |-- doc2.md
+|   |   |-- methods.md
+|   |   `-- strikecem_detailed_doc.md
+|   |-- data_formats.md
+|   |-- developer_notes.md
+|   |-- modules.md
+|   `-- roadmap.md
+|-- include
+|   `-- strikeengine
+|       |-- atmosphere
+|       |   |-- AtmosphereManager.hpp
+|       |   `-- AtmosphereModel.hpp
+|       |-- components
+|       |   |-- guidance
+|       |   |   |-- AntennaComponent.hpp
+|       |   |   |-- AutopilotCommandComponent.hpp
+|       |   |   |-- AutopilotStateComponent.hpp
+|       |   |   |-- CountermeasureDispenserComponent.hpp
+|       |   |   |-- FuzeComponent.hpp
+|       |   |   |-- GuidanceComponent.hpp
+|       |   |   |-- JammerComponent.hpp
+|       |   |   |-- SeekerComponent.hpp
+|       |   |   `-- WarheadComponent.hpp
+|       |   |-- metadata
+|       |   |   |-- InfraredSignatureComponent.hpp
+|       |   |   |-- RCSProfileComponent.hpp
+|       |   |   `-- TargetComponent.hpp
+|       |   |-- physics
+|       |   |   |-- AerodynamicProfileComponent.hpp
+|       |   |   |-- ControlSurfaceComponent.hpp
+|       |   |   |-- ForceAccumulatorComponent.hpp
+|       |   |   |-- IMUComponent.hpp
+|       |   |   |-- InertiaComponent.hpp
+|       |   |   |-- MassComponent.hpp
+|       |   |   |-- NavigationStateComponent.hpp
+|       |   |   |-- PropulsionComponent.hpp
+|       |   |   `-- VelocityComponent.hpp
+|       |   |-- sensors
+|       |   |   |-- GPSComponent.hpp
+|       |   |   `-- InfraredSeekerComponent.hpp
+|       |   `-- transform
+|       |       `-- TransformComponent.hpp
+|       |-- core
+|       |   |-- Engine.hpp
+|       |   |-- JobSystem.hpp
+|       |   |-- Profiler.hpp
+|       |   `-- SystemGraph.hpp
+|       |-- designer
+|       |   |-- DesignPart.hpp
+|       |   |-- PartLoader.hpp
+|       |   |-- VehicleModel.hpp
+|       |   |-- analysis
+|       |   |   `-- MassPropertiesCalculator.hpp
+|       |   `-- parts
+|       |       |-- CylinderPart.hpp
+|       |       `-- NoseConePart.hpp
+|       |-- ecs
+|       |   |-- Component.hpp
+|       |   |-- Entity.hpp
+|       |   |-- Registry.hpp
+|       |   `-- System.hpp
+|       |-- flight
+|       |   |-- AerodynamicsDatabase.hpp
+|       |   |-- IRSignatureDatabase.hpp
+|       |   `-- RCSDatabase.hpp
+|       |-- simulation
+|       |   |-- EntityFactory.hpp
+|       |   `-- ScenarioRunner.hpp
+|       |-- systems
+|       |   |-- guidance
+|       |   |   |-- ControlSystem.hpp
+|       |   |   |-- ElectronicWarfareSystem.hpp
+|       |   |   |-- EndgameSystem.hpp
+|       |   |   |-- GuidanceSystem.hpp
+|       |   |   |-- NavigationSystem.hpp
+|       |   |   |-- RadarSystem.hpp
+|       |   |   `-- SensorSystem.hpp
+|       |   `-- physics
+|       |       |-- AerodynamicsSystem.hpp
+|       |       |-- GravitySystem.hpp
+|       |       |-- IntegrationSystem.hpp
+|       |       `-- PropulsionSystem.hpp
+|       `-- utils
+|           `-- JsonGlm.hpp
+|-- renderer
+|-- src
+|   |-- CMakeLists.txt
+|   `-- strikeengine
+|       |-- atmosphere
+|       |   |-- AtmosphereManager.cpp
+|       |   `-- AtmosphereModel.cpp
+|       |-- core
+|       |   |-- Engine.cpp
+|       |   |-- JobSystem.cpp
+|       |   `-- SystemGraph.cpp
+|       |-- designer
+|       |   |-- PartLoader.cpp
+|       |   `-- analysis
+|       |       `-- MassPropertiesCalculator.cpp
+|       |-- flight
+|       |   |-- AerodynamicsDatabase.cpp
+|       |   |-- IRSignatureDatabase.cpp
+|       |   `-- RCSDatabase.cpp
+|       |-- simulation
+|       |   |-- EntityFactory.cpp
+|       |   `-- ScenarioRunner.cpp
+|       `-- systems
+|           |-- guidance
+|           |   |-- ControlSystem.cpp
+|           |   |-- ElectronicWarfareSystem.cpp
+|           |   |-- EndgameSystem.cpp
+|           |   |-- GuidanceSystem.cpp
+|           |   |-- NavigationSystem.cpp
+|           |   |-- RadarSystem.cpp
+|           |   `-- SensorSystem.cpp
+|           `-- physics
+|               |-- AerodynamicsSystem.cpp
+|               |-- GravitySystem.cpp
+|               |-- IntegrationSystem.cpp
+|               `-- PropulsionSystem.cpp
+|-- structure.txt
+|-- tests
+|   |-- CMakeLists.txt
+|   |-- atmosphere_test.cpp
+|   |-- physics_test.cpp
+|   |-- profile_loader_test.cpp
+|   |-- radar_test.cpp
+|   |-- terrain_test.cpp
+|   `-- test_main.cpp
+`-- tools
+    |-- CMakeLists.txt
+    |-- GenerateAtmosphereTable.cpp
+    `-- convert_srtm.cpp
+
+54 directories, 129 files
