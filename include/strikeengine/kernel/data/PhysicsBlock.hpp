@@ -39,6 +39,7 @@ struct PhysicsBlock {
 	std::vector<double> cd;
 	std::vector<double> clAlpha;           // lift slope 1/rad
 	std::vector<double> clFin;             // fin lift 1/rad (deflection)
+	std::vector<double> clMax;             // max |CL| (stall / control limit)
 	std::vector<int>    propulsionId;      // index into backend propulsion pool; -1 = none
 	std::vector<double> ignitionTime;      // s (thrust curve evaluated at t - ignitionTime)
 

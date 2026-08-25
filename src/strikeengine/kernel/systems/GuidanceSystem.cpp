@@ -5,6 +5,27 @@
 
 namespace StrikeEngine::Kernel {
 
+    // Clamp the commanded acceleration magnitude to the per-entity guidance
+    // limit (GuidanceBlock::maxAccel; 0 = unlimited). Real guidance laws
+    // shape commanded g before the autopilot sees it: an unbounded
+    // ProNav/Waypoint demand over-drives the fins into permanent saturation.
+    static void clampCommandMagnitude(
+        std::size_t id, GuidanceBlock& guidance)
+    {
+        const double lim = guidance.maxAccel[id];
+        if (lim <= 0.0) return;
+        const double ax = guidance.commandedAccelX[id];
+        const double ay = guidance.commandedAccelY[id];
+        const double az = guidance.commandedAccelZ[id];
+        const double mag = std::sqrt(ax * ax + ay * ay + az * az);
+        if (mag > lim && mag > 1e-9) {
+            const double s = lim / mag;
+            guidance.commandedAccelX[id] = ax * s;
+            guidance.commandedAccelY[id] = ay * s;
+            guidance.commandedAccelZ[id] = az * s;
+        }
+    }
+
     void GuidanceSystem::update(
         const EntityStatusBlock& status,
         const NavigationBlock& nav,
@@ -36,6 +57,7 @@ namespace StrikeEngine::Kernel {
             } else if (mode == GuidanceMode::Waypoint) {
                 updateWaypoint(i, nav, guidance);
             }
+            clampCommandMagnitude(i, guidance);
         }
     }
 

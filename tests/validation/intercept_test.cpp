@@ -13,6 +13,7 @@ int main() {
     std::printf("=== intercept_test: guided head-on intercept ===\n");
 
     SimulationKernel kernel;
+    kernel.setRandomSeed(0xAB31u);   // deterministic sensor noise: same engagement every run
 
     // --- Interceptor: boosted missile with fin authority (W1+W3 config) ---
     VehicleInitState missile{};
@@ -60,6 +61,7 @@ int main() {
     cmd.entityId = missileId;
     cmd.mode = GuidanceMode::ProportionalNavigation;
     cmd.targetX = target.px; cmd.targetY = target.py; cmd.targetZ = target.pz;
+    cmd.maxAccel = 40.0;   // 4 g guidance demand limit (realistic shaped command)
     kernel.queueCommand(cmd);
 
     auto& phys = kernel.getPhysics();

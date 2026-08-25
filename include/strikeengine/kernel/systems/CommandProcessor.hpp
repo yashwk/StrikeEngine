@@ -16,6 +16,10 @@ namespace StrikeEngine::Kernel {
         double targetVx = 0.0;
         double targetVy = 0.0;
         double targetVz = 0.0;
+        double maxAccel = 0.0;   // m/s^2; guidance demand magnitude limit
+                                 // (0 = unlimited). Real guidance laws shape
+                                 // commanded g; unbounded demands over-drive
+                                 // the fins into saturation.
     };
 
     class CommandProcessor {

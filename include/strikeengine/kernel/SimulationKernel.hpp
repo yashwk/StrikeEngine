@@ -65,6 +65,13 @@ namespace StrikeEngine::Kernel {
         void step(double dt);
         void runSteps(std::size_t steps, double dt);
 
+        /**
+         * @brief Make all stochastic models (sensor noise, biases) deterministic.
+         * Same seed + same scenario + same step sequence => bit-identical runs.
+         * Call before stepping. Default (unseeded) keeps a wall-clock seed.
+         */
+        void setRandomSeed(std::uint32_t seed);
+
         // Accessors
         const PhysicsBlock& getPhysics() const { return physicsBlock; }
         const ControlBlock& getControl() const { return controlBlock; }

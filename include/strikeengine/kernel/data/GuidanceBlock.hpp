@@ -23,6 +23,10 @@ namespace StrikeEngine::Kernel {
         std::vector<double> targetVy;
         std::vector<double> targetVz;
 
+        // Guidance demand magnitude limit (m/s^2); 0 = unlimited.
+        // Set per entity via SimulationCommand::maxAccel.
+        std::vector<double> maxAccel;
+
         // Output: Required acceleration command
         std::vector<double> commandedAccelX;
         std::vector<double> commandedAccelY;

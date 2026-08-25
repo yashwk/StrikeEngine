@@ -43,6 +43,10 @@ namespace StrikeEngine::Kernel {
         reset();
     }
 
+    void SimulationKernel::setRandomSeed(std::uint32_t seed) {
+        sensorSystem.setSeed(seed);
+    }
+
     void SimulationKernel::reset() {
         physicsBlock = PhysicsBlock();
         controlBlock = ControlBlock();
@@ -83,6 +87,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.cd.push_back(0.3);
             physicsBlock.clAlpha.push_back(0.0);
             physicsBlock.clFin.push_back(0.0);
+            physicsBlock.clMax.push_back(2.0);
             physicsBlock.propulsionId.push_back(-1);
             physicsBlock.ignitionTime.push_back(0.0);
             physicsBlock.finPitch.push_back(0.0); physicsBlock.finYaw.push_back(0.0); physicsBlock.finRoll.push_back(0.0);
@@ -97,6 +102,7 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.targetX.push_back(0); guidanceBlock.targetY.push_back(0); guidanceBlock.targetZ.push_back(0);
             guidanceBlock.targetVx.push_back(0); guidanceBlock.targetVy.push_back(0); guidanceBlock.targetVz.push_back(0);
             guidanceBlock.commandedAccelX.push_back(0); guidanceBlock.commandedAccelY.push_back(0); guidanceBlock.commandedAccelZ.push_back(0);
+            guidanceBlock.maxAccel.push_back(0.0);
 
             statusBlock.type.push_back(EntityType::Missile);
             statusBlock.allegiance.push_back(Allegiance::Friendly);
@@ -141,6 +147,7 @@ namespace StrikeEngine::Kernel {
         physicsBlock.cd[id] = config.cd;
         physicsBlock.clAlpha[id] = config.clAlpha;
         physicsBlock.clFin[id] = config.clFin;
+        physicsBlock.clMax[id] = config.clMax;
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;

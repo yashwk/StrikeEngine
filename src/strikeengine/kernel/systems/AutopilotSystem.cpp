@@ -27,6 +27,8 @@ namespace StrikeEngine::Kernel {
             pitchIntegral.resize(nav.size, 0.0);
             yawIntegral.resize(nav.size, 0.0);
             wasCommanded.resize(nav.size, false);
+            azFiltered.resize(nav.size, 0.0);
+            ayFiltered.resize(nav.size, 0.0);
         }
 
         for (std::size_t i = 0; i < nav.size; ++i) {
@@ -38,6 +40,8 @@ namespace StrikeEngine::Kernel {
                 control.rollCommand[i] = 0.0;
                 pitchIntegral[i] = 0.0;
                 yawIntegral[i] = 0.0;
+                azFiltered[i] = 0.0;
+                ayFiltered[i] = 0.0;
                 wasCommanded[i] = false;
                 continue;
             }
@@ -63,11 +67,19 @@ namespace StrikeEngine::Kernel {
                          guidance.commandedAccelZ[id],
                          axCmdB, ayCmdB, azCmdB);
 
-        // 2. Measured specific force (body frame, from sensors)
-        const double azMeas = sensor.accelZ[id];
-        const double ayMeas = sensor.accelY[id];
+        // 2. Measured specific force (body frame, from sensors), low-pass
+        //    filtered. Without the lag, the fin's own lift feeds straight
+        //    back through azMeas in the same tick and couples the outer loop
+        //    to the short period (fin/accel limit cycle on stiff airframes).
+        azFiltered[id] += (sensor.accelZ[id] - azFiltered[id]) * (dt / kAccelFilTau);
+        ayFiltered[id] += (sensor.accelY[id] - ayFiltered[id]) * (dt / kAccelFilTau);
+        const double azMeas = azFiltered[id];
+        const double ayMeas = ayFiltered[id];
 
-        // 3. Outer loop: accel error -> desired body rate (P + integral)
+        // 3. Outer loop: accel error -> desired body rate (P + integral).
+        //    The integral is provisional here; anti-windup back-calculation
+        //    happens after the deflection clamp (step 7) so a saturated fin
+        //    cannot wind the integrator up into a permanent slam.
         const double ez = azCmdB - azMeas;
         const double ey = ayCmdB - ayMeas;
         pitchIntegral[id] += ez * dt;
@@ -107,11 +119,27 @@ namespace StrikeEngine::Kernel {
         const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
         double rollDeflection = verticality * (-kRollP * rollError - kRollD * nav.estWx[id]);
 
-        // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority)
+        // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority),
+        //    then back-calculate the integrals that would just reach the
+        //    clamp (anti-windup): when saturated, the integral is re-set so
+        //    the unclamped command equals the limit. Without this, a
+        //    sustained guidance demand pins the fins at max forever.
         constexpr double maxDeflection = 0.43;
-        control.pitchCommand[id] = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
-        control.yawCommand[id]   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
+        const double pitchClamped = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
+        const double yawClamped   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
+        control.pitchCommand[id] = pitchClamped;
+        control.yawCommand[id]   = yawClamped;
         control.rollCommand[id]  = std::clamp(rollDeflection,  -maxDeflection, maxDeflection);
+
+        if (pitchClamped != pitchDeflection) {
+            // pitchRateCmd = -(kAccelP*ez + kAccelI*iz); solve for iz at the clamp
+            const double rateAtLimit = (pitchClamped + kAlphaP * alpha) / kRateP + nav.estWy[id];
+            pitchIntegral[id] = std::clamp(-(rateAtLimit + kAccelP * ez) / kAccelI, -10.0, 10.0);
+        }
+        if (yawClamped != yawDeflection) {
+            const double rateAtLimit = (yawClamped + kAlphaP * beta) / kRateP + nav.estWz[id];
+            yawIntegral[id] = std::clamp(-(rateAtLimit + kAccelP * ey) / kAccelI, -10.0, 10.0);
+        }
     }
 
 } // namespace StrikeEngine::Kernel

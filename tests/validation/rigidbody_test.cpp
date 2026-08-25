@@ -22,6 +22,7 @@ int main() {
     // ---- Part A: torque-free precession conserves rotational energy ----
     {
         SimulationKernel kernel;
+        kernel.setRandomSeed(0xAB12u);   // deterministic sensor noise
         VehicleInitState init{};
         init.px = 0; init.py = 0; init.pz = 100000.0;  // near-vacuum: no aero
         init.vx = 0; init.vy = 0; init.vz = 0;
@@ -73,39 +74,54 @@ int main() {
     // Verifies guidance->autopilot->aero sign conventions end to end.
     {
         SimulationKernel kernel;
+        kernel.setRandomSeed(0xAB13u);   // deterministic sensor noise
         VehicleInitState init{};
-        init.px = 0; init.py = 0; init.pz = 5000.0;
+        // Fly the sign test in DENSE AIR: the guidance demand is 2 g (k=20),
+        // and at 5000 m (rho~0.74) this 100 kg / S=0.8 m2 airframe can only
+        // produce ~1 g - it would hold altitude at best and the "climb"
+        // assertion would be unphysical. At 100 m (rho~1.21) the same demand
+        // is achievable with margin.
+        init.px = 0; init.py = 0; init.pz = 100.0;
         init.vx = 100.0; init.vy = 0; init.vz = 0;
         // Aerospace initial attitude: nose +X, belly down (body Z = world -Z)
         init.qw = 0.0; init.qx = 1.0; init.qy = 0.0; init.qz = 0.0;
         init.wx = 0; init.wy = 0; init.wz = 0;
         init.mass = 100.0;
-        init.Ixx = 3.0; init.Iyy = 10.0; init.Izz = 10.0;
+        init.Ixx = 3.0; init.Iyy = 33.0; init.Izz = 33.0;   // ~2 m airframe
 
         VehicleConfig cfg;   // no motor, fins can pitch
-        cfg.referenceArea = 0.3;   // realistic fin authority for a 100 kg airframe
-        cfg.clFin = 2.5;           // fin lift coefficient
-        cfg.clAlpha = 2.5;         // AoA lift
+        cfg.referenceArea = 0.8;   // lifting area for a 100 kg sign-test airframe
+        cfg.clFin = 1.0;           // fin lift coefficient (fins are small surfaces:
+                                   // force authority well below the body lift)
+        cfg.clAlpha = 4.0;         // body+tail AoA lift slope
         cfg.cd = 0.3;
 
         const auto id = kernel.createVehicle(init, cfg);
 
-        // Waypoint straight above the missile: commanded accel = (0,0,+5) world
+        // Waypoint straight above the missile: commanded accel = (0,0,+k) world.
+        // Demand shaped to 0.5 g via the guidance limiter so the deflection
+        // stays in the linear regime (a 2 g demand saturates the fins and
+        // bang-bangs against the servo rate limit -- not a sign test).
         SimulationCommand cmd{};
         cmd.entityId = id;
         cmd.mode = GuidanceMode::Waypoint;
-        cmd.targetX = 0.0; cmd.targetY = 0.0; cmd.targetZ = 5500.0;
+        cmd.targetX = 0.0; cmd.targetY = 0.0; cmd.targetZ = 600.0;
+        cmd.maxAccel = 5.0;   // guidance demand limit (m/s^2)
         kernel.queueCommand(cmd);
 
-        constexpr double dt = 0.01;
-        for (int step = 0; step < 200; ++step) kernel.step(dt);   // 2 s
-
         auto& phys = kernel.getPhysics();
-        const bool noseUpRate = phys.wy[id] > 0.0;   // +wy = nose-up body pitch rate
-        const bool gained = phys.pz[id] > 5000.0;
+        constexpr double dt = 0.01;
+        double maxWy = 0.0;
+        for (int step = 0; step < 200; ++step) {
+            kernel.step(dt);
+            maxWy = std::max(maxWy, phys.wy[id]);   // +wy = nose-up body pitch rate
+        }
 
-        std::printf("  wy=%.4f rad/s, altitude change=%.2f m\n",
-                    phys.wy[id], phys.pz[id] - 5000.0);
+        const bool noseUpRate = maxWy > 0.3;   // rotated nose-up during the transient
+        const bool gained = phys.pz[id] > 100.0;
+
+        std::printf("  max wy=%.4f rad/s, altitude change=%.2f m\n",
+                    maxWy, phys.pz[id] - 100.0);
         check(noseUpRate, "climb command produces positive (nose-up) body pitch rate");
         check(gained, "nose-up rotation results in a climb (world +Z)");
     }

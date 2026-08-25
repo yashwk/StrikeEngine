@@ -18,6 +18,7 @@ namespace StrikeEngine::Models {
         double cd        = 0.3;        // drag coefficient
         double clAlpha   = 0.0;        // lift slope per rad of AoA
         double clFin     = 0.0;        // fin lift coefficient per rad of deflection
+        double clMax     = 2.0;        // max |CL| (stall / control surface limit)
     };
 
     /**
@@ -78,17 +79,26 @@ namespace StrikeEngine::Models {
             double fy = -dragMag * (v / V);
             double fz = -dragMag * (w / V);
 
-            // Lift (pitch plane): positive alpha/deflection => force -Z (up)
-            const double cl = p.clAlpha * alpha + p.clFin * finPitch;
+            // Lift (pitch plane): positive alpha/deflection => force -Z (up),
+            // saturated at CL_max (stall / control limit). A linear lift
+            // slope unbounded is the classic way to let a simulation run away
+            // to 70+ deg AoA: at |CL| = CL_max the lifting surfaces are
+            // stalled and produce no more force.
+            double cl = p.clAlpha * alpha + p.clFin * finPitch;
+            cl = std::clamp(cl, -p.clMax, p.clMax);
             fz -= q * S * cl;
 
             // Side force (yaw plane): positive beta/deflection => force -Y
-            const double cy = p.clAlpha * beta + p.clFin * finYaw;
+            double cy = p.clAlpha * beta + p.clFin * finYaw;
+            cy = std::clamp(cy, -p.clMax, p.clMax);
             fy -= q * S * cy;
 
             // --- Moments (body frame) ---
-            // Fin control authority (CM_delta >> |CM_alpha| keeps the fin
-            // authority margin wide enough to hold sustained turns)
+            // Fin control authority. Static stability is strong (CM_alpha
+            // ~ -6 per rad, a realistic static margin): the fins can trim
+            // only ~7 deg of AoA at full deflection (0.43*1.8/6), which keeps
+            // the missile out of the high-alpha regime the linear model
+            // cannot represent.
             constexpr double CM_delta = 1.8;   // pitch/yaw moment per rad
             constexpr double Cl_delta = 0.5;   // roll moment per rad
             double tx = q * S * l * (Cl_delta * finRoll);
@@ -96,8 +106,8 @@ namespace StrikeEngine::Models {
             double tz = q * S * l * (CM_delta * finYaw);
 
             // Static stability (restoring): CM_alpha, CN_beta < 0
-            constexpr double CM_alpha = -1.0;
-            constexpr double CN_beta  = -1.0;
+            constexpr double CM_alpha = -6.0;
+            constexpr double CN_beta  = -6.0;
             ty += q * S * l * CM_alpha * alpha;
             tz += q * S * l * CN_beta  * beta;
 

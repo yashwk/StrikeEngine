@@ -4,6 +4,7 @@
 #include <strikeengine/kernel/data/SensorBlock.hpp>
 #include <random>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace StrikeEngine::Kernel {
@@ -25,6 +26,14 @@ namespace StrikeEngine::Kernel {
             double currentTime,
             double dt
         );
+
+        /**
+         * @brief Re-seed all stochastic models for reproducible runs.
+         * Same seed + same scenario + same step sequence => identical
+         * measurements. Without this, every run draws a fresh clock seed and
+         * sweeps/Monte-Carlo studies are noise-dominated.
+         */
+        void setSeed(std::uint32_t seed);
 
     private:
         std::mt19937 rng;

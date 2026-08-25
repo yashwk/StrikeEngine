@@ -53,13 +53,25 @@ namespace StrikeEngine::Kernel {
         std::vector<double> yawIntegral;
         std::vector<bool>   wasCommanded;
 
+        // Per-entity low-pass-filtered specific force for the outer loops.
+        // The raw accelerometer includes the fin's own lift with zero lag
+        // (fin -> lift -> azMeas in the same tick); feeding that back at full
+        // bandwidth couples the inner (rate) and outer (accel) loops into a
+        // high-frequency limit cycle on stiff airframes. A first-order lag on
+        // the accel feedback is standard practice (sensor/shaping filter) and
+        // enforces the classical two-timescale separation.
+        std::vector<double> azFiltered;
+        std::vector<double> ayFiltered;
+
         // Gains (tuned for the W3 DoD intercept validation)
         static constexpr double kAccelP     = 0.08;  // (rad/s) per (m/s^2)
         static constexpr double kAccelI     = 0.06;  // (rad/s) per (m/s^2 * s)
         static constexpr double kRateP      = 0.15;  // rad deflection per (rad/s)
-        static constexpr double kAlphaP     = 0.15;  // rad deflection per rad AoA/beta (stability augmentation)
+        static constexpr double kAlphaP     = 0.08;  // rad deflection per rad AoA/beta (stability augmentation;
+                                                    // reduced with strong CM_alpha -6 airframe, which self-restores)
         static constexpr double kRollP      = 0.10;  // roll deflection per rad roll
         static constexpr double kRollD      = 0.05;  // roll deflection per (rad/s)
+        static constexpr double kAccelFilTau = 0.05; // s: accel feedback LPF time constant
     };
 
 } // namespace StrikeEngine::Kernel

@@ -21,6 +21,7 @@ int main() {
     // ---- Part A: coasting drone (no motor configured) ----
     {
         SimulationKernel kernel;
+        kernel.setRandomSeed(0xAB21u);   // deterministic sensor noise
         VehicleInitState init{};
         init.px = 0; init.py = 0; init.pz = 1000.0;
         init.vx = 80.0; init.vy = 0; init.vz = 0;
@@ -53,6 +54,7 @@ int main() {
     // ---- Part B: fueled missile burns to dry mass, never below ----
     {
         SimulationKernel kernel;
+        kernel.setRandomSeed(0xAB22u);   // deterministic sensor noise
         VehicleInitState init{};
         init.px = 0; init.py = 0; init.pz = 5000.0;
         init.vx = 10.0; init.vy = 0; init.vz = 0;

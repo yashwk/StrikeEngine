@@ -1,4 +1,5 @@
 #include <strikeengine/kernel/systems/SensorSystem.hpp>
+#include <strikeengine/kernel/math/Quaternion.hpp>
 #include <cmath>
 #include <chrono>
 
@@ -7,6 +8,13 @@ namespace StrikeEngine::Kernel {
     SensorSystem::SensorSystem() {
         unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
         rng = std::mt19937(seed);
+    }
+
+    void SensorSystem::setSeed(std::uint32_t seed) {
+        // Deterministic stream for reproducible validation runs. Note: the
+        // streaming-bias state is a pure function of the RNG, so re-seeding
+        // the same scenario reproduces the same biases as well.
+        rng.seed(seed);
     }
 
     void SensorSystem::ensureCapacity(std::size_t size) {
@@ -18,22 +26,6 @@ namespace StrikeEngine::Kernel {
             trueGyroBiasY.resize(size, 0.0);
             trueGyroBiasZ.resize(size, 0.0);
         }
-    }
-
-    // Helper: Rotate vector by inverse quaternion (World to Body)
-    void rotateWorldToBody(double qw, double qx, double qy, double qz,
-                           double vx, double vy, double vz,
-                           double& bx, double& by, double& bz) {
-        // Inverse of unit quaternion (qw, qx, qy, qz) is (qw, -qx, -qy, -qz)
-        // q_inv * v * q
-        double ix =  qw * vx - (-qy) * vz + (-qz) * vy;
-        double iy =  qw * vy - (-qz) * vx + (-qx) * vz;
-        double iz =  qw * vz - (-qx) * vy + (-qy) * vx;
-        double iw = -(-qx) * vx - (-qy) * vy - (-qz) * vz;
-
-        bx = ix * qw + iw * (-qx) + iy * (-qz) - iz * (-qy);
-        by = iy * qw + iw * (-qy) + iz * (-qx) - ix * (-qz);
-        bz = iz * qw + iw * (-qz) + ix * (-qy) - iy * (-qx);
     }
 
     void SensorSystem::update(
@@ -71,10 +63,15 @@ namespace StrikeEngine::Kernel {
             double fy = physics.ay[i];
             double fz = physics.az[i] + 9.80665; // Gravity points down (-Z), so specific force +g in Z
 
-            // Rotate Specific Force to Body Frame
+            // Rotate Specific Force to Body Frame. Uses the shared
+            // Quaternion.hpp rotation (v' = q^-1 v q). The historical local
+            // helper had a sign error on the cross-product terms (it applied
+            // q^-1 twice), which inverted the measured specific force for any
+            // non-identity attitude and made the autopilot's lateral channels
+            // positive-feedback (growing oscillation -> tumble).
             double bfx, bfy, bfz;
-            rotateWorldToBody(physics.qw[i], physics.qx[i], physics.qy[i], physics.qz[i],
-                              fx, fy, fz, bfx, bfy, bfz);
+            quatRotateToBody(physics.qw[i], physics.qx[i], physics.qy[i], physics.qz[i],
+                             fx, fy, fz, bfx, bfy, bfz);
 
             // True Gyro is already body frame (assumed in PhysicsBlock wx,wy,wz)
             // Wait, PhysicsBlock wx, wy, wz are body frame angular rates? Yes.

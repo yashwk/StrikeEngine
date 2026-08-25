@@ -28,6 +28,7 @@ namespace StrikeEngine::Kernel {
         double cd      = 0.3;   // drag coefficient
         double clAlpha = 0.0;   // lift slope per rad of angle of attack
         double clFin   = 0.0;   // fin lift coefficient per rad of deflection
+        double clMax   = 2.0;   // max |CL| (stall/control-surface limit)
 
         // --- Propulsion (empty curve => no motor, vehicle coasts) ---
         std::vector<Models::ThrustDataPoint> thrustCurve;  // time_s vs thrust_N
