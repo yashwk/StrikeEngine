@@ -278,5 +278,5 @@ StrikeCEM run consumes it; RCS database loads into the sim (design identity matc
 | 2026-02 | Phase 0c archive old ECS | engine `90d03c1`, `63cbf87`, `d1507fb`; tree clean |
 | 2026-02 | Phase 1a Vulkan split | engine `9e9ad4d` — core lib compiles w/o Vulkan; ctest 4/4 green; Vulkan-ON build verified |
 | 2026-02 | Phase 1b API layout | engine `08a64ba` — 66 renames to include/src; canonical `<strikeengine/...>` includes; both builds green; consumer smoke test passes |
-| | Phase 1c install/package | … |
-| | Phase 1 gate (ctest) | … |
+| 2026-08-25 | Phase 1c install/package | engine `0b61905` — install/export package (`strikeengine` + optional `strikeengine_vulkan`), `StrikeEngine::` namespace, package config (`find_package(StrikeEngine 0.1)`), GNUInstallDirs; installed package is self-contained (glm/nlohmann build-tree only) |
+| 2026-08-25 | Phase 1 gate | engine `0b61905` — fresh configure **OFF** and **ON** both build; `ctest` 4/4 green in both; `cmake --install` to staging prefix verified for both; throwaway consumer (`find_package` + `SimulationKernel`/`ISA1976` smoke main) compiles, links and runs against both installed packages (Vulkan-dependency branch exercised with ON) |
