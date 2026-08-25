@@ -27,7 +27,6 @@
     # Generated data files
     *.bin
     /data/atmosphere_table.bin
-    docs/cem/
 
 # Build outputs and scratch
 build/
@@ -35,3 +34,4 @@ build_log.txt
 .cache/
 singlerun_output.csv
 test.cpp
+docs/cem/
