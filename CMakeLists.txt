@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.23)
-project(StrikeEngine)
+project(StrikeEngine VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,12 +34,21 @@ list(FILTER STRIKEENGINE_SOURCES EXCLUDE REGEX ".*/backend/vulkan/.*")
 
 add_library(strikeengine STATIC ${STRIKEENGINE_SOURCES})
 
-target_include_directories(strikeengine PUBLIC "${CMAKE_SOURCE_DIR}/include")
+target_include_directories(strikeengine PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+target_compile_features(strikeengine PUBLIC cxx_std_23)
 
 target_link_libraries(strikeengine PUBLIC
-    glm
-    nlohmann_json
+    $<BUILD_INTERFACE:glm>
+    $<BUILD_INTERFACE:nlohmann_json>
 )
+# glm and nlohmann/json are header-only and used only in .cpp files, never in
+# public headers. Build-tree consumers (add_subdirectory / FetchContent) get
+# them via BUILD_INTERFACE; the INSTALLED package is self-contained and its
+# exported target carries no external dependencies.
 
 # --- Optional Vulkan compute backend -------------------------------------
 # Requesting BackendType::Vulkan from SimulationKernel works only when the
@@ -54,7 +63,9 @@ if(STRIKEENGINE_WITH_VULKAN)
         src/strikeengine/kernel/backend/vulkan/VulkanBackend.cpp
     )
 
-    target_include_directories(strikeengine_vulkan PRIVATE "${CMAKE_SOURCE_DIR}/include")
+    target_include_directories(strikeengine_vulkan PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    )
     target_link_libraries(strikeengine_vulkan PUBLIC Vulkan::Vulkan)
 
     # Compile Compute Shader
@@ -66,6 +77,51 @@ if(STRIKEENGINE_WITH_VULKAN)
 endif()
 
 add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
+
+# ---------------------------------------------------------------------------
+# Install / package (Phase 1c): consumers use find_package(StrikeEngine) or
+# FetchContent of a pinned tag. Headers install to include/, the static lib and
+# (optionally) the Vulkan companion install as targets export, and a CMake
+# package config makes the dependencies resolvable (see cmake/strikeengineConfig.cmake.in).
+# ---------------------------------------------------------------------------
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS strikeengine
+        EXPORT strikeengineTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+install(DIRECTORY include/strikeengine
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+if(STRIKEENGINE_WITH_VULKAN)
+    install(TARGETS strikeengine_vulkan
+            EXPORT strikeengineTargets
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+install(EXPORT strikeengineTargets
+        FILE strikeengineTargets.cmake
+        NAMESPACE StrikeEngine::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/strikeengine)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/StrikeEngineConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/strikeengineConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/StrikeEngineConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/strikeengine
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/StrikeEngineConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/StrikeEngineConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/strikeengine
+)
 
 # Subdirectories
 enable_testing()

@@ -1,0 +1,16 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# The installed package is self-contained: glm and nlohmann/json are
+# header-only and only used by the library implementation, so the exported
+# target references no external packages.
+include("${CMAKE_CURRENT_LIST_DIR}/strikeengineTargets.cmake")
+
+# The optional Vulkan compute backend links Vulkan::Vulkan; only needed when
+# the engine was built and consumed WITH the vulkan companion.
+if(TARGET StrikeEngine::strikeengine_vulkan)
+    find_dependency(Vulkan)
+endif()
+
+check_required_components(strikeengine)
