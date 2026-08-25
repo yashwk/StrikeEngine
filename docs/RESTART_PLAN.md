@@ -277,6 +277,6 @@ StrikeCEM run consumes it; RCS database loads into the sim (design identity matc
 | 2026-02 | Phase 0b StrikeSim split | StrikeSim `78e4b67`; engine `90d03c1` (apps out) |
 | 2026-02 | Phase 0c archive old ECS | engine `90d03c1`, `63cbf87`, `d1507fb`; tree clean |
 | 2026-02 | Phase 1a Vulkan split | engine `9e9ad4d` — core lib compiles w/o Vulkan; ctest 4/4 green; Vulkan-ON build verified |
-| | Phase 1b API layout | … |
+| 2026-02 | Phase 1b API layout | engine `08a64ba` — 66 renames to include/src; canonical `<strikeengine/...>` includes; both builds green; consumer smoke test passes |
 | | Phase 1c install/package | … |
 | | Phase 1 gate (ctest) | … |
