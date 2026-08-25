@@ -5,6 +5,35 @@ traceable to the code at commits `48775a6` (engine) / `d82f851` (StrikeSim).
 Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 `(file:line)` form.
 
+> ## Post-session status (same day, end of deep session) — measured
+>
+> Session goal: W1+W2+W3 spine (per-entity config → 6-DOF rigid body → control
+> authority) proven by `ctest`. **Result: spine implemented and committed, DoD
+> NOT met.** Full suite: 5/7 pass, 2 red. Evidence is test output, not narration.
+>
+> | Workstream | Status | Measured evidence |
+> | --- | --- | --- |
+> | W1 per-entity vehicle config | DONE (`7018693`) | `vehicleconfig_test` PASS: target coasts 70 m/s, mass constant 100 kg; missile 500 → 390 kg, floors at dry 370 kg (burnout honored). `VehicleConfig` is public API. |
+> | W2 6-DOF rigid body | DONE (`7018693`) | `rigidbody_test` PARTIAL: energy drift 2.1e-4, \|q\| error 2.2e-16, gyroscopic coupling PASS (wx drifts from initial). **RED: nose-up → world-climb assertion fails (alt change −2.8 m)** — end-to-end sign chain still broken. |
+> | W3 control authority | PARTIAL (`0f8c3e3`) | Fin lift from deflection/AoA, rate-command loop, α/β damping, servo lag + rate limit all implemented and committed. **DoD RED: `intercept_test` min miss 2978 m** (was ~1281 m mid-session with older gains; both fail). Failure mode: violent pitch+yaw limit cycle ~t=2 s at high dynamic pressure; missile dives through ground (z→−1937). Thrust ruled out by isolation run (coasting missile, no motor → same instability). Root cause unconfirmed; outer-loop body-frame sign chain is the prime suspect. |
+> | W4 true RK4/RK45 | PARTIAL (`0f8c3e3`) | Derivative-callback API + true stage re-eval (RK4, RK45 Fehlberg 4(5) w/ error control + step halving, Euler, Symplectic) done. Remaining W4 scope: adaptive step control policies + impact-time interpolation — not started. |
+> | W5 events/environment | NOT STARTED | Ghosts confirmed still present: intercept run ends at z = −1937 (ground hit at z=0 set `isAlive=false`, `physics.active` stayed true). |
+> | W6 seeker/sensor | NOT STARTED | — |
+> | W7 navigation EKF | NOT STARTED | — |
+>
+> Audit items fixed by this session (baseline sections below are now stale on
+> these points): CL=0 and fin-force gap (W3 lift term, `AeroModel.hpp`);
+> fake-RK4/constant-accel integration (integrator refactor); world-frame
+> rotational placeholder (body-frame Euler, `CPUBackend.cpp`); shared 50 kN/5 s
+> motor (per-entity propulsion pool); per-entity ref area/drag (`PhysicsBlock`);
+> nav estQ/estP/estV never aligned from truth (`NavigationSystem.cpp`).
+>
+> Still open audit-critical items (baseline sections remain accurate): sign
+> convention unverified (`AutopilotSystem.cpp`, comment in §3 — now RED in
+> `rigidbody_test`), actuator chain exists but unstable at speed, ghosts (§8),
+> fixed-gain autopilot (no gain scheduling by dynamic pressure), seeker FOV/
+> latency (§6), EKF (§7), impact interpolation (§9).
+
 ---
 
 ## 1. Truth dynamics — translational
