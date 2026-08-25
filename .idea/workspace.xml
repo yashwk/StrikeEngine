@@ -1,15 +1,336 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;javascript.preferred.runtime.type.id&quot;: &quot;node&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/yashwanth/projects/StrikeEngine&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;settings.javascript.runtime&quot;,
-    &quot;settings.editor.splitter.proportion&quot;: &quot;0.31196582&quot;
+  <component name="AIDiffSettings">
+    <option name="showAIDiff" value="false" />
+  </component>
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="BackendCodeEditorMiscSettings">
+    <option name="/Default/Environment/Hierarchy/GeneratedFilesCacheKey/Timestamp/@EntryValue" value="4" type="long" />
+    <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
+  </component>
+  <component name="CMakePresetLoader"><![CDATA[{
+  "useNewFormat": true
+}]]></component>
+  <component name="CMakeProjectFlavorService">
+    <option name="flavorId" value="CMakePlainProjectFlavor" />
+  </component>
+  <component name="CMakeReloadState">
+    <option name="reloaded" value="true" />
+  </component>
+  <component name="CMakeRunConfigurationManager">
+    <generated>
+      <config projectName="StrikeEngine" targetName="sweep_test" />
+      <config projectName="StrikeEngine" targetName="glm" />
+      <config projectName="StrikeEngine" targetName="optimizer_test" />
+      <config projectName="StrikeEngine" targetName="strikeengine" />
+      <config projectName="StrikeEngine" targetName="run_tests" folderName="Tests" />
+      <config projectName="StrikeEngine" targetName="mc_test" />
+    </generated>
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="6a4d0fbe-109b-4b39-a3e8-cdaa5f30ef95" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/SimulationKernel.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/SimulationKernel.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/SimulationKernel.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/SimulationKernel.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/BackendFactory.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/backend/BackendFactory.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/BackendFactory.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/backend/BackendFactory.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/CPUBackend.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/backend/CPUBackend.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/CPUBackend.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/backend/CPUBackend.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/GPUBackend.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/backend/GPUBackend.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/PhysicsBackend.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/backend/PhysicsBackend.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/vulkan/VulkanBackend.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/backend/vulkan/VulkanBackend.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/vulkan/VulkanBackend.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/backend/vulkan/VulkanBackend.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/vulkan/VulkanContext.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/backend/vulkan/VulkanContext.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/vulkan/VulkanContext.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/backend/vulkan/VulkanContext.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/backend/vulkan/shaders/physics_step.comp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/backend/vulkan/shaders/physics_step.comp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/config/KernelConfig.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/config/KernelConfig.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/config/ScenarioConfig.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/config/ScenarioConfig.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/ControlBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/ControlBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/EntityStatusBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/EntityStatusBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/GuidanceBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/GuidanceBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/NavigationBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/NavigationBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/PhysicsBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/PhysicsBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/SeekerBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/SeekerBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/data/SensorBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/SensorBlock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/EulerIntegrator.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/integrator/EulerIntegrator.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/EulerIntegrator.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/integrator/EulerIntegrator.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/Integrator.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/integrator/Integrator.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/IntegratorFactory.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/integrator/IntegratorFactory.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/RK45Integrator.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/integrator/RK45Integrator.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/RK45Integrator.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/integrator/RK45Integrator.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/RK4Integrator.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/integrator/RK4Integrator.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/RK4Integrator.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/integrator/RK4Integrator.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/SymplecticIntegrator.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/integrator/SymplecticIntegrator.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/integrator/SymplecticIntegrator.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/integrator/SymplecticIntegrator.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/scheduler/HybridScheduler.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/scheduler/HybridScheduler.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/scheduler/HybridScheduler.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/scheduler/HybridScheduler.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/AutopilotSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/AutopilotSystem.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/AutopilotSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/AutopilotSystem.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/CommandProcessor.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/CommandProcessor.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/CommandProcessor.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/CommandProcessor.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/EventSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/EventSystem.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/EventSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/EventSystem.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/GuidanceSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/GuidanceSystem.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/GuidanceSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/GuidanceSystem.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/NavigationSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/NavigationSystem.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/NavigationSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/NavigationSystem.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/SeekerSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/SeekerSystem.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/SeekerSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/SeekerSystem.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/SensorSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/SensorSystem.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/systems/SensorSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/SensorSystem.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/time/KernelTime.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/time/KernelTime.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/physics/aerodynamics/AeroModel.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/physics/aerodynamics/AeroModel.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/physics/atmosphere/AtmosphereModel.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/physics/atmosphere/AtmosphereModel.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/physics/atmosphere/ISA1976.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/physics/atmosphere/ISA1976.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/physics/propulsion/PropulsionModel.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/physics/propulsion/PropulsionModel.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/physics/propulsion/ThrustCurve.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/physics/propulsion/ThrustCurve.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/signatures/IRSignatureDatabase.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/models/signatures/IRSignatureDatabase.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/signatures/IRSignatureDatabase.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/signatures/IRSignatureDatabase.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/signatures/RCSDatabase.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/models/signatures/RCSDatabase.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/signatures/RCSDatabase.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/signatures/RCSDatabase.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/MonteCarlo.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/simulation/MonteCarlo.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/MonteCarlo.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/simulation/MonteCarlo.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/Optimizer.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/simulation/Optimizer.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/Optimizer.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/simulation/Optimizer.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/ParamSweep.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/simulation/ParamSweep.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/ParamSweep.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/simulation/ParamSweep.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/SingleRun.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/simulation/SingleRun.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/simulation/SingleRun.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/simulation/SingleRun.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/atmosphere_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/optimizer_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/optimizer_test.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/validation/mc_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/validation/mc_test.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/validation/singlerun_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/validation/singlerun_test.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/validation/sweep_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/validation/sweep_test.cpp" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="240" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "yashwk"
   }
-}</component>
-  <component name="SelectedDebugProfileService">{
-  &quot;profileIdByStamp&quot;: [],
-  &quot;modificationCount&quot;: 1
-}</component>
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/yashwk/StrikeEngine.git",
+    "accountId": "fe24cad1-4229-4b5a-b83d-a67c2426eb71"
+  }
+}]]></component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="0z6S66Hu" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0" />
+      <entry key="MS500" value="1.000000000000015" />
+      <entry key="S2" value="1.0009575745126424" />
+      <entry key="S5" value="1.1420524271356478" />
+      <entry key="S10" value="1.7534319174506234" />
+      <entry key="S30" value="3.292668350470744" />
+      <entry key="S60" value="4.028271210878479" />
+      <entry key="M2" value="4.480374020579155" />
+      <entry key="M5" value="4.783432717824033" />
+      <entry key="M10" value="4.890813455746227" />
+      <entry key="M15" value="4.942364734982036" />
+      <entry key="M30" value="5.381244124392167" />
+      <entry key="H1" value="7.126248051017512" />
+      <entry key="H2" value="9.847929589676617" />
+      <entry key="H4" value="12.30488910366918" />
+      <entry key="D1" value="15.274864202432317" />
+      <entry key="W1" value="15.893363795340989" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="0.0" />
+      <entry key="M30" value="0.0" />
+      <entry key="H1" value="0.0" />
+      <entry key="H2" value="0.0" />
+      <entry key="H4" value="0.0" />
+      <entry key="D1" value="0.0" />
+      <entry key="W1" value="0.0" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="1.7139830638186535E-9" />
+      <entry key="MS500" value="0.01765230022767207" />
+      <entry key="S2" value="0.3654161290852515" />
+      <entry key="S5" value="0.8068364867640516" />
+      <entry key="S10" value="1.5620655091681623" />
+      <entry key="S30" value="3.218571678398859" />
+      <entry key="S60" value="3.989173973239632" />
+      <entry key="M2" value="4.460221822624295" />
+      <entry key="M5" value="4.7752131767104755" />
+      <entry key="M10" value="4.886675984185685" />
+      <entry key="M15" value="4.939600057506817" />
+      <entry key="M30" value="5.379857157709988" />
+      <entry key="H1" value="7.1255506028608515" />
+      <entry key="H2" value="9.847578174470192" />
+      <entry key="H4" value="12.304712219500654" />
+      <entry key="D1" value="15.27483448765962" />
+      <entry key="W1" value="15.893359543444166" />
+    </decayedShown>
+  </component>
+  <component name="ProjectApplicationVersion">
+    <option name="ide" value="CLion" />
+    <option name="majorVersion" value="2026" />
+    <option name="minorVersion" value="2.1" />
+    <option name="productBranch" value="Classic" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 8,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3IOyJFzYL5jINyruUc4ms0PuXAK" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+    <option name="showScratchesAndConsoles" value="false" />
+    <option name="showVisibilityIcons" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "CMake Application.StrikeDesigner.executor": "Run",
+    "CidrDebugProfileConversion": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.RadMigrateCodeStyle": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "ctest.advertisement.all.test.configuration.is.created": "true",
+    "git-widget-placeholder": "main",
+    "javascript.preferred.runtime.type.id": "node",
+    "last_opened_file_path": "/home/yashwanth/projects/StrikeEngine",
+    "node.js.detected.package.eslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "ml.llm.AcpAgentsConfigurable",
+    "settings.editor.splitter.proportion": "0.3337041"
+  }
+}]]></component>
+  <component name="RunManager" selected="CMake Application.run_tests">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="glm" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="glm" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="mc_test" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="mc_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="StrikeEngine" RUN_TARGET_NAME="mc_test">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="optimizer_test" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="optimizer_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="StrikeEngine" RUN_TARGET_NAME="optimizer_test">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="run_tests" type="CMakeRunConfiguration" factoryName="Application" folderName="Tests" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="run_tests" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="StrikeEngine" RUN_TARGET_NAME="run_tests">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="strikeengine" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="strikeengine" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="sweep_test" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="sweep_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="StrikeEngine" RUN_TARGET_NAME="sweep_test">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="All CTest" type="CTestRunConfiguration" factoryName="CTestRun" PROGRAM_PARAMS="--extra-verbose" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$CMakeCurrentLocalGenerationDir$" PASS_PARENT_ENVS_2="true" RUN_PATH="$CTestCurrentExecutableName$" EXPLICIT_BUILD_TARGET_NAME="all" TEST_MODE="SUITE_TEST">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+        <option name="BeforeTestRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="CMake Application.run_tests" />
+      <item itemvalue="CMake Application.strikeengine" />
+      <item itemvalue="CMake Application.glm" />
+      <item itemvalue="CMake Application.mc_test" />
+      <item itemvalue="CMake Application.optimizer_test" />
+      <item itemvalue="CMake Application.sweep_test" />
+      <item itemvalue="CTest Application.All CTest" />
+    </list>
+  </component>
+  <component name="SelectedDebugProfileService"><![CDATA[{
+  "profileIdByStamp": [
+    {
+      "first": {
+        "##RUN_CONFIGURATION##": "CMake Application.run_tests",
+        "cmake": "CMakeBuildProfile:Debug"
+      },
+      "second": "8f20e80d-c5d4-4bc5-b111-0f3438007d72"
+    }
+  ],
+  "modificationCount": 11
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="6a4d0fbe-109b-4b39-a3e8-cdaa5f30ef95" name="Changes" comment="" />
+      <created>1787649837191</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1787649837191</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VCPKGProject">
+    <isAutomaticCheckingOnLaunch value="false" />
+    <isAutomaticFoundErrors value="true" />
+    <isAutomaticReloadCMake value="true" />
+    <isAutomaticBootstrapAfterUpdate value="false" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
 </project>

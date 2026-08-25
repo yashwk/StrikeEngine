@@ -1,4 +1,4 @@
-#include "../../simulation/ParamSweep.hpp"
+#include <strikeengine/simulation/ParamSweep.hpp>
 #include <iostream>
 #include <cmath>
 

@@ -1,4 +1,4 @@
-#include "../../simulation/SingleRun.hpp"
+#include <strikeengine/simulation/SingleRun.hpp>
 #include <iostream>
 
 int main() {

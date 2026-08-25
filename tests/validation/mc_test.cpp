@@ -1,4 +1,4 @@
-#include "../../simulation/MonteCarlo.hpp"
+#include <strikeengine/simulation/MonteCarlo.hpp>
 #include <iostream>
 
 int main() {

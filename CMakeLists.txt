@@ -27,19 +27,14 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 FetchContent_MakeAvailable(json)
 
-# New Architecture Sources
-file(GLOB_RECURSE KERNEL_SOURCES "kernel/*.cpp")
-list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*/backend/vulkan/.*")
-file(GLOB_RECURSE MODELS_SOURCES "models/*.cpp")
-file(GLOB_RECURSE SIM_SOURCES "simulation/*.cpp")
+# Public API layout: headers under include/strikeengine, implementation under
+# src/strikeengine. Consumers use #include <strikeengine/...>.
+file(GLOB_RECURSE STRIKEENGINE_SOURCES "src/strikeengine/*.cpp")
+list(FILTER STRIKEENGINE_SOURCES EXCLUDE REGEX ".*/backend/vulkan/.*")
 
-add_library(strikeengine STATIC
-    ${KERNEL_SOURCES}
-    ${MODELS_SOURCES}
-    ${SIM_SOURCES}
-)
+add_library(strikeengine STATIC ${STRIKEENGINE_SOURCES})
 
-target_include_directories(strikeengine PUBLIC "${CMAKE_SOURCE_DIR}")
+target_include_directories(strikeengine PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
 target_link_libraries(strikeengine PUBLIC
     glm
@@ -49,22 +44,23 @@ target_link_libraries(strikeengine PUBLIC
 # --- Optional Vulkan compute backend -------------------------------------
 # Requesting BackendType::Vulkan from SimulationKernel works only when the
 # companion strikeengine_vulkan library is linked (it self-registers through
-# kernel/backend/BackendFactory). Building without it throws a clear error.
+# strikeengine/kernel/backend/BackendFactory). Building without it throws a
+# clear error.
 if(STRIKEENGINE_WITH_VULKAN)
     find_package(Vulkan REQUIRED)
 
     add_library(strikeengine_vulkan STATIC
-        kernel/backend/vulkan/VulkanContext.cpp
-        kernel/backend/vulkan/VulkanBackend.cpp
+        src/strikeengine/kernel/backend/vulkan/VulkanContext.cpp
+        src/strikeengine/kernel/backend/vulkan/VulkanBackend.cpp
     )
 
-    target_include_directories(strikeengine_vulkan PRIVATE "${CMAKE_SOURCE_DIR}")
+    target_include_directories(strikeengine_vulkan PRIVATE "${CMAKE_SOURCE_DIR}/include")
     target_link_libraries(strikeengine_vulkan PUBLIC Vulkan::Vulkan)
 
     # Compile Compute Shader
     add_custom_command(
         TARGET strikeengine_vulkan PRE_BUILD
-        COMMAND glslc ${CMAKE_SOURCE_DIR}/kernel/backend/vulkan/shaders/physics_step.comp -o ${CMAKE_BINARY_DIR}/physics_step.spv
+        COMMAND glslc ${CMAKE_SOURCE_DIR}/src/strikeengine/kernel/backend/vulkan/shaders/physics_step.comp -o ${CMAKE_BINARY_DIR}/physics_step.spv
         COMMENT "Compiling compute shader to SPIR-V"
     )
 endif()

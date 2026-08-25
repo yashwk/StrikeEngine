@@ -1,4 +1,4 @@
-#include "../simulation/Optimizer.hpp"
+#include <strikeengine/simulation/Optimizer.hpp>
 #include <iostream>
 #include <cmath>
 
