@@ -6,7 +6,8 @@
 
 namespace StrikeEngine {
     // Physics Constants (WGS 84 standard)
-    constexpr double GRAVITATIONAL_CONSTANT = 6.67430e-11; /// m^3 kg^-1 s^-2
+    /// m^3 kg^-1 s^-2
+    constexpr double GRAVITATIONAL_CONSTANT = 6.67430e-11;
     constexpr double EARTH_MASS_KG = 5.97219e24; /// kg
 
     void GravitySystem::update(Registry& registry, double dt)
@@ -29,7 +30,7 @@ namespace StrikeEngine {
 
             // Calculate the size of the gravitational force using Newton's law.
             // F = G * (m1 * m2) / r^2
-            double force_magnitude = (GRAVITATIONAL_CONSTANT * EARTH_MASS_KG * mass.currentMass_kg) /
+            double force_magnitude = (GRAVITATIONAL_CONSTANT * EARTH_MASS_KG * mass.fuelMassInitial_kg) /
                 (distance_from_center * distance_from_center);
 
             // Determine the direction of the force (towards the Earth's center at 0,0,0).

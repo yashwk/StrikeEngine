@@ -2,6 +2,7 @@ add_executable(GenerateAtmosphereTable GenerateAtmosphereTable.cpp)
 target_link_libraries(GenerateAtmosphereTable PRIVATE strikeengine)
 set_target_properties(GenerateAtmosphereTable PROPERTIES FOLDER "Tools")
 
-add_executable(convert_srtm convert_srtm.cpp)
+add_executable(convert_srtm convert_srtm.cpp
+        ../kernel/backend/CPUBackend.hpp)
 target_link_libraries(convert_srtm PRIVATE strikeengine)
 set_target_properties(convert_srtm PROPERTIES FOLDER "Tools")

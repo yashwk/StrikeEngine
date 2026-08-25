@@ -24,10 +24,10 @@ namespace StrikeEngine {
 
         for (auto entity : view) {
             auto& seeker = view.get<SeekerComponent>(entity);
-            if (seeker.type == "RF") {
+            if (seeker.type == SeekerType::RF) {
                 processRadarSeeker(entity, registry, _rcs_database_cache);
             }
-            else if (seeker.type == "IR") {
+            else if (seeker.type == SeekerType::IR) {
                 processIRSeeker(entity, registry, _ir_database_cache);
             }
         }

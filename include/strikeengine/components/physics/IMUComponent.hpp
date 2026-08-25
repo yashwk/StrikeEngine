@@ -3,7 +3,22 @@
 #include "strikeengine/ecs/Component.hpp"
 
 namespace StrikeEngine {
-
+    struct GyroTypes {
+        enum Type {
+            MEMS,
+            FiberOptic,
+            RingLaser,
+            HemisphericalResonator,
+        };
+    };
+    struct AccelerometerTypes {
+        enum Type {
+            MEMS,
+            Piezoelectric,
+            Capacitive,
+            VibratingBeam,
+        };
+    };
     /**
      * @brief Defines the error characteristics of an Inertial Measurement Unit (IMU).
      *
@@ -12,12 +27,15 @@ namespace StrikeEngine {
      */
     struct IMUComponent final : public Component {
         // Gyroscope Error Parameters
-        double gyro_bias_drift_rate_deg_per_hr = 0.1;
-        double gyro_noise_density_deg_per_sqrt_hr = 0.01;
+        double gyro_bias_drift_rate_deg_per_hr;
+        double gyro_noise_density_deg_per_sqrt_hr;
 
         // Accelerometer Error Parameters
-        double accelerometer_bias_milli_g = 1.0;
-        double accelerometer_noise_density_g_per_sqrt_hz = 0.001;
-    };
+        double accelerometer_bias_milli_g;
+        double accelerometer_noise_density_g_per_sqrt_hz;
 
+        // Magnetometer Error Parameters
+        double magnetometer_bias_uT;
+        double magnetometer_noise_density_uT_per_sqrt_hz;
+    };
 } // namespace StrikeEngine

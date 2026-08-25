@@ -1,0 +1,121 @@
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float64 : require
+
+layout(local_size_x = 256) in;
+
+#define MAX_ENTITIES 1000000
+
+layout(std430, binding = 0) buffer PhysicsData {
+    float64_t px[MAX_ENTITIES];
+    float64_t py[MAX_ENTITIES];
+    float64_t pz[MAX_ENTITIES];
+
+    float64_t vx[MAX_ENTITIES];
+    float64_t vy[MAX_ENTITIES];
+    float64_t vz[MAX_ENTITIES];
+
+    float64_t qw[MAX_ENTITIES];
+    float64_t qx[MAX_ENTITIES];
+    float64_t qy[MAX_ENTITIES];
+    float64_t qz[MAX_ENTITIES];
+
+    float64_t wx[MAX_ENTITIES];
+    float64_t wy[MAX_ENTITIES];
+    float64_t wz[MAX_ENTITIES];
+
+    float64_t ax[MAX_ENTITIES];
+    float64_t ay[MAX_ENTITIES];
+    float64_t az[MAX_ENTITIES];
+
+    float64_t alphax[MAX_ENTITIES];
+    float64_t alphay[MAX_ENTITIES];
+    float64_t alphaz[MAX_ENTITIES];
+
+    float64_t Ixx[MAX_ENTITIES];
+    float64_t Iyy[MAX_ENTITIES];
+    float64_t Izz[MAX_ENTITIES];
+
+    float64_t mass[MAX_ENTITIES];
+    uint isActive[MAX_ENTITIES]; // bool is not allowed in std430, use uint
+};
+
+layout(std430, binding = 1) buffer ControlData {
+    float64_t thrustCommand[MAX_ENTITIES];
+    float64_t pitchCommand[MAX_ENTITIES];
+    float64_t yawCommand[MAX_ENTITIES];
+    float64_t rollCommand[MAX_ENTITIES];
+};
+
+layout(push_constant) uniform PushConstants {
+    float64_t dt;
+    float64_t currentTime;
+    uint entityCount;
+} pc;
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.entityCount) return;
+    if (isActive[id] == 0) return;
+
+    // --- Simple Euler Integration MVP ---
+    // (RK4 is complex to write in a single shader immediately, we will start with Euler
+    //  to validate the memory mapping and execution first).
+
+    float64_t dt = pc.dt;
+
+    // Position integration
+    px[id] += vx[id] * dt;
+    py[id] += vy[id] * dt;
+    pz[id] += vz[id] * dt;
+
+    // Add thrust acceleration (Simple)
+    float64_t thrust = thrustCommand[id];
+    
+    // Convert quaternion to forward vector
+    float64_t q_w = qw[id];
+    float64_t q_x = qx[id];
+    float64_t q_y = qy[id];
+    float64_t q_z = qz[id];
+
+    float64_t fwd_x = 1.0 - 2.0 * (q_y * q_y + q_z * q_z);
+    float64_t fwd_y = 2.0 * (q_x * q_y + q_w * q_z);
+    float64_t fwd_z = 2.0 * (q_x * q_z - q_w * q_y);
+
+    float64_t a_thrust_x = (thrust / mass[id]) * fwd_x;
+    float64_t a_thrust_y = (thrust / mass[id]) * fwd_y;
+    float64_t a_thrust_z = (thrust / mass[id]) * fwd_z;
+
+    // Gravity
+    float64_t g_z = -9.81;
+
+    ax[id] = a_thrust_x;
+    ay[id] = a_thrust_y;
+    az[id] = a_thrust_z + g_z;
+
+    vx[id] += ax[id] * dt;
+    vy[id] += ay[id] * dt;
+    vz[id] += az[id] * dt;
+
+    // Angular integration (Simple)
+    wx[id] += alphax[id] * dt;
+    wy[id] += alphay[id] * dt;
+    wz[id] += alphaz[id] * dt;
+
+    // Quaternion derivative
+    float64_t dq_w = 0.5 * (-q_x * wx[id] - q_y * wy[id] - q_z * wz[id]);
+    float64_t dq_x = 0.5 * ( q_w * wx[id] + q_y * wz[id] - q_z * wy[id]);
+    float64_t dq_y = 0.5 * ( q_w * wy[id] - q_x * wz[id] + q_z * wx[id]);
+    float64_t dq_z = 0.5 * ( q_w * wz[id] + q_x * wy[id] - q_y * wx[id]);
+
+    qw[id] += dq_w * dt;
+    qx[id] += dq_x * dt;
+    qy[id] += dq_y * dt;
+    qz[id] += dq_z * dt;
+
+    // Normalize
+    float64_t mag = sqrt(qw[id]*qw[id] + qx[id]*qx[id] + qy[id]*qy[id] + qz[id]*qz[id]);
+    qw[id] /= mag;
+    qx[id] /= mag;
+    qy[id] /= mag;
+    qz[id] /= mag;
+}

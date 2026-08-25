@@ -8,6 +8,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "include/strikeengine/ecs/System.hpp"
+
 namespace StrikeEngine {
     class SensorSystem final : public System {
     public:

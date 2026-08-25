@@ -1,3 +1,4 @@
+// TODO : clean documentation
 #pragma once
 
 #include "strikeengine/ecs/Component.hpp"
@@ -14,10 +15,10 @@ namespace StrikeEngine {
     struct ForceAccumulatorComponent final : public Component {
     private:
         /** @brief The vector sum of all linear forces acting on the entity's center of mass. */
-        glm::dvec3 totalForce{0.0};
+        glm::dvec3 totalForce{0,0,0};
 
         /** @brief The vector sum of all torques acting on the entity. */
-        glm::dvec3 totalTorque{0.0};
+        glm::dvec3 totalTorque{0,0,0};
 
     public:
         ForceAccumulatorComponent() = default;
@@ -95,16 +96,31 @@ namespace StrikeEngine {
         }
 
         /**
+         * @brief Resets all accumulated torques acting on the entity.
+         *
+         */
+        void clearTorque()
+        {
+            totalTorque = glm::dvec3(0,0,0);
+        }
+
+        /**
+         * @brief Resets all accumulated forces acting on the entity.
+         */
+        void clearForce()
+        {
+            totalForce = glm::dvec3(0,0,0);
+        }
+
+        /**
          * @brief Resets all accumulated forces and torques acting on the entity.
          *
          * This method clears the totalForce and totalTorque vectors, setting them to zero.
-         * It is typically called at the beginning of a new simulation frame to ensure
-         * forces and torques are recalculated without residuals from the previous frame.
          */
         void clear()
         {
-            totalForce = glm::dvec3(0.0);
-            totalTorque = glm::dvec3(0.0);
+            totalForce = glm::dvec3(0,0,0);
+            totalTorque = glm::dvec3(0,0,0);
         }
     };
 } // namespace StrikeEngine

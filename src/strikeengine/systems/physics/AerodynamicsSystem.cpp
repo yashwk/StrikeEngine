@@ -11,7 +11,7 @@
 #include <glm/gtx/norm.hpp>
 
 namespace StrikeEngine {
-   AerodynamicsSystem::AerodynamicsSystem(const AtmosphereManager& atmosphereManager): _atmosphere_manager(
+   AerodynamicsSystem::AerodynamicsSystem(const AtmosphereManager& atmosphereManager) : _atmosphere_manager(
       atmosphereManager)
    {
    }
@@ -32,17 +32,17 @@ namespace StrikeEngine {
          auto& accumulator = view.get<ForceAccumulatorComponent>(entity);
 
          // --- 1. Load Aerodynamic Database if is not already cached ---
-         if (!_aeroDatabases.contains(aero.profileID))
+         if (!_aeroDatabases.contains(aero.profile_id))
          {
             auto db = std::make_unique<AerodynamicsDatabase>();
-            std::string profile_path = "data/aero/" + aero.profileID + ".json";
-            if (db->loadProfile(profile_path)) { _aeroDatabases[aero.profileID] = std::move(db); }
+            std::string profile_path = "data/aero/" + aero.profile_id + ".json";
+            if (db->loadProfile(profile_path)) { _aeroDatabases[aero.profile_id] = std::move(db); }
             else
             {
                continue;
             }
          }
-         const auto& aero_db = _aeroDatabases.at(aero.profileID);
+         const auto& aero_db = _aeroDatabases.at(aero.profile_id);
 
          // --- 2. Calculate Current Flight Conditions ---
          if (glm::length2(velocity.getLinear()) < 1e-6)

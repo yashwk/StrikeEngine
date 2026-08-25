@@ -26,7 +26,7 @@ namespace StrikeEngine {
             std::cerr << "Error: Could not open scenario file: " << scenarioPath << std::endl;
             return false;
         }
-        json data;
+        nlohmann::json data;
         try {
             data = json::parse(f);
         } catch (const json::parse_error& e) {

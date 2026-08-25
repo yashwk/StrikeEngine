@@ -1,3 +1,2 @@
 add_subdirectory(StrikeSim)
 add_subdirectory(StrikeDesigner)
-add_subdirectory(MissionCLI)

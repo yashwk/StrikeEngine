@@ -29,85 +29,105 @@
 #include <iostream>
 
 namespace StrikeEngine {
-
     using json = nlohmann::json;
 
     // Helper function to parse a single GainSchedule from a JSON object
-    void parseGainSchedule(const json& j, GainSchedule& schedule) {
-        if (j.contains("mach_breakpoints")) {
+    void parseGainSchedule(const json& j, GainSchedule& schedule)
+    {
+        if (j.contains("mach_breakpoints"))
+        {
             j.at("mach_breakpoints").get_to(schedule.mach_breakpoints);
         }
-        if (j.contains("dynamic_pressure_breakpoints_pa")) {
+        if (j.contains("dynamic_pressure_breakpoints_pa"))
+        {
             j.at("dynamic_pressure_breakpoints_pa").get_to(schedule.dynamic_pressure_breakpoints_pa);
         }
-        if (j.contains("gain_table")) {
+        if (j.contains("gain_table"))
+        {
             j.at("gain_table").get_to(schedule.gain_table);
         }
     }
 
-    EntityFactory::EntityFactory(Registry& registry) : _registry(registry) {}
+    EntityFactory::EntityFactory(Registry& registry) : _registry(registry)
+    {
+    }
 
-    Entity EntityFactory::createFromProfile(const std::string& profilePath) {
+    Entity EntityFactory::createFromProfile(const std::string& profilePath)
+    {
         std::ifstream f(profilePath);
-        if (!f.is_open()) {
+        if (!f.is_open())
+        {
             throw std::runtime_error("EntityFactory: Could not open profile file: " + profilePath);
         }
 
         json data;
-        try {
+        try
+        {
             data = json::parse(f);
-        } catch (const json::parse_error& e) {
+        }
+        catch (const json::parse_error& e)
+        {
             throw std::runtime_error("EntityFactory: Failed to parse JSON profile '" + profilePath + "': " + e.what());
         }
 
         Entity newEntity = _registry.create();
-        std::cout << "Creating entity '" << data.at("name").get<std::string>() << "' with ID " << newEntity.index() << " (v" << newEntity.version() << ")" << std::endl;
+        std::cout << "Creating entity '" << data.at("name").get<std::string>() << "' with ID " << newEntity.index() <<
+            " (v" << newEntity.version() << ")" << std::endl;
 
         const auto& componentsToAdd = data.at("simulation").at("components_to_add");
 
-        for (const std::string& componentName : componentsToAdd) {
-            if (componentName == "transform") {
+        for (const std::string& componentName : componentsToAdd)
+        {
+            if (componentName == "transform")
+            {
                 const auto& c = data.at("initial_state").at("transform");
                 TransformComponent transform;
                 transform.position = c.at("position").get<glm::dvec3>();
                 transform.orientation = c.at("orientation").get<glm::dquat>();
                 _registry.add<TransformComponent>(newEntity, transform);
             }
-            else if (componentName == "mass") {
+            else if (componentName == "mass")
+            {
                 const auto& c = data.at("mass_properties");
                 MassComponent mass;
-                mass.initialMass_kg = c.at("initial_kg").get<double>();
+                mass.fuelMassInitial_kg = c.at("initial_kg").get<double>();
                 mass.dryMass_kg = c.at("dry_kg").get<double>();
-                mass.currentMass_kg = mass.initialMass_kg;
-                mass.updateInverseMass();
+                mass.fuelMassRemaining_kg = mass.fuelMassInitial_kg;
                 _registry.add<MassComponent>(newEntity, mass);
             }
-            else if (componentName == "inertia") {
+            else if (componentName == "inertia")
+            {
                 const auto& c = data.at("mass_properties");
                 InertiaComponent inertia;
                 inertia.setInertiaTensor(c.at("inertia_tensor").get<glm::dmat3>());
                 _registry.add<InertiaComponent>(newEntity, inertia);
             }
-            else if (componentName == "velocity") {
+            else if (componentName == "velocity")
+            {
                 const auto& c = data.at("initial_state").at("velocity");
                 VelocityComponent velocity;
                 velocity.setLinear(c.at("linear").get<glm::dvec3>());
                 velocity.setAngular(c.at("angular").get<glm::dvec3>());
                 _registry.add<VelocityComponent>(newEntity, velocity);
             }
-            else if (componentName == "propulsion") {
+            else if (componentName == "propulsion")
+            {
                 const auto& c = data.at("propulsion");
                 auto& propulsion = _registry.add<PropulsionComponent>(newEntity);
-                for (const auto& stage_data : c.at("stages")) {
+                for (const auto& stage_data : c.at("stages"))
+                {
                     PropulsionStage stage;
                     stage.name = stage_data.at("name").get<std::string>();
                     stage.stage_mass_kg = stage_data.at("stage_mass_kg").get<double>();
                     stage.burnTime_seconds = stage_data.at("burnTime_seconds").get<double>();
                     stage.isp_sea_level_s = stage_data.value("isp_sea_level_s", 0.0);
                     stage.isp_vacuum_s = stage_data.value("isp_vacuum_s", 0.0);
-                    if (stage_data.contains("thrust_curve")) {
-                        for (const auto& point : stage_data.at("thrust_curve")) {
-                            if (point.is_array() && point.size() == 2) {
+                    if (stage_data.contains("thrust_curve"))
+                    {
+                        for (const auto& point : stage_data.at("thrust_curve"))
+                        {
+                            if (point.is_array() && point.size() == 2)
+                            {
                                 stage.thrust_curve.emplace_back(point[0].get<double>(), point[1].get<double>());
                             }
                         }
@@ -115,26 +135,34 @@ namespace StrikeEngine {
                     propulsion.stages.push_back(stage);
                 }
                 propulsion.active = c.value("active", false);
-                if (propulsion.active && !propulsion.stages.empty()) {
+                if (propulsion.active && !propulsion.stages.empty())
+                {
                     propulsion.currentStageIndex = 0;
                 }
             }
-            else if (componentName == "aerodynamics") {
+            else if (componentName == "aerodynamics")
+            {
                 const auto& c = data.at("aerodynamics");
                 auto& aero = _registry.add<AerodynamicProfileComponent>(newEntity);
-                aero.profileID = c.at("profile_id").get<std::string>();
+                aero.profile_id = c.at("profile_id").get<std::string>();
                 aero.reference_area_m2 = c.at("reference_area_m2").get<double>();
                 aero.wingspan_m = c.value("wingspan_m", 1.0);
             }
-            else if (componentName == "guidance") {
+            else if (componentName == "guidance")
+            {
                 const auto& c = data.at("guidance");
                 GuidanceComponent guidance;
                 auto lawString = c.at("law").get<std::string>();
-                if (lawString == "AugmentedProportionalNavigation") {
+                if (lawString == "AugmentedProportionalNavigation")
+                {
                     guidance.law = GuidanceLaw::AugmentedProportionalNavigation;
-                } else if (lawString == "PurePursuit") {
+                }
+                else if (lawString == "PurePursuit")
+                {
                     guidance.law = GuidanceLaw::PurePursuit;
-                } else {
+                }
+                else
+                {
                     guidance.law = GuidanceLaw::ProportionalNavigation;
                 }
                 guidance.navigation_constant = c.at("navigation_constant").get<double>();
@@ -143,21 +171,33 @@ namespace StrikeEngine {
             else if (componentName == "seeker") {
                 const auto& c = data.at("seeker");
                 SeekerComponent seeker;
-                seeker.type = c.at("type").get<std::string>();
+                if (c.at("type").get<std::string>() == "RF")
+                {
+                    seeker.type = SeekerType::RF;
+                }
+                else
+                {
+                    seeker.type = SeekerType::IR;
+                }
+
                 seeker.field_of_view_deg = c.at("field_of_view_deg").get<double>();
                 seeker.gimbal_limit_deg = c.at("gimbal_limit_deg").get<double>();
                 seeker.max_range_m = c.at("max_range_m").get<double>();
                 _registry.add<SeekerComponent>(newEntity, seeker);
             }
-            else if (componentName == "rcs_profile") {
-                if (data.contains("rcs_profile")) {
+            else if (componentName == "rcs_profile")
+            {
+                if (data.contains("rcs_profile"))
+                {
                     const auto& c = data.at("rcs_profile");
                     auto& rcs = _registry.add<RCSProfileComponent>(newEntity);
                     rcs.profile_path = c.at("profile_path").get<std::string>();
                 }
             }
-            else if (componentName == "antenna") {
-                if (data.contains("antenna")) {
+            else if (componentName == "antenna")
+            {
+                if (data.contains("antenna"))
+                {
                     const auto& c = data.at("antenna");
                     auto& antenna = _registry.add<AntennaComponent>(newEntity);
                     antenna.transmitter_power_W = c.value("transmitter_power_W", 10000.0);
@@ -167,38 +207,47 @@ namespace StrikeEngine {
                     antenna.snr_threshold_dB = c.value("snr_threshold_dB", 13.0);
                 }
             }
-            else if (componentName == "infrared_seeker") {
-                if (data.contains("infrared_seeker")) {
+            else if (componentName == "infrared_seeker")
+            {
+                if (data.contains("infrared_seeker"))
+                {
                     const auto& c = data.at("infrared_seeker");
                     auto& ir_seeker = _registry.add<InfraredSeekerComponent>(newEntity);
                     ir_seeker.sensitivity_W = c.value("sensitivity_W", 1e-15);
                     ir_seeker.field_of_view_deg = c.value("field_of_view_deg", 4.0);
                 }
             }
-            else if (componentName == "infrared_signature") {
-                if (data.contains("infrared_signature")) {
+            else if (componentName == "infrared_signature")
+            {
+                if (data.contains("infrared_signature"))
+                {
                     const auto& c = data.at("infrared_signature");
                     auto& ir_sig = _registry.add<InfraredSignatureComponent>(newEntity);
                     ir_sig.profile_path = c.at("profile_path").get<std::string>();
                 }
             }
-            else if (componentName == "target_signature") {
+            else if (componentName == "target_signature")
+            {
                 const auto& c = data.at("target_signature");
                 TargetComponent target;
                 target.rcs_m2 = c.at("rcs_m2").get<double>();
                 _registry.add<TargetComponent>(newEntity, target);
             }
-            else if (componentName == "imu") {
+            else if (componentName == "imu")
+            {
                 const auto& c = data.at("imu");
                 IMUComponent imu;
                 imu.gyro_bias_drift_rate_deg_per_hr = c.at("gyro_bias_drift_rate_deg_per_hr").get<double>();
                 imu.gyro_noise_density_deg_per_sqrt_hr = c.at("gyro_noise_density_deg_per_sqrt_hr").get<double>();
                 imu.accelerometer_bias_milli_g = c.at("accelerometer_bias_milli_g").get<double>();
-                imu.accelerometer_noise_density_g_per_sqrt_hz = c.at("accelerometer_noise_density_g_per_sqrt_hz").get<double>();
+                imu.accelerometer_noise_density_g_per_sqrt_hz = c.at("accelerometer_noise_density_g_per_sqrt_hz").get<
+                    double>();
                 _registry.add<IMUComponent>(newEntity, imu);
             }
-            else if (componentName == "gps") {
-                if (data.contains("gps")) {
+            else if (componentName == "gps")
+            {
+                if (data.contains("gps"))
+                {
                     const auto& c = data.at("gps");
                     auto& gps_comp = _registry.add<GPSComponent>(newEntity);
                     gps_comp.update_rate_hz = c.value("update_rate_hz", 1.0);
@@ -213,21 +262,27 @@ namespace StrikeEngine {
             else if (componentName == "autopilot_state") _registry.add<AutopilotStateComponent>(newEntity);
         }
 
-        if (data.contains("autopilot")) {
+        if (data.contains("autopilot"))
+        {
             const auto& autopilot_data = data.at("autopilot");
-            if (_registry.has<AutopilotStateComponent>(newEntity)) {
+            if (_registry.has<AutopilotStateComponent>(newEntity))
+            {
                 auto& autopilot_state = _registry.get<AutopilotStateComponent>(newEntity);
-                if (autopilot_data.contains("kp_schedule")) {
+                if (autopilot_data.contains("kp_schedule"))
+                {
                     parseGainSchedule(autopilot_data.at("kp_schedule"), autopilot_state.kp_schedule);
                 }
-                if (autopilot_data.contains("ki_schedule")) {
+                if (autopilot_data.contains("ki_schedule"))
+                {
                     parseGainSchedule(autopilot_data.at("ki_schedule"), autopilot_state.ki_schedule);
                 }
-                if (autopilot_data.contains("kd_schedule")) {
+                if (autopilot_data.contains("kd_schedule"))
+                {
                     parseGainSchedule(autopilot_data.at("kd_schedule"), autopilot_state.kd_schedule);
                 }
             }
-            if (_registry.has<ControlSurfaceComponent>(newEntity)) {
+            if (_registry.has<ControlSurfaceComponent>(newEntity))
+            {
                 auto& control_surface = _registry.get<ControlSurfaceComponent>(newEntity);
                 double max_deflection_deg = autopilot_data.value("max_deflection_deg", 20.0);
                 control_surface.max_deflection_rad = glm::radians(max_deflection_deg);
@@ -238,5 +293,4 @@ namespace StrikeEngine {
 
         return newEntity;
     }
-
 } // namespace StrikeEngine

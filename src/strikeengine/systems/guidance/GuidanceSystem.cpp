@@ -1,7 +1,7 @@
+// TODO : refactor file
 #include "strikeengine/systems/guidance/GuidanceSystem.hpp"
 #include "strikeengine/ecs/Registry.hpp"
 
-// Required Components
 #include "strikeengine/components/guidance/GuidanceComponent.hpp"
 #include "strikeengine/components/guidance/AutopilotCommandComponent.hpp"
 #include "strikeengine/components/physics/NavigationStateComponent.hpp"
@@ -13,11 +13,11 @@
 
 namespace StrikeEngine {
 
-    // Define standard gravity for converting acceleration from m/s^2 to G's.
+    // standard gravity in m/s^2
     constexpr double STANDARD_GRAVITY = 9.80665;
 
     void GuidanceSystem::update(Registry& registry, double dt) {
-        // The view now requires the full set of components for a realistic GNC loop.
+
         auto view = registry.view<GuidanceComponent, SeekerComponent, NavigationStateComponent, AutopilotCommandComponent>();
 
         for (auto entity : view) {

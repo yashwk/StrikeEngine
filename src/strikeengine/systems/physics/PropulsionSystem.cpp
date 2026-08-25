@@ -1,3 +1,4 @@
+// TODO : refactor file to accommodate more propulsion modes
 #include "strikeengine/systems/physics/PropulsionSystem.hpp"
 #include "strikeengine/atmosphere/AtmosphereManager.hpp"
 #include "strikeengine/components/physics/PropulsionComponent.hpp"
@@ -8,6 +9,8 @@
 #include <algorithm>
 
 namespace StrikeEngine {
+
+
 
     // Helper function to perform linear interpolation on the thrust curve
     double getThrustFromCurve(double currentTime, const std::vector<ThrustDataPoint>& curve) {
@@ -49,8 +52,7 @@ namespace StrikeEngine {
             auto& currentStage = propulsion.stages[propulsion.currentStageIndex];
 
             if (propulsion.timeInCurrentStage_seconds >= currentStage.burnTime_seconds) {
-                mass.currentMass_kg -= currentStage.stage_mass_kg;
-                mass.updateInverseMass();
+                mass.fuelMassInitial_kg -= currentStage.stage_mass_kg;
                 propulsion.currentStageIndex++;
                 propulsion.timeInCurrentStage_seconds = 0.0;
                 if (propulsion.currentStageIndex >= propulsion.stages.size()) {
@@ -79,8 +81,7 @@ namespace StrikeEngine {
                 const double g0 = 9.80665;
                 if (current_isp > 0) {
                     double fuelFlowRate = currentThrust / (current_isp * g0);
-                    mass.currentMass_kg -= fuelFlowRate * dt;
-                    mass.updateInverseMass();
+                    mass.fuelMassInitial_kg -= fuelFlowRate * dt;
                 }
             }
 

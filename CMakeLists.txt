@@ -3,20 +3,12 @@ project(StrikeEngine)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-set(PROJECT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set(PROJECT_APPS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/apps)
-set(PROJECT_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
-set(PROJECT_TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-set(PROJECT_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Dependencies
 include(FetchContent)
-find_package(Vulkan REQUIRED)
 
-set(VULKAN_INCLUDE_DIR ${Vulkan_INCLUDE_DIRS})
-set(VULKAN_LIBRARIES ${Vulkan_LIBRARIES})
+find_package(Vulkan REQUIRED)
 
 FetchContent_Declare(
         glm
@@ -30,27 +22,37 @@ FetchContent_Declare(
         GIT_TAG v3.12.0
 )
 
-FetchContent_Declare(
-        glfw
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG 3.4
-)
-
-FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG v1.92.5-docking
-)
-
 FetchContent_MakeAvailable(glm)
 FetchContent_MakeAvailable(json)
-FetchContent_MakeAvailable(glfw)
-FetchContent_MakeAvailable(imgui)
+
+# New Architecture Sources
+file(GLOB_RECURSE KERNEL_SOURCES "kernel/*.cpp")
+file(GLOB_RECURSE MODELS_SOURCES "models/*.cpp")
+file(GLOB_RECURSE SIM_SOURCES "simulation/*.cpp")
+
+add_library(strikeengine STATIC
+    ${KERNEL_SOURCES}
+    ${MODELS_SOURCES}
+    ${SIM_SOURCES}
+)
+
+# Compile Compute Shader
+add_custom_command(
+    TARGET strikeengine PRE_BUILD
+    COMMAND glslc ${CMAKE_SOURCE_DIR}/kernel/backend/vulkan/shaders/physics_step.comp -o ${CMAKE_BINARY_DIR}/physics_step.spv
+    COMMENT "Compiling compute shader to SPIR-V"
+)
+
+target_include_directories(strikeengine PUBLIC "${CMAKE_SOURCE_DIR}")
+
+target_link_libraries(strikeengine PUBLIC
+    glm
+    nlohmann_json
+    Vulkan::Vulkan
+)
 
 # Subdirectories
-add_subdirectory(src)
-add_subdirectory(apps)
-add_subdirectory(tools)
 add_subdirectory(tests)
+add_subdirectory(apps)
 
-#add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
+add_definitions(-DGLM_ENABLE_EXPERIMENTAL)

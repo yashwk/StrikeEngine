@@ -4,22 +4,19 @@
 #include <string>
 
 namespace StrikeEngine {
+    enum FuzeType {
+        PROXIMITY_RADAR,
+        PROXIMITY_LASER,
+        IMPACT,
+        NONE,
+    };
 
     /**
      * @brief Defines the trigger logic for a warhead.
      */
     struct FuzeComponent final : public Component {
-        /**
-         * @brief A string identifier for the fuze type.
-         * Examples: "proximity_radar", "proximity_laser", "impact"
-         */
-        std::string type = "proximity_radar";
-
-        /**
-         * @brief The distance from the target, in meters, at which the proximity
-         * fuze will trigger the warhead detonation.
-         */
-        double trigger_distance_m = 5.0;
+        FuzeType type;
+        double trigger_angle_deg;
+        double trigger_distance_m;
     };
-
 } // namespace StrikeEngine

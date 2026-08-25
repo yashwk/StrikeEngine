@@ -5,12 +5,9 @@
 #include <string>
 
 namespace StrikeEngine {
-
 	enum class SeekerType {
 		RF,
-		IR,
-		IIR,
-		LASER
+		IR
 	};
 
 	enum class SeekerMode {
@@ -25,15 +22,18 @@ namespace StrikeEngine {
 	 */
 	struct SeekerComponent final : public Component {
 		// --- Properties (Loaded from profile) ---
-		std::string type ; // e.g., "RF" (Radio Frequency), "IR" (Infrared)
-		double field_of_view_deg = 10.0;
-		double gimbal_limit_deg = 60.0;
-		double max_range_m = 25000.0;
+
+		SeekerType type;
+		SeekerMode mode;
+		double field_of_view_deg;
+		double gimbal_limit_deg;
+		double max_range_m;
 
 		// --- State Variables ---
+		// TODO : strict state management
 		bool is_active = false;
+
 		bool has_lock = false;
 		Entity locked_target = NULL_ENTITY;
 	};
-
 } // namespace StrikeEngine

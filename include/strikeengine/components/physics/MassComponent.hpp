@@ -1,39 +1,60 @@
 #pragma once
 
 #include "strikeengine/ecs/Component.hpp"
+#include <algorithm>
 
 namespace StrikeEngine {
 
     /**
-     * @brief Represents the physical mass of an entity, including changes from fuel consumption.
+     * @brief Represents the mass properties of a rigid body.
      *
-     * This component is essential for all physics calculations involving force and acceleration.
-     * It tracks the initial (wet) mass, the final (dry) mass, and the current mass,
-     * which allows systems like the ThrustSystem to model fuel usage realistically.
+     * This component separates immutable structural mass from
+     * consumable mass (fuel/propellant). All derived quantities
+     * are computed, never stored redundantly.
      */
     struct MassComponent final : public Component {
-        /** @brief The initial mass of the entity at launch, including all fuel (in kg). */
-        double initialMass_kg{1.0};
 
-        /** @brief The mass of the entity after all the propellant is consumed (in kg). */
+        // --------------------------------------------------
+        // Immutable structural properties
+        // --------------------------------------------------
+
+        /** @brief Structural (dry) mass of the entity in kg. */
         double dryMass_kg{1.0};
 
-        /** @brief The current mass of the entity at the current simulation tick (in kg). */
-        double currentMass_kg{1.0};
+        // --------------------------------------------------
+        // Consumable mass (fuel / propellant)
+        // --------------------------------------------------
 
-        /**
-         * @brief The inverse of the current mass (1.0 / currentMass_kg).
-         * Pre-calculated to optimize physics calculations by replacing division with multiplication.
-         * A value of 0.0 represents an object with infinite mass.
-         */
-        double inverseMass{1.0};
+        /** @brief Total fuel mass at launch (kg). */
+        double fuelMassInitial_kg{0.0};
 
-        /**
-         * @brief Updates the inverseMass based on the currentMass_kg.
-         * Should be called by a system whenever the currentMass_kg changes.
-         */
-        void updateInverseMass() {
-            inverseMass = (currentMass_kg > 1e-9) ? 1.0 / currentMass_kg : 0.0;
+        /** @brief Remaining fuel mass (kg). */
+        double fuelMassRemaining_kg{0.0};
+
+        // --------------------------------------------------
+        // Derived quantities (computed, not stored)
+        // --------------------------------------------------
+
+        /** @brief Returns the current total mass (kg). */
+        [[nodiscard]] double totalMass() const noexcept {
+            return dryMass_kg + fuelMassRemaining_kg;
+        }
+
+        /** @brief Returns inverse total mass (1/kg). */
+        [[nodiscard]] double inverseMass() const noexcept {
+            const double m = totalMass();
+            return (m > 1e-9) ? 1.0 / m : 0.0;
+        }
+
+        /** @brief Returns true if fuel remains. */
+        [[nodiscard]] bool hasFuel() const noexcept {
+            return fuelMassRemaining_kg > 0.0;
+        }
+
+        /** @brief Consumes fuel (kg). Clamped safely. */
+        void consumeFuel(double mass_kg) noexcept {
+            fuelMassRemaining_kg =
+                std::max(0.0, fuelMassRemaining_kg - mass_kg);
         }
     };
 

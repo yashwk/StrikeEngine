@@ -74,7 +74,7 @@ namespace StrikeEngine {
 
             // --- 1. Simulate and Process IMU Data ---
             // Get the "perfect" ground truth acceleration for this frame.
-            glm::dvec3 ground_truth_acceleration = accumulator.getTotalForce() * mass.inverseMass;
+            glm::dvec3 ground_truth_acceleration = accumulator.getTotalForce() * mass.inverseMass();
 
             constexpr double g_to_ms2 = 9.80665;
             double accel_noise_std_dev = imu.accelerometer_noise_density_g_per_sqrt_hz * g_to_ms2 / sqrt(dt);

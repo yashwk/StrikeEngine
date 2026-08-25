@@ -17,6 +17,6 @@ namespace StrikeEngine {
 		 * @param registry A reference to the ECS registry.
 		 * @param dt The time elapsed since the last frame (delta time).
 		 */
-		virtual void update(Registry& registry, double dt);
+		virtual void update(Registry& registry, double dt) = 0;
 	};
 } // namespace StrikeEngine

@@ -1,6 +1,7 @@
 file(GLOB_RECURSE STRIKEENGINE_SOURCES "strikeengine/**/*.cpp")
 
-add_library(strikeengine STATIC ${STRIKEENGINE_SOURCES})
+add_library(strikeengine STATIC ${STRIKEENGINE_SOURCES}
+        ../kernel/backend/CPUBackend.hpp)
 
 target_compile_definitions(strikeengine PUBLIC GLM_ENABLE_EXPERIMENTAL)
 

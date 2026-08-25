@@ -1,3 +1,4 @@
+// TODO : refactor file to add more propulsion modes
 #pragma once
 
 #include "strikeengine/ecs/Component.hpp"
@@ -24,7 +25,6 @@ namespace StrikeEngine {
         std::vector<ThrustDataPoint> thrust_curve;
         double burnTime_seconds = 0.0; // Total duration of the stage burn
 
-        // --- UPGRADED ---
         // Engine efficiency (Isp) is now defined at sea level and in a vacuum.
         double isp_sea_level_s = 0.0;
         double isp_vacuum_s = 0.0;

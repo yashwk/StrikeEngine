@@ -15,7 +15,7 @@ namespace StrikeEngine {
          * @brief A unique identifier used to look up the correct set of
          * aerodynamic tables from a central database.
          */
-        std::string profileID;
+        std::string profile_id;
 
         /**
          * @brief The reference area (in m^2) used in aerodynamic force calculations.
@@ -29,7 +29,7 @@ namespace StrikeEngine {
 
 
         // --- State Variables (Updated by Systems each tick) ---
-
+        // TODO : add more state variables
         /**
          * @brief The current angle of attack (AoA) in radians.
          */

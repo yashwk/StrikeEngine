@@ -9,7 +9,6 @@
 
 namespace StrikeEngine {
 
-    // Helper functions to convert decibels (dB) to a linear ratio
     double dbToRatio(double db) {
         return std::pow(10.0, db / 10.0);
     }

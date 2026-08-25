@@ -7,6 +7,7 @@ namespace StrikeEngine {
      * @brief Defines the common infrared wavelength bands for sensors.
      */
     enum class IRWavelengthBand {
+        ShortWave, // SWIR (1-3 micrometers) - Good for high-res imaging.
         MidWave, // MWIR (3-5 micrometers) - Good for detecting hot engine plumes.
         LongWave // LWIR (8-12 micrometers) - Good for detecting cooler targets like airframes.
     };

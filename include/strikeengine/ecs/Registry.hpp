@@ -10,6 +10,7 @@
 #include <iostream>
 #include <deque>
 #include <ranges>
+#include <typeindex>
 
 namespace StrikeEngine {
 
@@ -98,18 +99,17 @@ namespace StrikeEngine {
             return {index, _entityVersions[index]};
         }
 
-        void destroy(Entity entity) {
+        void destroy(Entity entity) noexcept{
             uint32_t index = entity.index();
             if (index >= _entityVersions.size() || _entityVersions[index] != entity.version()) {
                 return; // Entity is already invalid
             }
-            _entityVersions[index]++; // Invalidate all existing handles
-            _freeList.push_back(index);
-
             // Notify all component pools to remove their data for this entity
             for (const auto& pool : _componentPools | std::views::values) {
                 pool->onEntityDestroyed(entity);
             }
+            _entityVersions[index]++; // Invalidate all existing handles
+            _freeList.push_back(index);
         }
 
         [[nodiscard]] bool isAlive(Entity entity) const {
@@ -138,11 +138,14 @@ namespace StrikeEngine {
             if (!isAlive(entity)) {
                 return false;
             }
-            const char* typeName = typeid(T).name();
-            if (!_componentPools.contains(typeName)) {
+            auto key = std::type_index(typeid(T));
+            auto it = _componentPools.find(key);
+
+            if (it == _componentPools.end()) {
                 return false;
             }
-            return getComponentPool<T>()->has(entity);
+            auto pool = static_cast<ComponentPool<T>*>(it->second.get());
+            return pool->has(entity);
         }
 
         template<typename... Components>
@@ -195,16 +198,16 @@ namespace StrikeEngine {
     private:
         template<typename T>
         std::shared_ptr<ComponentPool<T>> getComponentPool() {
-            const char* typeName = typeid(T).name();
-            if (!_componentPools.contains(typeName)) {
-                _componentPools[typeName] = std::make_shared<ComponentPool<T>>();
+            auto key = std::type_index(typeid(T));
+            if (!_componentPools.contains(key)) {
+                _componentPools[key] = std::make_shared<ComponentPool<T>>();
             }
-            return std::static_pointer_cast<ComponentPool<T>>(_componentPools[typeName]);
+            return std::static_pointer_cast<ComponentPool<T>>(_componentPools[key]);
         }
 
         uint32_t _nextEntityIndex = 0;
         std::deque<uint32_t> _freeList;
         std::vector<uint32_t> _entityVersions;
-        std::unordered_map<const char*, std::shared_ptr<IComponentPool>> _componentPools;
+        std::unordered_map<std::type_index, std::shared_ptr<IComponentPool>> _componentPools;
     };
 }

@@ -2,6 +2,7 @@
 
 #include "strikeengine/ecs/Component.hpp"
 #include "strikeengine/ecs/Entity.hpp"
+
 namespace StrikeEngine {
     enum class GuidanceLaw {
         ProportionalNavigation,
@@ -20,18 +21,19 @@ namespace StrikeEngine {
         /** @brief The unique ID of the entity this component is trying to intercept. */
         Entity targetEntity = NULL_ENTITY;
 
-        /** @brief A string identifier for the guidance law (e.g., "ProportionalNavigation"). */
-        GuidanceLaw law = GuidanceLaw::ProportionalNavigation;
+        /**
+         * @brief The guidance law to be chosen from the GuidanceLaw enum
+         */
+        GuidanceLaw law;
 
         /**
          * @brief The navigation constant (N) for Proportional Navigation.
          * A dimensionless value, typically between 3 and 5. It determines the
          * "aggressiveness" of the guidance corrections.
          */
-        double navigation_constant = 4.0;
+        double navigation_constant;
 
         /** @brief A flag to enable or disable the guidance logic for this entity. */
-        bool enabled = true;
+        bool enabled;
     };
-
 } // namespace StrikeEngine
