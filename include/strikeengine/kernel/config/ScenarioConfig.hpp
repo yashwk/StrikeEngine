@@ -15,6 +15,13 @@ namespace StrikeEngine::Kernel {
         double initialTargetX = 0.0;
         double initialTargetY = 0.0;
         double initialTargetZ = 0.0;
+
+        // Target velocity. ProNav needs a correct closing velocity against a
+        // moving target (LOS-rate guidance derives omega from relative
+        // velocity); defaults keep legacy scenarios stationary-aimpoint.
+        double initialTargetVx = 0.0;
+        double initialTargetVy = 0.0;
+        double initialTargetVz = 0.0;
     };
 
     struct ScenarioConfig {
@@ -37,6 +44,9 @@ namespace StrikeEngine::Kernel {
                     cmd.targetX = entityCfg.initialTargetX;
                     cmd.targetY = entityCfg.initialTargetY;
                     cmd.targetZ = entityCfg.initialTargetZ;
+                    cmd.targetVx = entityCfg.initialTargetVx;
+                    cmd.targetVy = entityCfg.initialTargetVy;
+                    cmd.targetVz = entityCfg.initialTargetVz;
                     kernel.queueCommand(cmd);
                 }
             }
