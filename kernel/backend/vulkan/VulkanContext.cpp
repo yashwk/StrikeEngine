@@ -33,7 +33,13 @@ namespace StrikeEngine::Kernel {
         }
 #ifndef NDEBUG
         if (enableValidationLayers && instance) {
-            instance.destroyDebugUtilsMessengerEXT(debugMessenger);
+            // EXT debug-utils entry points are not loaded by default;
+            // resolve via vkGetInstanceProcAddr and call the C API directly.
+            auto destroyFn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+                instance.getProcAddr("vkDestroyDebugUtilsMessengerEXT"));
+            if (destroyFn) {
+                destroyFn(instance, static_cast<VkDebugUtilsMessengerEXT>(debugMessenger), nullptr);
+            }
         }
 #endif
         if (instance) {
@@ -82,7 +88,17 @@ namespace StrikeEngine::Kernel {
             debugCallback
         );
 
-        debugMessenger = instance.createDebugUtilsMessengerEXT(createInfo);
+        auto createFn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+            instance.getProcAddr("vkCreateDebugUtilsMessengerEXT"));
+        if (!createFn) {
+            throw std::runtime_error("Vulkan: vkCreateDebugUtilsMessengerEXT not available");
+        }
+        VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
+        if (createFn(instance, &static_cast<const VkDebugUtilsMessengerCreateInfoEXT&>(createInfo),
+                     nullptr, &messenger) != VK_SUCCESS) {
+            throw std::runtime_error("Vulkan: failed to create debug messenger");
+        }
+        debugMessenger = vk::DebugUtilsMessengerEXT(messenger);
     }
 #endif
 

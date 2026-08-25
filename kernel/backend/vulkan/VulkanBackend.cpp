@@ -1,4 +1,6 @@
 #include "VulkanBackend.hpp"
+#include "../BackendFactory.hpp"
+#include "../../SimulationKernel.hpp"
 #include "../../data/ControlBlock.hpp"
 #include "../../data/PhysicsBlock.hpp"
 #include <iostream>
@@ -270,5 +272,20 @@ namespace StrikeEngine::Kernel {
 
         device.unmapMemory(physicsMemory);
     }
+
+    namespace {
+
+        // Self-registration: linking strikeengine_vulkan into a program makes
+        // BackendType::Vulkan available to SimulationKernel via the registry.
+        struct VulkanBackendRegistrar {
+            VulkanBackendRegistrar() {
+                registerPhysicsBackendFactory(
+                    static_cast<int>(BackendType::Vulkan),
+                    []() { return std::make_unique<VulkanBackend>(); });
+            }
+        };
+        VulkanBackendRegistrar vulkanBackendRegistrar;
+
+    } // namespace
 
 } // namespace StrikeEngine::Kernel

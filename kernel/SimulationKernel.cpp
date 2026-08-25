@@ -1,6 +1,6 @@
 #include "SimulationKernel.hpp"
+#include "backend/BackendFactory.hpp"
 #include "backend/CPUBackend.hpp"
-#include "backend/vulkan/VulkanBackend.hpp"
 #include "integrator/RK4Integrator.hpp"
 #include "../models/physics/atmosphere/ISA1976.hpp"
 #include "../models/physics/aerodynamics/AeroModel.hpp"
@@ -11,7 +11,13 @@ namespace StrikeEngine::Kernel {
 
     SimulationKernel::SimulationKernel(BackendType backendType) {
         if (backendType == BackendType::Vulkan) {
-            backend = std::make_unique<VulkanBackend>();
+            auto factory = getPhysicsBackendFactory(static_cast<int>(BackendType::Vulkan));
+            if (!factory) {
+                throw std::runtime_error(
+                    "Vulkan backend requested but not linked; "
+                    "build with -DSTRIKEENGINE_WITH_VULKAN=ON and link strikeengine_vulkan");
+            }
+            backend = factory();
         } else {
             // Instantiate the MVP stateless models
             auto atmosphere = std::make_shared<Models::ISA1976>();
