@@ -27,7 +27,7 @@
     # Generated data files
     *.bin
     /data/atmosphere_table.bin
-    docs/cem
+    docs/cem/
 
 # Build outputs and scratch
 build/
