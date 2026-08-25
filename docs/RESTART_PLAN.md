@@ -273,9 +273,9 @@ StrikeCEM run consumes it; RCS database loads into the sim (design identity matc
 | ------ | ------ | ----------------- |
 | 2026-02 | Plan approved (4 decisions) | A: build engine in place, StrikeSim fresh; B: plan doc |
 | 2026-02 | Doc written | `docs/RESTART_PLAN.md` |
-| | Phase 0a snapshot + tag | … |
-| | Phase 0b StrikeSim split | … |
-| | Phase 0c archive old ECS | … |
+| 2026-02 | Phase 0a snapshot + tag | engine `a9e60ad` + `legacy/pre-restructure-v1` |
+| 2026-02 | Phase 0b StrikeSim split | StrikeSim `78e4b67`; engine `90d03c1` (apps out) |
+| 2026-02 | Phase 0c archive old ECS | engine `90d03c1`, `63cbf87`, `d1507fb`; tree clean |
 | | Phase 1a Vulkan split | … |
 | | Phase 1b API layout | … |
 | | Phase 1c install/package | … |
