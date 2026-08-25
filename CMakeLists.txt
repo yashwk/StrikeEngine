@@ -53,6 +53,5 @@ target_link_libraries(strikeengine PUBLIC
 
 # Subdirectories
 add_subdirectory(tests)
-add_subdirectory(apps)
 
 add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
