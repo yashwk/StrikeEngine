@@ -20,6 +20,7 @@
 #include <strikeengine/kernel/data/NavigationBlock.hpp>
 #include <strikeengine/kernel/systems/SensorSystem.hpp>
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
+#include <strikeengine/kernel/config/VehicleConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -56,6 +57,7 @@ namespace StrikeEngine::Kernel {
 
         // Entity management
         PhysicsId createVehicle(const VehicleInitState& init);
+        PhysicsId createVehicle(const VehicleInitState& init, const VehicleConfig& config);
         void removeVehicle(PhysicsId id);
 
         // Simulation control
@@ -65,6 +67,10 @@ namespace StrikeEngine::Kernel {
 
         // Accessors
         const PhysicsBlock& getPhysics() const { return physicsBlock; }
+        const ControlBlock& getControl() const { return controlBlock; }
+        const GuidanceBlock& getGuidance() const { return guidanceBlock; }
+        const NavigationBlock& getNavigation() const { return navigationBlock; }
+        const SensorBlock& getSensors() const { return sensorBlock; }
         double getSimulationTime() const { return time.currentTime(); }
         std::size_t getEntityCount() const { return physicsBlock.size - freeList.size(); }
 

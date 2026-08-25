@@ -1,141 +1,116 @@
 #pragma once
 #include <cmath>
+#include <algorithm>
 
 namespace StrikeEngine::Models {
 
     struct AeroWrench {
-        double force_x, force_y, force_z;
-        double torque_x, torque_y, torque_z;
+        double force_x, force_y, force_z;   // BODY frame forces (N)
+        double torque_x, torque_y, torque_z; // BODY frame moments (N*m)
     };
 
+    /**
+     * @brief Per-vehicle aero parameters (W1: per-entity config).
+     */
+    struct AeroParams {
+        double referenceArea   = 0.1;  // m^2
+        double referenceLength = 1.0;  // m
+        double cd        = 0.3;        // drag coefficient
+        double clAlpha   = 0.0;        // lift slope per rad of AoA
+        double clFin     = 0.0;        // fin lift coefficient per rad of deflection
+    };
+
+    /**
+     * @brief Aerodynamic force/moment model (BODY frame).
+     *
+     * Conventions (aerospace NED body axes: X forward, Y right, Z down):
+     *   - a positive pitch deflection (trailing edge down) produces a
+     *     nose-UP moment (+torque_y) and a lift force in -Z
+     *   - a positive yaw deflection produces a nose-RIGHT moment (+torque_z)
+     *   - positive AoA (velocity from below, w > 0 with Z down) produces
+     *     lift in -Z and a restoring (stabilizing) -torque_y
+     *   - drag opposes the body-frame velocity vector
+     * All outputs are in the BODY frame; the backend rotates forces to the
+     * world frame and uses torques directly in the body-frame Euler
+     * equations (W2 spine).
+     */
     class AeroModel {
     public:
         virtual ~AeroModel() = default;
 
-        /**
-         * @brief Computes aerodynamic forces and moments (Wrench).
-         * @param vx, vy, vz Velocity vector components (m/s)
-         * @param qx, qy, qz, qw Orientation quaternion (body to world)
-         * @param wx, wy, wz Angular velocity (rad/s)
-         * @param finPitch, finYaw, finRoll Control surface deflections (rad)
-         * @param density Atmospheric density (kg/m^3)
-         * @param speedOfSound Speed of sound (m/s)
-         * @param referenceArea Reference area (m^2)
-         * @return Computed aerodynamic wrench in world frame.
-         */
         virtual AeroWrench computeWrench(
-            double vx, double vy, double vz,
-            double qx, double qy, double qz, double qw,
-            double wx, double wy, double wz,
-            double finPitch, double finYaw, double finRoll,
-            double density, double speedOfSound, double referenceArea) const = 0;
+            double u, double v, double w,       // BODY-frame velocity (m/s)
+            double wx, double wy, double wz,    // BODY angular rate (rad/s)
+            double finPitch, double finYaw, double finRoll,  // achieved deflections (rad)
+            double density, double speedOfSound,
+            const AeroParams& params) const = 0;
     };
 
     class BasicAeroModel : public AeroModel {
     public:
-        BasicAeroModel(double constantCd = 0.3, double constantCl = 0.1) 
-            : cd(constantCd), cl(constantCl) {}
+        BasicAeroModel() = default;
 
         AeroWrench computeWrench(
-            double vx, double vy, double vz,
-            double qx, double qy, double qz, double qw,
+            double u, double v, double w,
             double wx, double wy, double wz,
             double finPitch, double finYaw, double finRoll,
-            double density, double speedOfSound, double referenceArea) const override 
+            double density, double speedOfSound,
+            const AeroParams& p) const override
         {
-            double speedSq = vx * vx + vy * vy + vz * vz;
+            const double speedSq = u * u + v * v + w * w;
             if (speedSq < 1e-6) {
                 return {0, 0, 0, 0, 0, 0};
             }
 
-            double speed = std::sqrt(speedSq);
-            double dir_x = vx / speed;
-            double dir_y = vy / speed;
-            double dir_z = vz / speed;
+            const double V = std::sqrt(speedSq);
+            const double q = 0.5 * density * speedSq;   // dynamic pressure
+            const double S = p.referenceArea;
+            const double l = p.referenceLength;
 
-            double dynamicPressure = 0.5 * density * speedSq;
-            
-            // Drag
-            double dragMag = dynamicPressure * cd * referenceArea;
-            double drag_x = -dir_x * dragMag;
-            double drag_y = -dir_y * dragMag;
-            double drag_z = -dir_z * dragMag;
+            // Angle of attack and sideslip (body frame)
+            const double alpha = std::atan2(w, u);      // +w (Z down) => nose up
+            const double beta  = std::atan2(v, u);      // +v => airflow from right
 
-            // Simplistic Lift: Upward relative to velocity, ignoring true body AoA for MVP
-            // Body Up = q * (0, 1, 0) * q^-1.
-            // For MVP, we will simplify: lift is in the world UP direction if flying horizontally,
-            // or we just cross velocity with right vector.
-            // To be precise: body up vector.
-            // q * (0,1,0) = (2(xy - wz), 1 - 2(x^2 + z^2), 2(yz + wx))
-            double body_up_x = 2.0 * (qx * qy - qw * qz);
-            double body_up_y = 1.0 - 2.0 * (qx * qx + qz * qz);
-            double body_up_z = 2.0 * (qy * qz + qw * qx);
+            // --- Forces (body frame) ---
+            // Drag opposes velocity
+            const double dragMag = q * S * p.cd;
+            double fx = -dragMag * (u / V);
+            double fy = -dragMag * (v / V);
+            double fz = -dragMag * (w / V);
 
-            // Lift direction is perpendicular to velocity, in the plane of velocity and body_up
-            // Right = Velocity x BodyUp
-            double right_x = dir_y * body_up_z - dir_z * body_up_y;
-            double right_y = dir_z * body_up_x - dir_x * body_up_z;
-            double right_z = dir_x * body_up_y - dir_y * body_up_x;
+            // Lift (pitch plane): positive alpha/deflection => force -Z (up)
+            const double cl = p.clAlpha * alpha + p.clFin * finPitch;
+            fz -= q * S * cl;
 
-            // LiftDir = Right x Velocity
-            double lift_dir_x = right_y * dir_z - right_z * dir_y;
-            double lift_dir_y = right_z * dir_x - right_x * dir_z;
-            double lift_dir_z = right_x * dir_y - right_y * dir_x;
+            // Side force (yaw plane): positive beta/deflection => force -Y
+            const double cy = p.clAlpha * beta + p.clFin * finYaw;
+            fy -= q * S * cy;
 
-            double lift_dir_mag = std::sqrt(lift_dir_x * lift_dir_x + lift_dir_y * lift_dir_y + lift_dir_z * lift_dir_z);
-            if (lift_dir_mag > 1e-6) {
-                lift_dir_x /= lift_dir_mag;
-                lift_dir_y /= lift_dir_mag;
-                lift_dir_z /= lift_dir_mag;
-            } else {
-                lift_dir_x = lift_dir_y = lift_dir_z = 0.0;
-            }
+            // --- Moments (body frame) ---
+            // Fin control authority (CM_delta >> |CM_alpha| keeps the fin
+            // authority margin wide enough to hold sustained turns)
+            constexpr double CM_delta = 1.8;   // pitch/yaw moment per rad
+            constexpr double Cl_delta = 0.5;   // roll moment per rad
+            double tx = q * S * l * (Cl_delta * finRoll);
+            double ty = q * S * l * (CM_delta * finPitch);
+            double tz = q * S * l * (CM_delta * finYaw);
 
-            double liftMag = dynamicPressure * cl * referenceArea;
-            double lift_x = lift_dir_x * liftMag;
-            double lift_y = lift_dir_y * liftMag;
-            double lift_z = lift_dir_z * liftMag;
+            // Static stability (restoring): CM_alpha, CN_beta < 0
+            constexpr double CM_alpha = -1.0;
+            constexpr double CN_beta  = -1.0;
+            ty += q * S * l * CM_alpha * alpha;
+            tz += q * S * l * CN_beta  * beta;
 
-            double force_x = drag_x + lift_x;
-            double force_y = drag_y + lift_y;
-            double force_z = drag_z + lift_z;
+            // Rotational damping (dimensionless rate q_bar*l/V)
+            const double lOverV = l / V;
+            constexpr double Cq = 10.0;    // pitch/yaw damping
+            constexpr double Clp = 3.0;    // roll damping
+            ty -= q * S * l * Cq  * lOverV * wy;
+            tz -= q * S * l * Cq  * lOverV * wz;
+            tx -= q * S * l * Clp * lOverV * wx;
 
-            // Simplified control surface torques (World frame mapped)
-            // Pitch fin applies pitch torque, Yaw fin applies yaw torque.
-            // A true aero model would compute body torques and rotate to world.
-            // For MVP, we will compute in body frame and rotate to world.
-            double q_inv_w = qw, q_inv_x = -qx, q_inv_y = -qy, q_inv_z = -qz;
-            
-            // Torque coefficients
-            double CM_delta = 1.5; // Pitch/Yaw moment per radian
-            double Cl_delta = 0.5; // Roll moment per radian
-            
-            double body_torque_x = dynamicPressure * referenceArea * 1.0 * (Cl_delta * finRoll);
-            double body_torque_y = dynamicPressure * referenceArea * 1.0 * (CM_delta * finPitch); // Pitch
-            double body_torque_z = dynamicPressure * referenceArea * 1.0 * (CM_delta * finYaw);   // Yaw
-
-            // Add damping torque (-k * W)
-            double damping_k = 0.1 * dynamicPressure;
-            body_torque_x -= damping_k * wx;
-            body_torque_y -= damping_k * wy;
-            body_torque_z -= damping_k * wz;
-
-            // Rotate torque to world frame: q * t * q_inv
-            double ix = qw * body_torque_x + qy * body_torque_z - qz * body_torque_y;
-            double iy = qw * body_torque_y + qz * body_torque_x - qx * body_torque_z;
-            double iz = qw * body_torque_z + qx * body_torque_y - qy * body_torque_x;
-            double iw = -qx * body_torque_x - qy * body_torque_y - qz * body_torque_z;
-
-            double world_torque_x = ix * qw + iw * (-qx) + iy * (-qz) - iz * (-qy);
-            double world_torque_y = iy * qw + iw * (-qy) + iz * (-qx) - ix * (-qz);
-            double world_torque_z = iz * qw + iw * (-qz) + ix * (-qy) - iy * (-qx);
-
-            return {force_x, force_y, force_z, world_torque_x, world_torque_y, world_torque_z};
+            return {fx, fy, fz, tx, ty, tz};
         }
-
-    private:
-        double cd;
-        double cl;
     };
 
 } // namespace StrikeEngine::Models

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
+
+namespace StrikeEngine::Models { class PropulsionModel; }
 
 namespace StrikeEngine::Kernel
 {
@@ -19,6 +22,17 @@ namespace StrikeEngine::Kernel
 	{
 	public:
 		virtual ~PhysicsBackend() = default;
+
+		/**
+		 * @brief Registers a per-entity propulsion model (W1).
+		 * @return Pool index for the entity's propulsionId, or -1 if the
+		 *         backend does not support per-entity propulsion models.
+		 */
+		virtual int registerPropulsion(std::shared_ptr<const Models::PropulsionModel> model)
+		{
+			(void)model;
+			return -1;
+		}
 
 		virtual void initialize(
 			PhysicsBlock& physics,

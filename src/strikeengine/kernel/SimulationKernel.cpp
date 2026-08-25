@@ -19,29 +19,18 @@ namespace StrikeEngine::Kernel {
             }
             backend = factory();
         } else {
-            // Instantiate the MVP stateless models
+            // Truth models: atmosphere + aero are shared (state-less, take
+            // per-entity coefficients from the PhysicsBlock). Propulsion is
+            // per-entity (W1) and registered through createVehicle(config).
             auto atmosphere = std::make_shared<Models::ISA1976>();
-            auto aero = std::make_shared<Models::BasicAeroModel>(0.3, 0.0); // CD=0.3, CL=0.0
-            
-            std::vector<Models::ThrustDataPoint> thrustCurve = {
-                {0.0, 50000.0},
-                {5.0, 50000.0},
-                {5.1, 0.0},
-                {100.0, 0.0}
-            };
-            auto propulsion = std::make_shared<Models::PropulsionModel>(
-                Models::ThrustCurve(thrustCurve), 
-                250.0, // vacuum Isp
-                220.0  // SL Isp
-            );
+            auto aero = std::make_shared<Models::BasicAeroModel>();
 
             auto integrator = std::make_unique<RK4Integrator>();
 
             backend = std::make_unique<CPUBackend>(
-                std::move(integrator), 
-                atmosphere, 
-                aero, 
-                propulsion
+                std::move(integrator),
+                atmosphere,
+                aero
             );
         }
         
@@ -67,6 +56,10 @@ namespace StrikeEngine::Kernel {
     }
 
     PhysicsId SimulationKernel::createVehicle(const VehicleInitState& init) {
+        return createVehicle(init, VehicleConfig{});
+    }
+
+    PhysicsId SimulationKernel::createVehicle(const VehicleInitState& init, const VehicleConfig& config) {
         PhysicsId id;
 
         if (!freeList.empty()) {
@@ -84,6 +77,15 @@ namespace StrikeEngine::Kernel {
             physicsBlock.alphax.push_back(0); physicsBlock.alphay.push_back(0); physicsBlock.alphaz.push_back(0);
             physicsBlock.Ixx.push_back(1.0); physicsBlock.Iyy.push_back(10.0); physicsBlock.Izz.push_back(10.0);
             physicsBlock.mass.push_back(1.0);
+            physicsBlock.massDry.push_back(1.0);
+            physicsBlock.referenceArea.push_back(0.1);
+            physicsBlock.referenceLength.push_back(1.0);
+            physicsBlock.cd.push_back(0.3);
+            physicsBlock.clAlpha.push_back(0.0);
+            physicsBlock.clFin.push_back(0.0);
+            physicsBlock.propulsionId.push_back(-1);
+            physicsBlock.ignitionTime.push_back(0.0);
+            physicsBlock.finPitch.push_back(0.0); physicsBlock.finYaw.push_back(0.0); physicsBlock.finRoll.push_back(0.0);
             physicsBlock.active.push_back(true);
 
             controlBlock.thrustCommand.push_back(0);
@@ -133,7 +135,25 @@ namespace StrikeEngine::Kernel {
         physicsBlock.alphax[id] = 0.0; physicsBlock.alphay[id] = 0.0; physicsBlock.alphaz[id] = 0.0;
         physicsBlock.Ixx[id] = init.Ixx; physicsBlock.Iyy[id] = init.Iyy; physicsBlock.Izz[id] = init.Izz;
         physicsBlock.mass[id] = init.mass;
+        physicsBlock.massDry[id] = (config.massDry < 0.0) ? init.mass : config.massDry;
+        physicsBlock.referenceArea[id] = config.referenceArea;
+        physicsBlock.referenceLength[id] = config.referenceLength;
+        physicsBlock.cd[id] = config.cd;
+        physicsBlock.clAlpha[id] = config.clAlpha;
+        physicsBlock.clFin[id] = config.clFin;
+        physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
+        physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;
+
+        // Per-entity propulsion registration (W1): empty curve => coasting vehicle
+        if (!config.thrustCurve.empty()) {
+            auto prop = std::make_shared<Models::PropulsionModel>(
+                Models::ThrustCurve(config.thrustCurve),
+                config.vacuumIsp, config.seaLevelIsp);
+            physicsBlock.propulsionId[id] = backend->registerPropulsion(std::move(prop));
+        } else {
+            physicsBlock.propulsionId[id] = -1;
+        }
 
         statusBlock.type[id] = init.type;
         statusBlock.allegiance[id] = init.allegiance;
@@ -170,7 +190,7 @@ namespace StrikeEngine::Kernel {
         sensorSystem.update(physicsBlock, sensorBlock, time.currentTime(), dt);
         
         // 3. Compute Navigation estimates (INS + EKF)
-        navigationSystem.update(sensorBlock, navigationBlock, dt);
+        navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt);
         
         // 3.5 Process Seekers
         seekerSystem.update(physicsBlock, statusBlock, seekerBlock, dt);
@@ -179,7 +199,7 @@ namespace StrikeEngine::Kernel {
         guidanceSystem.update(statusBlock, navigationBlock, seekerBlock, guidanceBlock, controlBlock, dt);
 
         // 4.5 Update Autopilot to translate commanded accel to fin deflections
-        autopilotSystem.update(statusBlock, navigationBlock, guidanceBlock, controlBlock, dt);
+        autopilotSystem.update(statusBlock, navigationBlock, sensorBlock, guidanceBlock, controlBlock, dt);
         
         // 5. Evaluate truth events (impacts)
         eventSystem.evaluate(physicsBlock, statusBlock, time.currentTime());
