@@ -1,39 +1,55 @@
 #include <strikeengine/kernel/integrator/SymplecticIntegrator.hpp>
-#include <cmath>
-#include <vector>
-#include <strikeengine/kernel/data/PhysicsBlock.hpp>
 
 namespace StrikeEngine::Kernel
 {
 
-	double SymplecticIntegrator::integrate(
-		PhysicsBlock& physics,
-		double dt)
-	{
-		const std::size_t n = physics.size;
+double SymplecticIntegrator::integrate(
+    PhysicsBlock& state,
+    const DerivativeFn& deriv,
+    double t,
+    double dt)
+{
+    const double h = dt;
+    const double h2 = 0.5 * h;
 
-		for (std::size_t i = 0; i < n; ++i)
-		{
-			if (!physics.active[i])
-				continue;
+    // Kick-drift-kick (velocity Verlet) with force re-evaluation at midpoint.
+    PhysicsBlock a0 = state;   // accelerations at t
+    deriv(state, t, a0);
 
-			// Half velocity update
-			physics.vx[i] += 0.5 * physics.ax[i] * dt;
-			physics.vy[i] += 0.5 * physics.ay[i] * dt;
-			physics.vz[i] += 0.5 * physics.az[i] * dt;
+    // Half kick: v += 0.5 h * a(t)
+    PhysicsBlock half = state;
+    const std::size_t n = state.size;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        if (!state.active[i]) continue;
+        half.vx[i] += h2 * a0.vx[i];
+        half.vy[i] += h2 * a0.vy[i];
+        half.vz[i] += h2 * a0.vz[i];
+        half.wx[i] += h2 * a0.wx[i];
+        half.wy[i] += h2 * a0.wy[i];
+        half.wz[i] += h2 * a0.wz[i];
+    }
 
-			// Position update
-			physics.px[i] += physics.vx[i] * dt;
-			physics.py[i] += physics.vy[i] * dt;
-			physics.pz[i] += physics.vz[i] * dt;
+    // Drift: x += h * v_mid  (position/rotation/attitude integrate from mid-state)
+    PhysicsBlock dHalf = state;
+    deriv(half, t + h2, dHalf);
+    applyStateUpdate(state, dHalf, h);
 
-			// Second half velocity update
-			physics.vx[i] += 0.5 * physics.ax[i] * dt;
-			physics.vy[i] += 0.5 * physics.ay[i] * dt;
-			physics.vz[i] += 0.5 * physics.az[i] * dt;
-		}
+    // Second half kick: v += 0.5 h * a(t + h)
+    PhysicsBlock a1 = state;
+    deriv(state, t + h, a1);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        if (!state.active[i]) continue;
+        state.vx[i] += h2 * a1.vx[i];
+        state.vy[i] += h2 * a1.vy[i];
+        state.vz[i] += h2 * a1.vz[i];
+        state.wx[i] += h2 * a1.wx[i];
+        state.wy[i] += h2 * a1.wy[i];
+        state.wz[i] += h2 * a1.wz[i];
+    }
 
-		return dt;
-	}
+    return h;
+}
 
 } // namespace StrikeEngine::Kernel

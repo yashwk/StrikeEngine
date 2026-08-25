@@ -1,26 +1,28 @@
 #pragma once
 
-#include <cstddef>
+#include <memory>
+#include <strikeengine/kernel/integrator/Integrator.hpp>
+#include <strikeengine/kernel/data/PhysicsBlock.hpp>
 
 namespace StrikeEngine::Kernel
 {
 
-	class Integrator;
-	struct PhysicsBlock;
-
 	/**
-	 * @brief Hybrid adaptive scheduler.
+	 * @brief Substep scheduler for adaptive integrators.
 	 *
-	 * Keeps global fixed timestep but allows integrator
-	 * to subdivide dt internally.
+	 * Feeds the global timestep to the wrapped adaptive integrator in slices;
+	 * the integrator consumes each slice (possibly rejecting/retrying
+	 * internally) and the scheduler accumulates until the global dt is spent.
 	 */
 	class HybridScheduler
 	{
 	public:
-		HybridScheduler(Integrator& integrator);
+		explicit HybridScheduler(Integrator& integ);
 
 		void executeStep(
 			PhysicsBlock& physics,
+			const Integrator::DerivativeFn& deriv,
+			double currentTime,
 			double globalDt);
 
 	private:

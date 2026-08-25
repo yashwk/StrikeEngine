@@ -4,9 +4,9 @@
 
 namespace StrikeEngine::Kernel
 {
-
 	/**
-	 * @brief Velocity Verlet (Symplectic) integrator.
+	 * @brief Velocity Verlet (Symplectic) integrator with force
+	 * re-evaluation at the midpoint (kick-drift-kick).
 	 *
 	 * Energy preserving for long-duration simulations.
 	 */
@@ -14,10 +14,10 @@ namespace StrikeEngine::Kernel
 	{
 	public:
 		double integrate(
-			PhysicsBlock& physics,
+			PhysicsBlock& state,
+			const DerivativeFn& deriv,
+			double t,
 			double dt) override;
-
 		bool isAdaptive() const override { return false; }
 	};
-
 } // namespace StrikeEngine::Kernel

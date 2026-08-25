@@ -1,27 +1,16 @@
 #include <strikeengine/kernel/systems/AutopilotSystem.hpp>
+#include <strikeengine/kernel/math/Quaternion.hpp>
 #include <cmath>
 #include <algorithm>
 
 namespace StrikeEngine::Kernel {
 
-    // Helper to rotate world vector to body vector
-    static void worldToBody(double qw, double qx, double qy, double qz,
-                            double wx, double wy, double wz,
-                            double& bx, double& by, double& bz) {
-        // Inverse of unit quaternion (qw, qx, qy, qz) is (qw, -qx, -qy, -qz)
-        double ix =  qw * wx - (-qy) * wz + (-qz) * wy;
-        double iy =  qw * wy - (-qz) * wx + (-qx) * wz;
-        double iz =  qw * wz - (-qx) * wy + (-qy) * wx;
-        double iw = -(-qx) * wx - (-qy) * wy - (-qz) * wz;
-
-        bx = ix * qw + iw * (-qx) + iy * (-qz) - iz * (-qy);
-        by = iy * qw + iw * (-qy) + iz * (-qx) - ix * (-qz);
-        bz = iz * qw + iw * (-qz) + ix * (-qy) - iy * (-qx);
-    }
+    AutopilotSystem::AutopilotSystem() = default;
 
     void AutopilotSystem::update(
         const EntityStatusBlock& status,
         const NavigationBlock& nav,
+        const SensorBlock& sensor,
         const GuidanceBlock& guidance,
         ControlBlock& control,
         double dt)
@@ -34,6 +23,12 @@ namespace StrikeEngine::Kernel {
             control.thrustCommand.resize(nav.size, 0.0);
         }
 
+        if (pitchIntegral.size() < nav.size) {
+            pitchIntegral.resize(nav.size, 0.0);
+            yawIntegral.resize(nav.size, 0.0);
+            wasCommanded.resize(nav.size, false);
+        }
+
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
 
@@ -41,59 +36,82 @@ namespace StrikeEngine::Kernel {
                 control.pitchCommand[i] = 0.0;
                 control.yawCommand[i] = 0.0;
                 control.rollCommand[i] = 0.0;
+                pitchIntegral[i] = 0.0;
+                yawIntegral[i] = 0.0;
+                wasCommanded[i] = false;
                 continue;
             }
 
-            updateFlightController(i, nav, guidance, control);
+            updateFlightController(i, nav, sensor, guidance, control, dt);
+            wasCommanded[i] = true;
         }
     }
 
     void AutopilotSystem::updateFlightController(
         std::size_t id,
         const NavigationBlock& nav,
+        const SensorBlock& sensor,
         const GuidanceBlock& guidance,
-        ControlBlock& control)
+        ControlBlock& control,
+        double dt)
     {
-        // 1. Read commanded acceleration in World frame
-        double ax_w = guidance.commandedAccelX[id];
-        double ay_w = guidance.commandedAccelY[id];
-        double az_w = guidance.commandedAccelZ[id];
+        // 1. Commanded acceleration (world, from guidance) -> body frame
+        double axCmdB, ayCmdB, azCmdB;
+        quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                         guidance.commandedAccelX[id],
+                         guidance.commandedAccelY[id],
+                         guidance.commandedAccelZ[id],
+                         axCmdB, ayCmdB, azCmdB);
 
-        // 2. Rotate commanded acceleration to Body frame
-        double ax_b, ay_b, az_b;
-        worldToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
-                    ax_w, ay_w, az_w, ax_b, ay_b, az_b);
+        // 2. Measured specific force (body frame, from sensors)
+        const double azMeas = sensor.accelZ[id];
+        const double ayMeas = sensor.accelY[id];
 
-        // Body Z is usually Down or Up. Let's assume standard aerospace: X forward, Y right, Z down.
-        // Commanded acceleration in body Y means we need to Yaw.
-        // Commanded acceleration in body Z means we need to Pitch.
-        // Note: If we want positive Z acceleration (downward), we pitch down (positive Pitch rate).
-        // It depends on the Aerodynamics model lift convention.
-        
-        // Simple P-D Controller for Fin Deflection
-        // commandedAccel translates to a desired Angle of Attack, which translates to a required fin deflection.
-        // For MVP, we map commandedAccel directly to fin deflection with a proportional gain.
-        double k_p = -0.05; // P gain mapping Accel Error to Fin Deflection (rad)
-        double k_d = 0.1;   // D gain for rate damping (rad*s)
+        // 3. Outer loop: accel error -> desired body rate (P + integral)
+        const double ez = azCmdB - azMeas;
+        const double ey = ayCmdB - ayMeas;
+        pitchIntegral[id] += ez * dt;
+        yawIntegral[id]   += ey * dt;
+        pitchIntegral[id] = std::clamp(pitchIntegral[id], -10.0, 10.0);
+        yawIntegral[id]   = std::clamp(yawIntegral[id],   -10.0, 10.0);
 
-        // Commanded fin pitch to achieve az_b (with rate damping from estWy)
-        double pitchDeflection = k_p * az_b - k_d * nav.estWy[id];
-        
-        // Commanded fin yaw to achieve ay_b (with rate damping from estWz)
-        double yawDeflection = k_p * ay_b - k_d * nav.estWz[id];
+        // Positive az (down) needs nose-DOWN: negative wy. Positive ay (right)
+        // needs nose-RIGHT: positive wz.
+        const double pitchRateCmd = -(kAccelP * ez + kAccelI * pitchIntegral[id]);
+        const double yawRateCmd   =   (kAccelP * ey + kAccelI * yawIntegral[id]);
 
-        // Roll stabilization: simple P-D to keep wings level (estQ roll -> 0, estWx -> 0)
-        // Extract roll from quaternion:
-        double roll = std::atan2(2.0 * (nav.estQw[id] * nav.estQx[id] + nav.estQy[id] * nav.estQz[id]),
-                                 1.0 - 2.0 * (nav.estQx[id] * nav.estQx[id] + nav.estQy[id] * nav.estQy[id]));
-        
-        double rollDeflection = -0.1 * roll - 0.05 * nav.estWx[id];
+        // 4. AoA / sideslip estimates from estimated body-frame velocity
+        double ub, vb, wb;
+        quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                         nav.estVx[id], nav.estVy[id], nav.estVz[id],
+                         ub, vb, wb);
+        const double alpha = std::atan2(wb, ub);
+        const double beta  = std::atan2(vb, ub);
 
-        // 3. Clamp fin deflections to physical limits (e.g., +/- 25 degrees = ~0.43 rad)
-        const double maxDeflection = 0.43;
+        // 5. Inner loop: desired rate -> deflection, with AoA damping
+        double pitchDeflection = kRateP * (pitchRateCmd - nav.estWy[id]) - kAlphaP * alpha;
+        double yawDeflection   = kRateP * (yawRateCmd   - nav.estWz[id]) - kAlphaP * beta;
+
+        // 6. Roll stabilization: wings-level P-D, referenced to the local
+        // gravity direction (attitude-independent — works for any initial
+        // orientation, unlike a quaternion-identity reference).
+        // g_b = gravity direction in body axes: level flight => (0, 0, +1).
+        // A right roll by phi gives g_b.y = -sin(phi): rollError = atan2(-g_b.y, g_b.z).
+        // In a steep dive g_b.z -> 0 and the reference degenerates; scale the
+        // command by the vertical component so wings-level authority fades
+        // near-vertical instead of slamming full deflection.
+        double gBx, gBy, gBz;
+        quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                         0.0, 0.0, -1.0, gBx, gBy, gBz);
+        const double verticality = std::clamp(gBz, 0.0, 1.0);
+        const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
+        double rollDeflection = verticality * (-kRollP * rollError - kRollD * nav.estWx[id]);
+
+        // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority)
+        constexpr double maxDeflection = 0.43;
         control.pitchCommand[id] = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
-        control.yawCommand[id] = std::clamp(yawDeflection, -maxDeflection, maxDeflection);
-        control.rollCommand[id] = std::clamp(rollDeflection, -maxDeflection, maxDeflection);
+        control.yawCommand[id]   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
+        control.rollCommand[id]  = std::clamp(rollDeflection,  -maxDeflection, maxDeflection);
     }
 
 } // namespace StrikeEngine::Kernel

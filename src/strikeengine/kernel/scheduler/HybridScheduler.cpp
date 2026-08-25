@@ -1,5 +1,4 @@
 #include <strikeengine/kernel/scheduler/HybridScheduler.hpp>
-#include <strikeengine/kernel/integrator/Integrator.hpp>
 
 namespace StrikeEngine::Kernel
 {
@@ -11,6 +10,8 @@ namespace StrikeEngine::Kernel
 
 	void HybridScheduler::executeStep(
 		PhysicsBlock& physics,
+		const Integrator::DerivativeFn& deriv,
+		double currentTime,
 		double globalDt)
 	{
 		double accumulated = 0.0;
@@ -18,9 +19,7 @@ namespace StrikeEngine::Kernel
 
 		while (remaining > 0.0)
 		{
-			double proposedDt = remaining;
-
-			double actualDt = integrator.integrate(physics, proposedDt);
+			double actualDt = integrator.integrate(physics, deriv, currentTime + accumulated, remaining);
 
 			// Clamp safety
 			if (actualDt <= 0.0)
@@ -35,6 +34,13 @@ namespace StrikeEngine::Kernel
 			// Prevent infinite loops due to tiny tolerances
 			if (remaining < 1e-12)
 				break;
+
+			// Safety valve: integrator must make progress
+			if (actualDt < 1e-9)
+			{
+				integrator.integrate(physics, deriv, currentTime + accumulated, remaining);
+				break;
+			}
 		}
 	}
 

@@ -1,110 +1,74 @@
 #include <strikeengine/kernel/integrator/RK4Integrator.hpp>
 #include <vector>
-#include <cmath>
-
-#include <strikeengine/kernel/data/PhysicsBlock.hpp>
 
 namespace StrikeEngine::Kernel
 {
 
 double RK4Integrator::integrate(
-    PhysicsBlock& physics,
+    PhysicsBlock& state,
+    const DerivativeFn& deriv,
+    double t,
     double dt)
 {
-    const std::size_t n = physics.size;
+    const double h = dt;
+    const double h2 = 0.5 * h;
+    const double h6 = h / 6.0;
 
-    std::vector<double> px0 = physics.px;
-    std::vector<double> py0 = physics.py;
-    std::vector<double> pz0 = physics.pz;
+    // Stage states and derivative buffers (full copies; n is small in MVP tests)
+    PhysicsBlock k1 = state;
+    PhysicsBlock k2 = state;
+    PhysicsBlock k3 = state;
+    PhysicsBlock k4 = state;
+    PhysicsBlock stage = state;
 
-    std::vector<double> vx0 = physics.vx;
-    std::vector<double> vy0 = physics.vy;
-    std::vector<double> vz0 = physics.vz;
+    deriv(state, t, k1);
 
+    // k2 = f(t + h/2, x + h/2*k1)
+    stage = state;
+    applyStateUpdate(stage, k1, h2);
+    deriv(stage, t + h2, k2);
+
+    // k3 = f(t + h/2, x + h/2*k2)
+    stage = state;
+    applyStateUpdate(stage, k2, h2);
+    deriv(stage, t + h2, k3);
+
+    // k4 = f(t + h, x + h*k3)
+    stage = state;
+    applyStateUpdate(stage, k3, h);
+    deriv(stage, t + h, k4);
+
+    // x1 = x0 + h/6 (k1 + 2 k2 + 2 k3 + k4)
+    const std::size_t n = state.size;
+    PhysicsBlock acc = state;   // accumulated weighted derivative
     for (std::size_t i = 0; i < n; ++i)
     {
-        if (!physics.active[i])
-            continue;
+        if (!state.active[i]) continue;
+        acc.px[i] = (k1.px[i] + 2.0 * k2.px[i] + 2.0 * k3.px[i] + k4.px[i]) / 6.0;
+        acc.py[i] = (k1.py[i] + 2.0 * k2.py[i] + 2.0 * k3.py[i] + k4.py[i]) / 6.0;
+        acc.pz[i] = (k1.pz[i] + 2.0 * k2.pz[i] + 2.0 * k3.pz[i] + k4.pz[i]) / 6.0;
 
-        const double ax = physics.ax[i];
-        const double ay = physics.ay[i];
-        const double az = physics.az[i];
+        acc.vx[i] = (k1.vx[i] + 2.0 * k2.vx[i] + 2.0 * k3.vx[i] + k4.vx[i]) / 6.0;
+        acc.vy[i] = (k1.vy[i] + 2.0 * k2.vy[i] + 2.0 * k3.vy[i] + k4.vy[i]) / 6.0;
+        acc.vz[i] = (k1.vz[i] + 2.0 * k2.vz[i] + 2.0 * k3.vz[i] + k4.vz[i]) / 6.0;
 
-        const double k1_vx = ax;
-        const double k1_vy = ay;
-        const double k1_vz = az;
+        acc.wx[i] = (k1.wx[i] + 2.0 * k2.wx[i] + 2.0 * k3.wx[i] + k4.wx[i]) / 6.0;
+        acc.wy[i] = (k1.wy[i] + 2.0 * k2.wy[i] + 2.0 * k3.wy[i] + k4.wy[i]) / 6.0;
+        acc.wz[i] = (k1.wz[i] + 2.0 * k2.wz[i] + 2.0 * k3.wz[i] + k4.wz[i]) / 6.0;
 
-        const double k1_px = vx0[i];
-        const double k1_py = vy0[i];
-        const double k1_pz = vz0[i];
+        acc.qw[i] = (k1.qw[i] + 2.0 * k2.qw[i] + 2.0 * k3.qw[i] + k4.qw[i]) / 6.0;
+        acc.qx[i] = (k1.qx[i] + 2.0 * k2.qx[i] + 2.0 * k3.qx[i] + k4.qx[i]) / 6.0;
+        acc.qy[i] = (k1.qy[i] + 2.0 * k2.qy[i] + 2.0 * k3.qy[i] + k4.qy[i]) / 6.0;
+        acc.qz[i] = (k1.qz[i] + 2.0 * k2.qz[i] + 2.0 * k3.qz[i] + k4.qz[i]) / 6.0;
 
-        const double k2_vx = ax;
-        const double k2_vy = ay;
-        const double k2_vz = az;
-
-        const double k2_px = vx0[i] + 0.5 * dt * k1_vx;
-        const double k2_py = vy0[i] + 0.5 * dt * k1_vy;
-        const double k2_pz = vz0[i] + 0.5 * dt * k1_vz;
-
-        const double k3_vx = ax;
-        const double k3_vy = ay;
-        const double k3_vz = az;
-
-        const double k3_px = vx0[i] + 0.5 * dt * k2_vx;
-        const double k3_py = vy0[i] + 0.5 * dt * k2_vy;
-        const double k3_pz = vz0[i] + 0.5 * dt * k2_vz;
-
-        const double k4_vx = ax;
-        const double k4_vy = ay;
-        const double k4_vz = az;
-
-        const double k4_px = vx0[i] + dt * k3_vx;
-        const double k4_py = vy0[i] + dt * k3_vy;
-        const double k4_pz = vz0[i] + dt * k3_vz;
-
-        physics.vx[i] += (dt / 6.0) * (k1_vx + 2*k2_vx + 2*k3_vx + k4_vx);
-        physics.vy[i] += (dt / 6.0) * (k1_vy + 2*k2_vy + 2*k3_vy + k4_vy);
-        physics.vz[i] += (dt / 6.0) * (k1_vz + 2*k2_vz + 2*k3_vz + k4_vz);
-
-        physics.px[i] += (dt / 6.0) * (k1_px + 2*k2_px + 2*k3_px + k4_px);
-        physics.py[i] += (dt / 6.0) * (k1_py + 2*k2_py + 2*k3_py + k4_py);
-        physics.pz[i] += (dt / 6.0) * (k1_pz + 2*k2_pz + 2*k3_pz + k4_pz);
-
-        // Angular velocity integration (Euler for MVP)
-        physics.wx[i] += physics.alphax[i] * dt;
-        physics.wy[i] += physics.alphay[i] * dt;
-        physics.wz[i] += physics.alphaz[i] * dt;
-
-        // Quaternion integration
-        double qw = physics.qw[i];
-        double qx = physics.qx[i];
-        double qy = physics.qy[i];
-        double qz = physics.qz[i];
-
-        double wx = physics.wx[i];
-        double wy = physics.wy[i];
-        double wz = physics.wz[i];
-
-        double dqw = 0.5 * (-qx*wx - qy*wy - qz*wz);
-        double dqx = 0.5 * ( qw*wx + qy*wz - qz*wy);
-        double dqy = 0.5 * ( qw*wy - qx*wz + qz*wx);
-        double dqz = 0.5 * ( qw*wz + qx*wy - qy*wx);
-
-        qw += dqw * dt;
-        qx += dqx * dt;
-        qy += dqy * dt;
-        qz += dqz * dt;
-
-        double norm = std::sqrt(qw*qw + qx*qx + qy*qy + qz*qz);
-        if (norm > 0) {
-            physics.qw[i] = qw / norm;
-            physics.qx[i] = qx / norm;
-            physics.qy[i] = qy / norm;
-            physics.qz[i] = qz / norm;
-        }
+        acc.mass[i]       = (k1.mass[i] + 2.0 * k2.mass[i] + 2.0 * k3.mass[i] + k4.mass[i]) / 6.0;
+        acc.finPitch[i]   = (k1.finPitch[i] + 2.0 * k2.finPitch[i] + 2.0 * k3.finPitch[i] + k4.finPitch[i]) / 6.0;
+        acc.finYaw[i]     = (k1.finYaw[i] + 2.0 * k2.finYaw[i] + 2.0 * k3.finYaw[i] + k4.finYaw[i]) / 6.0;
+        acc.finRoll[i]    = (k1.finRoll[i] + 2.0 * k2.finRoll[i] + 2.0 * k3.finRoll[i] + k4.finRoll[i]) / 6.0;
     }
 
-    return dt;
+    applyStateUpdate(state, acc, h);
+    return h;
 }
 
 } // namespace StrikeEngine::Kernel

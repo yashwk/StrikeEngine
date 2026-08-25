@@ -4,15 +4,14 @@
 
 namespace StrikeEngine::Kernel
 {
-
 	class EulerIntegrator final : public Integrator
 	{
 	public:
 		double integrate(
-			PhysicsBlock& physics,
+			PhysicsBlock& state,
+			const DerivativeFn& deriv,
+			double t,
 			double dt) override;
-
 		bool isAdaptive() const override { return false; }
 	};
-
 } // namespace StrikeEngine::Kernel
