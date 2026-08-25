@@ -130,7 +130,9 @@ namespace StrikeEngine::Kernel {
         double r_mag = std::sqrt(rx*rx + ry*ry + rz*rz);
         if (r_mag < 1.0) r_mag = 1.0;
 
-        double k = 5.0;
+        // Acceleration demand up to the maneuver limit (2 g here); the
+        // autopilot/servo limits bound the physical response.
+        const double k = 20.0;
         guidance.commandedAccelX[id] = k * (rx / r_mag);
         guidance.commandedAccelY[id] = k * (ry / r_mag);
         guidance.commandedAccelZ[id] = k * (rz / r_mag);

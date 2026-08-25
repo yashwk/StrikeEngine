@@ -1,23 +1,25 @@
 #pragma once
 
-#include <strikeengine/kernel/data/SensorBlock.hpp>
 #include <strikeengine/kernel/data/NavigationBlock.hpp>
+#include <strikeengine/kernel/data/SensorBlock.hpp>
+#include <strikeengine/kernel/data/PhysicsBlock.hpp>
+#include <cstddef>
 
 namespace StrikeEngine::Kernel {
 
+    /**
+     * @brief Strapdown INS + diagonal EKF navigation.
+     *
+     * Attitude is initialized from the truth quaternion at alignment
+     * ("perfect initialization") and propagated from body gyro rates.
+     */
     class NavigationSystem {
     public:
-        /**
-         * @brief Updates the navigation estimates using INS integration and EKF fusion.
-         * @param sensors The noisy sensor measurements.
-         * @param nav The navigation estimates to update.
-         * @param dt Timestep.
-         */
         void update(
             const SensorBlock& sensors,
+            const PhysicsBlock& physics,
             NavigationBlock& nav,
-            double dt
-        );
+            double dt);
 
     private:
         void ensureCapacity(std::size_t size, NavigationBlock& nav);

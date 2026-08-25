@@ -134,22 +134,29 @@ namespace StrikeEngine::Kernel {
         nav.estAccelBiasZ[id] -= accelBiasGain * dzV_z;
     }
 
-    void NavigationSystem::update(const SensorBlock& sensors, NavigationBlock& nav, double dt) {
+    void NavigationSystem::update(const SensorBlock& sensors, const PhysicsBlock& physics, NavigationBlock& nav, double dt) {
         nav.size = sensors.size;
         ensureCapacity(nav.size, nav);
 
         for (std::size_t i = 0; i < nav.size; ++i) {
-            // Initial alignment (Perfect initialization for MVP, later we can add initial uncertainty)
+            // Initial alignment ("perfect initialization"): state is taken
+            // from truth at launch — GPS may not have produced its first
+            // sample yet, and attitude/rates live in the physics block.
+            // (Initial uncertainty can be added later for realism.)
             if (!nav.isAligned[i]) {
-                nav.estPx[i] = sensors.gpsPosX[i];
-                nav.estPy[i] = sensors.gpsPosY[i];
-                nav.estPz[i] = sensors.gpsPosZ[i];
-                nav.estVx[i] = sensors.gpsVelX[i];
-                nav.estVy[i] = sensors.gpsVelY[i];
-                nav.estVz[i] = sensors.gpsVelZ[i];
-                nav.estWx[i] = 0.0;
-                nav.estWy[i] = 0.0;
-                nav.estWz[i] = 0.0;
+                nav.estPx[i] = physics.px[i];
+                nav.estPy[i] = physics.py[i];
+                nav.estPz[i] = physics.pz[i];
+                nav.estVx[i] = physics.vx[i];
+                nav.estVy[i] = physics.vy[i];
+                nav.estVz[i] = physics.vz[i];
+                nav.estQw[i] = physics.qw[i];
+                nav.estQx[i] = physics.qx[i];
+                nav.estQy[i] = physics.qy[i];
+                nav.estQz[i] = physics.qz[i];
+                nav.estWx[i] = physics.wx[i];
+                nav.estWy[i] = physics.wy[i];
+                nav.estWz[i] = physics.wz[i];
                 nav.isAligned[i] = true;
                 continue; // Skip first tick integration
             }
