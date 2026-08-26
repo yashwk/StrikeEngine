@@ -249,7 +249,7 @@ Goal: Hardware acceleration.
             - [~] WGS84.hpp (constants and geodetic/ECEF conversion are in EarthModel.hpp)
 
         - [~] frames/ (conversion and local moving-origin foundation are integrated in EarthModel/EarthFrames)
-            - [~] ECEF.hpp (coordinate/conversion API plus standalone propagator exist in EarthModel/EarthFixedPropagator)
+            - [~] ECEF.hpp (coordinate/conversion API, standalone propagator, and opt-in kernel mode exist)
             - [x] NED.hpp (standalone frame transforms are in EarthFrames.hpp)
             - [x] ENU.hpp (standalone frame transforms are in EarthFrames.hpp)
             - [x] Geodetic.hpp (geodetic coordinate and conversion API exists in EarthModel.hpp)
@@ -415,7 +415,7 @@ Goal: Hardware acceleration.
 - [x] Optimizer
 
 ## Phase 6
-- [~] ECEF (WGS84 conversion, local frames, and standalone global propagator; kernel migration pending)
+- [~] ECEF (WGS84 conversion, local frames, standalone propagator, and opt-in kernel truth mode)
 - [x] WGS84 Gravity (opt-in normal gravity and spherical point-mass option)
 - [~] Earth Rotation (rotation-rate, centrifugal, and local transport foundation)
 - [x] Coriolis Effects (opt-in local ENU acceleration)

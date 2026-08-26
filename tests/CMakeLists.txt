@@ -49,6 +49,9 @@ target_link_libraries(spherical_gravity_test PRIVATE strikeengine)
 add_executable(earth_fixed_test validation/earth_fixed_test.cpp)
 target_link_libraries(earth_fixed_test PRIVATE strikeengine)
 
+add_executable(ecef_kernel_test validation/ecef_kernel_test.cpp)
+target_link_libraries(ecef_kernel_test PRIVATE strikeengine)
+
 add_executable(guidance_test validation/guidance_test.cpp)
 target_link_libraries(guidance_test PRIVATE strikeengine)
 
@@ -104,6 +107,9 @@ set_tests_properties(spherical_gravity PROPERTIES TIMEOUT 120)
 
 add_test(NAME earth_fixed COMMAND earth_fixed_test)
 set_tests_properties(earth_fixed PROPERTIES TIMEOUT 120)
+
+add_test(NAME ecef_kernel COMMAND ecef_kernel_test)
+set_tests_properties(ecef_kernel PROPERTIES TIMEOUT 120)
 
 add_test(NAME guidance COMMAND guidance_test)
 set_tests_properties(guidance PROPERTIES TIMEOUT 120)

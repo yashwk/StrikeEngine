@@ -39,7 +39,7 @@ This roadmap outlines the complete Data-Oriented Design (SoA) architecture for S
 
 ## Phase 5: High-Fidelity Physics & Hardware Acceleration
 **Goal:** Real-world planet models and massive scale.
-* **Tasks — [~] PARTIAL:** WGS84 Gravity, Earth Rotation, Coriolis effects, Adaptive `RK45Integrator`, and the `GPUBackend` (Vulkan/CUDA). Adaptive RK45, an optional Vulkan backend, WGS84 normal and spherical point-mass gravity, local ENU/NED frame transforms, local Coriolis, centrifugal effects, local moving-origin transport, and a standalone rotating-Earth ECEF propagator are implemented; kernel-wide ECEF migration and CUDA remain pending.
+* **Tasks — [~] PARTIAL:** WGS84 Gravity, Earth Rotation, Coriolis effects, Adaptive `RK45Integrator`, and the `GPUBackend` (Vulkan/CUDA). Adaptive RK45, an optional Vulkan backend, WGS84 normal and spherical point-mass gravity, local ENU/NED frame transforms, local Coriolis, centrifugal effects, local moving-origin transport, a standalone rotating-Earth ECEF propagator, and opt-in kernel ECEF truth are implemented; global terrain databases, GPU ECEF truth, and CUDA remain pending.
 
 ## Phase 6: Simulation Power Tools (The Lab)
 **Goal:** Research-grade analytical capabilities.
@@ -47,11 +47,11 @@ This roadmap outlines the complete Data-Oriented Design (SoA) architecture for S
 
 ### Current validation checkpoint
 
-The current engine checkpoint has **18/18 CTest tests passing**. W1–W13 MVP
+The current engine checkpoint has **19/19 CTest tests passing**. W1–W14 MVP
 fidelity work is recorded in `docs/FIDELITY_AUDIT.md`; terrain/wind MVP support
 is included in W5, opt-in WGS84/local-earth effects in W9, frame/centrifugal
-effects in W10, spherical gravity in W12, and standalone ECEF propagation in
-W13. Remaining roadmap items are kernel-wide ECEF state/terrain integration,
-transport beyond the local reference frame, expanded
+effects in W10, spherical gravity in W12, standalone ECEF propagation in
+W13, and opt-in kernel ECEF truth in W14. Remaining roadmap items are global
+terrain integration, transport beyond the local reference frame, expanded
 sensors/seekers/controllers, structured I/O/tooling, failure models, and a
 generalized GPU backend.

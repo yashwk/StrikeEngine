@@ -1,4 +1,6 @@
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
+#include <strikeengine/models/physics/earth/EarthFrames.hpp>
+#include <strikeengine/models/physics/earth/EarthFixedPropagator.hpp>
 #include <algorithm>
 #include <cmath>
 #include <array>
@@ -128,7 +130,12 @@ namespace StrikeEngine::Kernel {
         wz = iz * qw + iw * (-qz) + ix * (-qy) - iy * (-qx);
     }
 
-    void NavigationSystem::strapdownINS(std::size_t id, const SensorBlock& sensors, NavigationBlock& nav, double dt) {
+    void NavigationSystem::strapdownINS(
+        std::size_t id,
+        const SensorBlock& sensors,
+        NavigationBlock& nav,
+        double dt,
+        const EnvironmentConfig& environment) {
         // 1. Compensate IMU measurements
         double fx = sensors.accelX[id] - nav.estAccelBiasX[id];
         double fy = sensors.accelY[id] - nav.estAccelBiasY[id];
@@ -146,10 +153,48 @@ namespace StrikeEngine::Kernel {
         double wfx, wfy, wfz;
         rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id], fx, fy, fz, wfx, wfy, wfz);
 
-        // 3. Add gravity (-Z)
-        double ax = wfx;
-        double ay = wfy;
-        double az = wfz - 9.80665;
+        std::array<double, 3> gravity{0.0, 0.0, -9.80665};
+        std::array<double, 3> earthAcceleration{0.0, 0.0, 0.0};
+        if (environment.earth.useEcefTruth) {
+            const Models::EcefCoordinate position{
+                nav.estPx[id], nav.estPy[id], nav.estPz[id]};
+            const auto geodetic = Models::ecefToGeodetic(position);
+            if (environment.earth.useWgs84Gravity) {
+                gravity = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
+            } else {
+                gravity = Models::EarthFrames::toVector(
+                    Models::sphericalGravityAccelerationEcef(position));
+            }
+            earthAcceleration = Models::EarthFrames::toVector(
+                Models::EarthFixed::acceleration(
+                    position,
+                    {nav.estVx[id], nav.estVy[id], nav.estVz[id]},
+                    {},
+                    {false,
+                     environment.earth.includeCoriolis,
+                     environment.earth.includeCentrifugal}));
+        } else if (environment.earth.useWgs84Gravity) {
+            gravity[2] = -Models::normalGravity(
+                environment.earth.referenceLatitudeRad, nav.estPz[id]);
+        } else if (environment.earth.useSphericalGravity) {
+            const Models::GeodeticCoordinate reference{
+                environment.earth.referenceLatitudeRad,
+                environment.earth.referenceLongitudeRad,
+                0.0};
+            gravity = Models::EarthFrames::localSphericalGravityAcceleration(
+                Models::EarthFrames::enuToGeodetic(
+                    {nav.estPx[id], nav.estPy[id], nav.estPz[id]}, reference));
+        }
+        if (!environment.earth.useEcefTruth && environment.earth.includeCoriolis) {
+            earthAcceleration = Models::localCoriolisAcceleration(
+                environment.earth.referenceLatitudeRad,
+                {nav.estVx[id], nav.estVy[id], nav.estVz[id]});
+        }
+
+        // 3. Add frame gravity and rotating-earth terms.
+        const double ax = wfx + gravity[0] + earthAcceleration[0];
+        const double ay = wfy + gravity[1] + earthAcceleration[1];
+        const double az = wfz + gravity[2] + earthAcceleration[2];
 
         // 4. Integrate velocity
         nav.estVx[id] += ax * dt;
@@ -339,7 +384,12 @@ namespace StrikeEngine::Kernel {
         nav.estGyroBiasZ[id] += correction[14];
     }
 
-    void NavigationSystem::update(const SensorBlock& sensors, const PhysicsBlock& physics, NavigationBlock& nav, double dt) {
+    void NavigationSystem::update(
+        const SensorBlock& sensors,
+        const PhysicsBlock& physics,
+        NavigationBlock& nav,
+        double dt,
+        const EnvironmentConfig& environment) {
         nav.size = sensors.size;
         ensureCapacity(nav.size, nav);
 
@@ -367,7 +417,7 @@ namespace StrikeEngine::Kernel {
             }
 
             // High rate strapdown integration
-            strapdownINS(i, sensors, nav, dt);
+            strapdownINS(i, sensors, nav, dt, environment);
 
             // Low rate EKF fusion
             if (sensors.gpsUpdated[i]) {

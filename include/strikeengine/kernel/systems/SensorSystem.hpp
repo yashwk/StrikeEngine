@@ -2,6 +2,7 @@
 
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
 #include <strikeengine/kernel/data/SensorBlock.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <random>
 #include <cstddef>
 #include <cstdint>
@@ -24,7 +25,8 @@ namespace StrikeEngine::Kernel {
             const PhysicsBlock& physics,
             SensorBlock& sensors,
             double currentTime,
-            double dt
+            double dt,
+            const EnvironmentConfig& environment = {}
         );
 
         /**

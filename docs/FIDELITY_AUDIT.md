@@ -37,8 +37,8 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 ## Current verification after restart
 
 The restart fixes were completed and re-run on 2026-08-26. The complete CTest
-suite is green: **14/14 tests passed** after adding navigation, environment,
-earth, guidance, and scenario regressions.
+suite is green: **19/19 tests passed** after adding navigation, environment,
+earth, guidance, scenario, and kernel-ECEF regressions.
 
 | Workstream | Current status | Evidence |
 | --- | --- | --- |
@@ -55,6 +55,7 @@ earth, guidance, and scenario regressions.
 | W11 earth transport | DONE for the local moving-origin MVP | WGS84 curvature radii, local ENU-to-geodetic resolution, transport-rate acceleration, and CPU integration are covered by `earth_transport_test` |
 | W12 spherical gravity | DONE for the opt-in local-earth MVP | Radial ECEF point-mass gravity, local ENU projection, and CPU integration are covered by `spherical_gravity_test` |
 | W13 global ECEF propagator | DONE for the standalone model MVP | Rotating-Earth ECEF gravity/Coriolis/centrifugal equations, configurable terms, and deterministic RK4 propagation are covered by `earth_fixed_test` |
+| W14 kernel ECEF truth mode | DONE for the opt-in kernel MVP | Absolute ECEF physics, geodetic atmosphere/ground handling, ECEF GPS/INS flow, and ellipsoid-clamped impact are covered by `ecef_kernel_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -112,6 +113,14 @@ projected into local ENU coordinates at each vehicle position before it is
 applied to the CPU truth model. If both gravity options are requested,
 WGS84 normal gravity remains the selected model; the default flat-earth model
 is unchanged when neither option is enabled.
+
+The W14 increment adds `EnvironmentConfig::earth.useEcefTruth`. In this mode
+the kernel stores absolute ECEF position and velocity, resolves atmosphere and
+terrain through geodetic/local-ENU views, applies rotating-Earth acceleration,
+and keeps GPS/INS state in the same ECEF frame. Ground impact clamps to the
+WGS84 ellipsoid before deactivation. Local ENU remains the default, and
+global terrain databases, body-frame earth-rate transport, and GPU ECEF truth
+remain future work.
 
 The W13 increment adds a standalone rotating-Earth ECEF state propagator. It
 evaluates gravity, Coriolis, centrifugal, and caller-supplied ECEF force terms

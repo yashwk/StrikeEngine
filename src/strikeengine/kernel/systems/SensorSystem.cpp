@@ -1,7 +1,9 @@
 #include <strikeengine/kernel/systems/SensorSystem.hpp>
 #include <strikeengine/kernel/math/Quaternion.hpp>
+#include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <cmath>
 #include <chrono>
+#include <array>
 
 namespace StrikeEngine::Kernel {
 
@@ -32,7 +34,8 @@ namespace StrikeEngine::Kernel {
         const PhysicsBlock& physics,
         SensorBlock& sensors,
         double currentTime,
-        double dt)
+        double dt,
+        const EnvironmentConfig& environment)
     {
         std::size_t size = physics.size;
         sensors.size = size;
@@ -58,10 +61,34 @@ namespace StrikeEngine::Kernel {
         for (std::size_t i = 0; i < size; ++i) {
             if (!physics.active[i]) continue;
 
-            // 1. IMU Specific Force (World frame a - g)
-            double fx = physics.ax[i];
-            double fy = physics.ay[i];
-            double fz = physics.az[i] + 9.80665; // Gravity points down (-Z), so specific force +g in Z
+            // 1. IMU Specific Force (world-frame acceleration minus gravity).
+            std::array<double, 3> gravity{0.0, 0.0, -9.80665};
+            if (environment.earth.useEcefTruth) {
+                const auto position = Models::ecefToGeodetic({
+                    physics.px[i], physics.py[i], physics.pz[i]});
+                if (environment.earth.useWgs84Gravity) {
+                    gravity = Models::EarthFrames::ecefNormalGravityAcceleration(
+                        position);
+                } else {
+                    gravity = Models::EarthFrames::toVector(
+                        Models::sphericalGravityAccelerationEcef(
+                            {physics.px[i], physics.py[i], physics.pz[i]}));
+                }
+            } else if (environment.earth.useWgs84Gravity) {
+                gravity[2] = -Models::normalGravity(
+                    environment.earth.referenceLatitudeRad, physics.pz[i]);
+            } else if (environment.earth.useSphericalGravity) {
+                const Models::GeodeticCoordinate reference{
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad,
+                    0.0};
+                gravity = Models::EarthFrames::localSphericalGravityAcceleration(
+                    Models::EarthFrames::enuToGeodetic(
+                        {physics.px[i], physics.py[i], physics.pz[i]}, reference));
+            }
+            const double fx = physics.ax[i] - gravity[0];
+            const double fy = physics.ay[i] - gravity[1];
+            const double fz = physics.az[i] - gravity[2];
 
             // Rotate Specific Force to Body Frame. Uses the shared
             // Quaternion.hpp rotation (v' = q^-1 v q). The historical local

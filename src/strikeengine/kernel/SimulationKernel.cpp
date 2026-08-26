@@ -233,10 +233,10 @@ namespace StrikeEngine::Kernel {
         backend->step(physicsBlock, controlBlock, time.currentTime(), dt);
         
         // 2. Generate noisy sensor measurements
-        sensorSystem.update(physicsBlock, sensorBlock, time.currentTime(), dt);
+        sensorSystem.update(physicsBlock, sensorBlock, time.currentTime(), dt, environment);
         
         // 3. Compute Navigation estimates (INS + EKF)
-        navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt);
+        navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt, environment);
         
         // 3.5 Process Seekers
         seekerSystem.update(physicsBlock, statusBlock, seekerBlock, dt);

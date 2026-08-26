@@ -8,8 +8,10 @@ namespace StrikeEngine::Kernel {
  * SoA truth-state block for all entities.
  *
  * Frame conventions (W1/W2 spine):
- *  - WORLD frame: flat earth, Z UP, ground at pz == 0. ax/ay/az are world
- *    accelerations (sensors rotate them to body for specific force).
+ *  - WORLD frame: local flat-earth ENU-style coordinates by default, with
+ *    absolute ECEF position/velocity available when
+ *    EnvironmentConfig::earth.useEcefTruth is enabled. ax/ay/az remain in
+ *    the selected world frame (sensors rotate them to body).
  *  - BODY frame: aerospace NED-ish (X forward, Y right, Z down). wx/wy/wz
  *    are BODY angular rates; q = body->world quaternion.
  *  - finPitch/finYaw/finRoll are the ACHIEVED servo deflections (rad),

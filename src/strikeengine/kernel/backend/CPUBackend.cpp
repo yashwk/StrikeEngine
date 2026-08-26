@@ -4,6 +4,7 @@
 #include <strikeengine/kernel/math/Quaternion.hpp>
 #include <strikeengine/models/physics/earth/EarthModel.hpp>
 #include <strikeengine/models/physics/earth/EarthFrames.hpp>
+#include <strikeengine/models/physics/earth/EarthFixedPropagator.hpp>
 #include <array>
 #include <cmath>
 
@@ -101,8 +102,16 @@ namespace StrikeEngine::Kernel
             d.py[i] = s.vy[i];
             d.pz[i] = s.vz[i];
 
-            // 1. Atmosphere at altitude (world Z up)
-            const double altitude = s.pz[i];
+            // 1. Atmosphere at altitude. Local mode uses Z above datum;
+            // ECEF mode resolves the absolute position through WGS84.
+            const bool ecefTruth = environment.earth.useEcefTruth;
+            const Models::EcefCoordinate ecefPosition{
+                s.px[i], s.py[i], s.pz[i]};
+            Models::GeodeticCoordinate earthPosition{};
+            if (ecefTruth) {
+                earthPosition = Models::ecefToGeodetic(ecefPosition);
+            }
+            const double altitude = ecefTruth ? earthPosition.altitudeM : s.pz[i];
             const auto atm = atmosphere->evaluate(altitude);
 
             // 2. Body-frame air-relative velocity. Wind is the world-frame
@@ -156,7 +165,26 @@ namespace StrikeEngine::Kernel
             quatRotateToWorld(s.qw[i], s.qx[i], s.qy[i], s.qz[i], fbx, fby, fbz, afx, afy, afz);
 
             std::array<double, 3> gravity{0.0, 0.0, -9.80665};
-            if (environment.earth.useWgs84Gravity) {
+            std::array<double, 3> earthFrameAcceleration{0.0, 0.0, 0.0};
+            if (ecefTruth) {
+                // ECEF truth defaults to radial spherical gravity unless the
+                // caller explicitly selects WGS84 normal gravity.
+                if (environment.earth.useWgs84Gravity) {
+                    gravity = Models::EarthFrames::ecefNormalGravityAcceleration(
+                        earthPosition);
+                } else {
+                    gravity = Models::EarthFrames::toVector(
+                        Models::sphericalGravityAccelerationEcef(ecefPosition));
+                }
+                const auto rotating = Models::EarthFixed::acceleration(
+                    ecefPosition,
+                    {s.vx[i], s.vy[i], s.vz[i]},
+                    {},
+                    {false,
+                     environment.earth.includeCoriolis,
+                     environment.earth.includeCentrifugal});
+                earthFrameAcceleration = Models::EarthFrames::toVector(rotating);
+            } else if (environment.earth.useWgs84Gravity) {
                 gravity[2] = -Models::normalGravity(
                     environment.earth.referenceLatitudeRad, altitude);
             } else if (environment.earth.useSphericalGravity) {
@@ -170,12 +198,12 @@ namespace StrikeEngine::Kernel
                     position);
             }
             std::array<double, 3> coriolis{0.0, 0.0, 0.0};
-            if (environment.earth.includeCoriolis) {
+            if (!ecefTruth && environment.earth.includeCoriolis) {
                 coriolis = Models::localCoriolisAcceleration(
                     environment.earth.referenceLatitudeRad,
                     {s.vx[i], s.vy[i], s.vz[i]});
             }
-            if (environment.earth.includeCentrifugal) {
+            if (!ecefTruth && environment.earth.includeCentrifugal) {
                 const auto centrifugal = Models::EarthFrames::localCentrifugalAcceleration({
                     environment.earth.referenceLatitudeRad,
                     environment.earth.referenceLongitudeRad,
@@ -184,7 +212,7 @@ namespace StrikeEngine::Kernel
                 coriolis[1] += centrifugal[1];
                 coriolis[2] += centrifugal[2];
             }
-            if (environment.earth.includeTransportRate) {
+            if (!ecefTruth && environment.earth.includeTransportRate) {
                 const Models::GeodeticCoordinate reference{
                     environment.earth.referenceLatitudeRad,
                     environment.earth.referenceLongitudeRad,
@@ -197,6 +225,9 @@ namespace StrikeEngine::Kernel
                 coriolis[1] += transport[1];
                 coriolis[2] += transport[2];
             }
+            coriolis[0] += earthFrameAcceleration[0];
+            coriolis[1] += earthFrameAcceleration[1];
+            coriolis[2] += earthFrameAcceleration[2];
 
             const double axWorld = afx * invMass + gravity[0] + coriolis[0];
             const double ayWorld = afy * invMass + gravity[1] + coriolis[1];

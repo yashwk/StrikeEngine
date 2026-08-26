@@ -8,11 +8,16 @@ namespace StrikeEngine::Kernel {
     /**
      * @brief Optional local-earth corrections for the truth model.
      *
-     * When enabled, the existing local world axes are interpreted as ENU
-     * (east, north, up) for Coriolis. The default remains the legacy
-     * flat-earth constant-gravity model.
+     * In local mode, world X/Y/Z are interpreted as ENU (east, north, up)
+     * for earth corrections. With useEcefTruth, PhysicsBlock position and
+     * velocity are absolute ECEF values and the reference latitude/longitude
+     * anchor terrain callbacks in a local ENU view. The default remains the
+     * legacy flat-earth constant-gravity model.
      */
     struct EarthEnvironmentConfig {
+        // When enabled, PhysicsBlock position/velocity are absolute ECEF
+        // metres and m/s. The default remains local ENU-style coordinates.
+        bool useEcefTruth = false;
         bool useWgs84Gravity = false;
         bool useSphericalGravity = false;
         bool includeCoriolis = false;

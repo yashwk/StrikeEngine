@@ -81,18 +81,29 @@ namespace StrikeEngine::Models {
                 subtract(toVector(ecef), originEcef));
         }
 
+        inline Vector3 enuToEcefVector(
+            const Vector3& enu,
+            const GeodeticCoordinate& origin);
+
         inline EcefCoordinate enuToEcef(
+            const Vector3& enu,
+            const GeodeticCoordinate& origin)
+        {
+            const Vector3 delta = enuToEcefVector(enu, origin);
+            return toEcef(add(toVector(geodeticToEcef(origin)), delta));
+        }
+
+        inline Vector3 enuToEcefVector(
             const Vector3& enu,
             const GeodeticCoordinate& origin)
         {
             const auto rotation = ecefToEnuRotation(
                 origin.latitudeRad, origin.longitudeRad);
             // The inverse of an orthonormal DCM is its transpose.
-            const Vector3 delta{
+            return {
                 rotation[0] * enu[0] + rotation[3] * enu[1] + rotation[6] * enu[2],
                 rotation[1] * enu[0] + rotation[4] * enu[1] + rotation[7] * enu[2],
                 rotation[2] * enu[0] + rotation[5] * enu[1] + rotation[8] * enu[2]};
-            return toEcef(add(toVector(geodeticToEcef(origin)), delta));
         }
 
         /**
@@ -149,6 +160,15 @@ namespace StrikeEngine::Models {
             return multiply(
                 ecefToEnuRotation(position.latitudeRad, position.longitudeRad),
                 gravityEcef);
+        }
+
+        inline Vector3 ecefNormalGravityAcceleration(
+            const GeodeticCoordinate& position)
+        {
+            return enuToEcefVector(
+                {0.0, 0.0, -normalGravity(
+                    position.latitudeRad, position.altitudeM)},
+                position);
         }
 
     } // namespace EarthFrames
