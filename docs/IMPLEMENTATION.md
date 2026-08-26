@@ -3,7 +3,7 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-26
-**Runtime checkpoint:** `40af724`
+**Runtime checkpoint:** `d1bd26f`
 
 This document maps the normative behavior in [`SPEC.md`](SPEC.md) to source
 files, build targets, execution order, validation, packaging, and remaining
@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **19/19 CTest tests pass**.
+- Release validation: **20/20 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -135,7 +135,8 @@ physics step. This ordering is part of the integration contract.
 - `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff.
 - `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin control.
 - `SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`, `BatchRunner`: study
-  wrappers; their output is not yet a versioned telemetry contract.
+  wrappers; frame-aware CSV reporting is implemented in `Reporting.hpp`, while
+  richer telemetry and binary output remain future work.
 
 ## 6. ECEF kernel integration
 
@@ -151,9 +152,9 @@ with `Models::geodeticToEcef`.
 | Seekers/guidance | Relative vectors in the shared ECEF frame |
 | Events | Local ENU terrain anchor and WGS84 ellipsoid impact clamp |
 
-The local mode remains the default. Study wrappers still need a shared
-frame-aware reporting layer before ECEF altitude/coordinate summaries are
-production-ready.
+The local mode remains the default. Study wrappers use the shared reporting
+layer for ECEF altitude/coordinate summaries; richer production telemetry and
+binary recording remain future work.
 
 ## 7. Validation inventory
 
@@ -167,6 +168,7 @@ production-ready.
 | `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation |
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation |
 | `guidance`, `scenario` | guidance and scenario contracts |
+| `reporting` | versioned local/ECEF wrapper output and primary-entity selection |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -183,6 +185,7 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W12 | spherical point-mass gravity | `a47d329` |
 | W13 | standalone rotating-Earth ECEF propagator | `5a8d0f9` |
 | W14 | opt-in kernel ECEF truth across physics/events/sensors/navigation | `40af724` |
+| W15 | frame-aware study-wrapper reporting and versioned CSV output | `d1bd26f` |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -235,8 +238,8 @@ runtime guarantees:
 
 ## 10. Known limitations and prioritized backlog
 
-1. **Study-wrapper reporting:** normalize altitude and coordinates for ECEF
-   scenarios in `SingleRun`, `ParamSweep`, `MonteCarlo`, and `BatchRunner`.
+1. **Structured study output:** extend the versioned wrapper CSV contract with
+   richer telemetry, binary recording, and configurable output selection.
 2. **Global terrain:** `tools/convert_srtm.cpp` exists, but runtime terrain is
    still a callback. Add DEM/DTED tiles, interpolation, streaming, datum/geoid
    policy, dateline/polar handling, and frame-aware collision queries.

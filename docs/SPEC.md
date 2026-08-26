@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **19/19 CTest tests passing** in Release.
+The current validated checkpoint is **20/20 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -300,11 +300,19 @@ Available wrappers:
 
 | API | Contract | Status |
 | --- | --- | --- |
-| `SingleRun` | Runs one vehicle and writes a basic CSV trajectory. | Implemented MVP; output is local-frame oriented. |
-| `ParamSweep` | Repeats a scenario over a scalar callback and writes CSV. | Implemented MVP; assumes primary entity 0. |
-| `MonteCarlo` | Perturbs copied scenarios and writes CSV outcomes. | Implemented MVP; RNG/output controls are limited. |
+| `SingleRun` | Runs one vehicle and writes a trajectory CSV. | Implemented MVP; versioned frame-aware output. |
+| `ParamSweep` | Repeats a scenario over a scalar callback and writes CSV. | Implemented MVP; reports the configured `primaryEntityIndex`. |
+| `MonteCarlo` | Perturbs copied scenarios and writes CSV outcomes. | Implemented MVP; reports the configured `primaryEntityIndex`; RNG controls remain limited. |
 | `Optimizer` | Runs particle-swarm parameter studies with callbacks. | Implemented MVP. |
-| `BatchRunner` | Runs isolated scenarios and returns structured summary results. | Implemented; ECEF-aware reporting is still limited. |
+| `BatchRunner` | Runs isolated scenarios and returns structured summary results. | Implemented MVP; frame-aware primary and aggregate metrics. |
+
+All wrapper CSV files use format version `1` metadata comments. Every row
+contains its `Frame` (`LOCAL_ENU` or `ECEF`) and selected-frame position and
+velocity columns. Rows also contain WGS84 latitude/longitude in radians and
+`Altitude_m`; local mode uses world Z for altitude, while ECEF mode derives
+altitude from the absolute ECEF position. `ScenarioConfig::primaryEntityIndex`
+selects the entity represented by sweep, Monte Carlo, and batch primary-state
+summaries; its default is zero for compatibility.
 
 ## 9. Capability matrix and boundaries
 
@@ -318,8 +326,8 @@ installable CMake packaging.
 Planned or partial: coefficient tables and higher-fidelity aero, fuel/staging
 models, failure and damage semantics, advanced atmosphere, full global
 terrain/DEM ingestion, geoid models, richer sensors and seeker families,
-sensor fusion, trajectory/energy management, pursuit, LQR/MPC, ECEF-aware
-study-wrapper outputs, structured versioned telemetry, parallel CPU execution,
+sensor fusion, trajectory/energy management, pursuit, LQR/MPC, richer
+versioned telemetry and binary recording, parallel CPU execution,
 CUDA, and a production-grade GPU backend. Optional ECS/editor mapping,
 visualization, plotting/analysis/scenario-generation tooling, and an API
 server wrapper are integration or tooling ideas, not current kernel features.
