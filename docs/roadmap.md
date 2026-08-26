@@ -1,5 +1,9 @@
 # StrikeEngine Unified Roadmap
 
+> **Historical/status reference:** [`SPEC.md`](SPEC.md) and
+> [`IMPLEMENTATION.md`](IMPLEMENTATION.md) are authoritative. This roadmap is
+> retained as the original feature inventory and status history.
+
 This roadmap outlines the complete Data-Oriented Design (SoA) architecture for StrikeEngine, enforcing a strict separation between pure mathematical models (`models/`) and execution state (`kernel/`).
 
 > **Status overlay — verified 2026-08-26:** This is an older roadmap and its

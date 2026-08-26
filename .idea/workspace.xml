@@ -39,25 +39,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6a4d0fbe-109b-4b39-a3e8-cdaa5f30ef95" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/SimulationKernel.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/SimulationKernel.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/config/VehicleConfig.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/config/VehicleConfig.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/data/GuidanceBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/GuidanceBlock.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/data/PhysicsBlock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/data/PhysicsBlock.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/systems/AutopilotSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/AutopilotSystem.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/systems/CommandProcessor.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/CommandProcessor.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/kernel/systems/SensorSystem.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/kernel/systems/SensorSystem.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/strikeengine/models/physics/aerodynamics/AeroModel.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/strikeengine/models/physics/aerodynamics/AeroModel.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/strikeengine/kernel/SimulationKernel.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/SimulationKernel.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/strikeengine/kernel/backend/CPUBackend.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/backend/CPUBackend.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/strikeengine/kernel/systems/AutopilotSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/AutopilotSystem.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/strikeengine/kernel/systems/CommandProcessor.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/CommandProcessor.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/strikeengine/kernel/systems/GuidanceSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/GuidanceSystem.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/strikeengine/kernel/systems/SensorSystem.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/strikeengine/kernel/systems/SensorSystem.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/validation/intercept_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/validation/intercept_test.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/validation/rigidbody_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/validation/rigidbody_test.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/validation/vehicleconfig_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/validation/vehicleconfig_test.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,7 +50,7 @@
     <option name="formatViaClangd" value="false" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="568" />
+    <option name="cachedIndexableFilesCount" value="185" />
     <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
@@ -96,23 +78,23 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.0" />
-      <entry key="MS500" value="1.000000000000015" />
-      <entry key="S2" value="1.0009575745126424" />
-      <entry key="S5" value="1.1420524271356478" />
-      <entry key="S10" value="1.7534319174506234" />
-      <entry key="S30" value="3.292668350470744" />
-      <entry key="S60" value="4.028271210878479" />
-      <entry key="M2" value="4.480374020579155" />
-      <entry key="M5" value="4.783432717824033" />
-      <entry key="M10" value="4.890813455746227" />
-      <entry key="M15" value="4.942364734982036" />
-      <entry key="M30" value="5.381244124392167" />
-      <entry key="H1" value="7.126248051017512" />
-      <entry key="H2" value="9.847929589676617" />
-      <entry key="H4" value="12.30488910366918" />
-      <entry key="D1" value="15.274864202432317" />
-      <entry key="W1" value="15.893363795340989" />
+      <entry key="MS100" value="1.5968193854777484" />
+      <entry key="MS500" value="2.5412228802479744" />
+      <entry key="S2" value="2.8760128610361915" />
+      <entry key="S5" value="3.5300177016231036" />
+      <entry key="S10" value="7.256711610524255" />
+      <entry key="S30" value="23.02946989600601" />
+      <entry key="S60" value="33.68020095750721" />
+      <entry key="M2" value="41.26540904731564" />
+      <entry key="M5" value="46.8082481793013" />
+      <entry key="M10" value="48.85122497343216" />
+      <entry key="M15" value="49.570214081684924" />
+      <entry key="M30" value="50.681471364852115" />
+      <entry key="H1" value="52.75823424710345" />
+      <entry key="H2" value="55.650451588535645" />
+      <entry key="H4" value="58.20012708547843" />
+      <entry key="D1" value="61.256194366491265" />
+      <entry key="W1" value="61.89066073449103" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
@@ -134,23 +116,23 @@
       <entry key="W1" value="0.0" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.7139830638186535E-9" />
-      <entry key="MS500" value="0.01765230022767207" />
-      <entry key="S2" value="0.3654161290852515" />
-      <entry key="S5" value="0.8068364867640516" />
-      <entry key="S10" value="1.5620655091681623" />
-      <entry key="S30" value="3.218571678398859" />
-      <entry key="S60" value="3.989173973239632" />
-      <entry key="M2" value="4.460221822624295" />
-      <entry key="M5" value="4.7752131767104755" />
-      <entry key="M10" value="4.886675984185685" />
-      <entry key="M15" value="4.939600057506817" />
-      <entry key="M30" value="5.379857157709988" />
-      <entry key="H1" value="7.1255506028608515" />
-      <entry key="H2" value="9.847578174470192" />
-      <entry key="H4" value="12.304712219500654" />
-      <entry key="D1" value="15.27483448765962" />
-      <entry key="W1" value="15.893359543444166" />
+      <entry key="MS100" value="1.5211908226192727" />
+      <entry key="MS500" value="2.516681965446689" />
+      <entry key="S2" value="2.8690437409077916" />
+      <entry key="S5" value="3.526224284632287" />
+      <entry key="S10" value="7.24685436049057" />
+      <entry key="S30" value="23.001494149553228" />
+      <entry key="S60" value="33.654771939526505" />
+      <entry key="M2" value="41.248150791335526" />
+      <entry key="M5" value="46.799938737645775" />
+      <entry key="M10" value="48.84680388801831" />
+      <entry key="M15" value="49.56720478403307" />
+      <entry key="M30" value="50.67993368861565" />
+      <entry key="H1" value="52.75745423599564" />
+      <entry key="H2" value="55.650057070778765" />
+      <entry key="H4" value="58.19992818948716" />
+      <entry key="D1" value="61.256160918282205" />
+      <entry key="W1" value="61.89065594764395" />
     </decayedShown>
   </component>
   <component name="ProjectApplicationVersion">
@@ -194,12 +176,17 @@
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;ml.llm.AcpAgentsConfigurable&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
     &quot;settings.editor.splitter.proportion&quot;: &quot;0.3337041&quot;,
     &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;
   }
 }</component>
   <component name="RunManager" selected="CMake Application.run_tests">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="glm" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="StrikeEngine" TARGET_NAME="glm" CONFIG_NAME="Debug">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -264,18 +251,18 @@
       <item itemvalue="CTest Application.All CTest" />
     </list>
   </component>
-  <component name="SelectedDebugProfileService">{
-  &quot;profileIdByStamp&quot;: [
+  <component name="SelectedDebugProfileService"><![CDATA[{
+  "profileIdByStamp": [
     {
-      &quot;first&quot;: {
-        &quot;##RUN_CONFIGURATION##&quot;: &quot;CMake Application.run_tests&quot;,
-        &quot;cmake&quot;: &quot;CMakeBuildProfile:Debug&quot;
+      "first": {
+        "##RUN_CONFIGURATION##": "CMake Application.run_tests",
+        "cmake": "CMakeBuildProfile:Debug"
       },
-      &quot;second&quot;: &quot;8f20e80d-c5d4-4bc5-b111-0f3438007d72&quot;
+      "second": "8f20e80d-c5d4-4bc5-b111-0f3438007d72"
     }
   ],
-  &quot;modificationCount&quot;: 11
-}</component>
+  "modificationCount": 15
+}]]></component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="6a4d0fbe-109b-4b39-a3e8-cdaa5f30ef95" name="Changes" comment="" />
@@ -285,7 +272,9 @@
       <updated>1787649837191</updated>
       <workItem from="1787675625997" duration="12000" />
       <workItem from="1787675648579" duration="13000" />
-      <workItem from="1787675668035" duration="14000" />
+      <workItem from="1787675668035" duration="325000" />
+      <workItem from="1787676662576" duration="86000" />
+      <workItem from="1787676755411" duration="405000" />
     </task>
     <servers />
   </component>

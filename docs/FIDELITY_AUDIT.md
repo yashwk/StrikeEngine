@@ -1,5 +1,9 @@
 # StrikeEngine — Fidelity Audit (2026-08-25; verified 2026-08-26)
 
+> **Evidence record:** [`SPEC.md`](SPEC.md) defines the normative contract and
+> [`IMPLEMENTATION.md`](IMPLEMENTATION.md) defines the current code mapping.
+> This audit is retained as historical and measured evidence.
+
 Baseline audit before the engine-fidelity deep session. Every claim below is
 traceable to the code at commits `48775a6` (engine) / `d82f851` (StrikeSim).
 Per-subsystem: what is modeled, what is crude, what is missing. Evidence in

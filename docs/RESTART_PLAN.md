@@ -1,5 +1,9 @@
 # StrikeEngine / StrikeSim / StrikeCEM — Restart Plan
 
+> **Historical execution record:** [`SPEC.md`](SPEC.md) and
+> [`IMPLEMENTATION.md`](IMPLEMENTATION.md) are now authoritative for the
+> current StrikeEngine project. This restart plan is retained as history.
+
 **Status:** approved; engine W1–W9 MVPs verified; execution in progress
 **Date:** 2026-02 (restart session)
 

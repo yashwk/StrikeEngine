@@ -1,5 +1,10 @@
 ## new roadmap
 
+> **Historical/status reference:** [`SPEC.md`](SPEC.md) and
+> [`IMPLEMENTATION.md`](IMPLEMENTATION.md) are now authoritative. This file
+> is retained for its original feature inventory and completion annotations;
+> it must not override the authoritative contract.
+
 > **Status overlay — verified 2026-08-26:** `[x]` means implemented and
 > covered by the current validation suite; `[~]` means an MVP or integrated
 > equivalent exists but the exact standalone structure is not complete; `[ ]`
