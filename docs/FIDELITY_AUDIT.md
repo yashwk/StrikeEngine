@@ -1,4 +1,4 @@
-# StrikeEngine — Fidelity Audit (2026-08-25)
+# StrikeEngine — Fidelity Audit (2026-08-25; verified 2026-08-26)
 
 Baseline audit before the engine-fidelity deep session. Every claim below is
 traceable to the code at commits `48775a6` (engine) / `d82f851` (StrikeSim).
@@ -33,6 +33,33 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 > `rigidbody_test`), actuator chain exists but unstable at speed, ghosts (§8),
 > fixed-gain autopilot (no gain scheduling by dynamic pressure), seeker FOV/
 > latency (§6), EKF (§7), impact interpolation (§9).
+
+## Current verification after restart
+
+The restart fixes were completed and re-run on 2026-08-26. The complete CTest
+suite is green: **7/7 tests passed** in 18.11 s.
+
+| Workstream | Current status | Evidence |
+| --- | --- | --- |
+| W1 per-entity vehicle config | DONE | `vehicleconfig_test` PASS |
+| W2 6-DOF rigid body | DONE | `rigidbody_test` PASS: quaternion norm, gyro coupling, and commanded climb |
+| W3 control authority | DONE for the MVP DoD | `intercept_test` PASS: minimum miss 25.30 m; actuator and post-burnout control path exercised |
+| W4 true RK4/RK45 | PARTIAL | Derivative callbacks and stage re-evaluation exist; adaptive policies and impact interpolation remain |
+| W5 events/environment | PARTIAL | Ground impacts now clamp, deactivate, and stop entities; terrain, wind, and interpolation remain |
+| W6 seeker/sensor | NOT STARTED | FOV, gimbal limits, hysteresis, and latency remain |
+| W7 navigation EKF | NOT STARTED | Coupled-state corrections and bias convergence remain |
+
+The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
+specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
+signs. The direct ProNav LOS-rate calculation was replaced in this MVP by a
+bounded predictive constant-acceleration intercept correction; the public
+guidance mode remains `ProportionalNavigation` for compatibility. This is an
+explicit interim guidance model, not a claim of true PN fidelity.
+
+The W5 repair changes ground impact from a status-only notification to a true
+state transition: position is clamped to ground, velocity/acceleration are
+cleared, and `physics.active` is disabled. This removes the previously observed
+below-ground integration ghosts. Impact time is still step-granular.
 
 ---
 

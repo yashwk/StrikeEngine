@@ -1,12 +1,22 @@
 # StrikeEngine / StrikeSim / StrikeCEM — Restart Plan
 
-**Status:** approved; execution in progress
+**Status:** approved; engine W1–W3 spine verified; execution in progress
 **Date:** 2026-02 (restart session)
 
 This document is the safety record for the project restructure. It captures the verified
 starting state, the locked-in architecture decisions, the phase-by-phase execution plan,
 and the rollback safety net. **Commit discipline: one recoverable checkpoint per phase;
 nothing is deleted before it exists in git history.**
+
+### Current engine checkpoint — 2026-08-26
+
+The interrupted engine-fidelity repair was resumed and completed for the W3/W5
+DoD that was red in the prior checkpoint. The CPU build succeeds and the full
+CTest suite passes **7/7**. The repair covered the autopilot frame/sign chain,
+bounded aerodynamic control authority, predictive intercept guidance, and
+ground-impact deactivation. W4 remains partial (impact interpolation and full
+adaptive policies), while W6/W7 remain future work. The historical starting
+state and phase plan below are retained as the restart record.
 
 ---
 

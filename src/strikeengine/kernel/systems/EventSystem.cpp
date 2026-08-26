@@ -3,7 +3,7 @@
 namespace StrikeEngine::Kernel {
 
     void EventSystem::evaluate(
-        const PhysicsBlock& physics,
+        PhysicsBlock& physics,
         EntityStatusBlock& status,
         double currentTime)
     {
@@ -12,7 +12,18 @@ namespace StrikeEngine::Kernel {
 
             // Example continuous check: Ground Impact (Flat Earth approximation Z <= 0)
             if (physics.pz[i] <= 0.0) {
-                // If it hits the ground, it is destroyed
+                // Ground impact removes the entity from subsequent physics
+                // and sensor updates. Clamp the crossing state so callers do
+                // not observe a dead entity continuing below the terrain as
+                // an active ghost.
+                physics.pz[i] = 0.0;
+                physics.vx[i] = 0.0;
+                physics.vy[i] = 0.0;
+                physics.vz[i] = 0.0;
+                physics.ax[i] = 0.0;
+                physics.ay[i] = 0.0;
+                physics.az[i] = 0.0;
+                physics.active[i] = false;
                 status.isAlive[i] = false;
                 
                 SimulationEvent evt;

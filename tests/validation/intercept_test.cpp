@@ -1,6 +1,6 @@
 // W3 spine DoD: control authority makes guided interception physically
-// possible. Head-on engagement, stationary target, ProNav + rate-command
-// autopilot: miss distance must drop from the pre-spine ~475 m to < 50 m.
+// possible. Head-on engagement, stationary target, predictive intercept
+// guidance + acceleration-command autopilot: miss distance must be < 50 m.
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
 #include <strikeengine/kernel/systems/CommandProcessor.hpp>
@@ -56,7 +56,7 @@ int main() {
 
     const auto targetId = kernel.createVehicle(target, targetCfg);
 
-    // --- ProNav on the stationary target ---
+    // --- Predictive intercept guidance on the stationary target ---
     SimulationCommand cmd{};
     cmd.entityId = missileId;
     cmd.mode = GuidanceMode::ProportionalNavigation;

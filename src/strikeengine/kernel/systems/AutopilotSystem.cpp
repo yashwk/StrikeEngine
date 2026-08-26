@@ -10,10 +10,10 @@ namespace StrikeEngine::Kernel {
     void AutopilotSystem::update(
         const EntityStatusBlock& status,
         const NavigationBlock& nav,
-        const SensorBlock& sensor,
+        const SensorBlock& /*sensor*/,
         const GuidanceBlock& guidance,
         ControlBlock& control,
-        double dt)
+        double /*dt*/)
     {
         // Resize control block if needed (usually handled in SimulationKernel, but safe to check)
         if (control.pitchCommand.size() < nav.size) {
@@ -23,14 +23,6 @@ namespace StrikeEngine::Kernel {
             control.thrustCommand.resize(nav.size, 0.0);
         }
 
-        if (pitchIntegral.size() < nav.size) {
-            pitchIntegral.resize(nav.size, 0.0);
-            yawIntegral.resize(nav.size, 0.0);
-            wasCommanded.resize(nav.size, false);
-            azFiltered.resize(nav.size, 0.0);
-            ayFiltered.resize(nav.size, 0.0);
-        }
-
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
 
@@ -38,26 +30,18 @@ namespace StrikeEngine::Kernel {
                 control.pitchCommand[i] = 0.0;
                 control.yawCommand[i] = 0.0;
                 control.rollCommand[i] = 0.0;
-                pitchIntegral[i] = 0.0;
-                yawIntegral[i] = 0.0;
-                azFiltered[i] = 0.0;
-                ayFiltered[i] = 0.0;
-                wasCommanded[i] = false;
                 continue;
             }
 
-            updateFlightController(i, nav, sensor, guidance, control, dt);
-            wasCommanded[i] = true;
+            updateFlightController(i, nav, guidance, control);
         }
     }
 
     void AutopilotSystem::updateFlightController(
         std::size_t id,
         const NavigationBlock& nav,
-        const SensorBlock& sensor,
         const GuidanceBlock& guidance,
-        ControlBlock& control,
-        double dt)
+        ControlBlock& control)
     {
         // 1. Commanded acceleration (world, from guidance) -> body frame
         double axCmdB, ayCmdB, azCmdB;
@@ -67,31 +51,22 @@ namespace StrikeEngine::Kernel {
                          guidance.commandedAccelZ[id],
                          axCmdB, ayCmdB, azCmdB);
 
-        // 2. Measured specific force (body frame, from sensors), low-pass
-        //    filtered. Without the lag, the fin's own lift feeds straight
-        //    back through azMeas in the same tick and couples the outer loop
-        //    to the short period (fin/accel limit cycle on stiff airframes).
-        azFiltered[id] += (sensor.accelZ[id] - azFiltered[id]) * (dt / kAccelFilTau);
-        ayFiltered[id] += (sensor.accelY[id] - ayFiltered[id]) * (dt / kAccelFilTau);
-        const double azMeas = azFiltered[id];
-        const double ayMeas = ayFiltered[id];
+        // Guidance commands are total world-frame accelerations, while the
+        // accelerometer measures specific force (total acceleration minus
+        // gravity). Convert the command into the body-frame specific-force
+        // demand before mapping it to the fins. The normal-force term is
+        // intentionally feed-forward: feeding the fin's own measured force
+        // back into this simplified airframe model creates a short-period
+        // limit cycle. Rates and AoA below provide the stabilizing feedback.
+        double gravityBx, gravityBy, gravityBz;
+        quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                         0.0, 0.0, -9.80665, gravityBx, gravityBy, gravityBz);
+        const double aySpecificCmd = ayCmdB - gravityBy;
+        const double azSpecificCmd = azCmdB - gravityBz;
 
-        // 3. Outer loop: accel error -> desired body rate (P + integral).
-        //    The integral is provisional here; anti-windup back-calculation
-        //    happens after the deflection clamp (step 7) so a saturated fin
-        //    cannot wind the integrator up into a permanent slam.
-        const double ez = azCmdB - azMeas;
-        const double ey = ayCmdB - ayMeas;
-        pitchIntegral[id] += ez * dt;
-        yawIntegral[id]   += ey * dt;
-        pitchIntegral[id] = std::clamp(pitchIntegral[id], -10.0, 10.0);
-        yawIntegral[id]   = std::clamp(yawIntegral[id],   -10.0, 10.0);
-
-        // Positive az (down) needs nose-DOWN: negative wy. Positive ay (right)
-        // needs nose-RIGHT: positive wz.
-        const double pitchRateCmd = -(kAccelP * ez + kAccelI * pitchIntegral[id]);
-        const double yawRateCmd   =   (kAccelP * ey + kAccelI * yawIntegral[id]);
-
+        // 3. Direct acceleration-command controller. The feed-forward term
+        //    supplies the requested normal force; body-rate and AoA terms
+        //    damp the short-period response before the fins saturate.
         // 4. AoA / sideslip estimates from estimated body-frame velocity
         double ub, vb, wb;
         quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
@@ -100,9 +75,32 @@ namespace StrikeEngine::Kernel {
         const double alpha = std::atan2(wb, ub);
         const double beta  = std::atan2(vb, ub);
 
-        // 5. Inner loop: desired rate -> deflection, with AoA damping
-        double pitchDeflection = kRateP * (pitchRateCmd - nav.estWy[id]) - kAlphaP * alpha;
-        double yawDeflection   = kRateP * (yawRateCmd   - nav.estWz[id]) - kAlphaP * beta;
+        // Positive body-Z specific force is down and requires nose-down
+        // (negative wy / fin); positive body-Y force requires nose-right
+        // (positive wz / fin). The signs below match AeroModel's documented
+        // X-forward/Y-right/Z-down convention.
+        const double pitchFeedForward = std::clamp(
+            -kAccelP * azSpecificCmd, -0.35, 0.35);
+        const double yawFeedForward = std::clamp(
+            kAccelP * aySpecificCmd, -0.35, 0.35);
+        const double pitchRateDamping = std::clamp(
+            -kRateP * nav.estWy[id], -0.20, 0.20);
+        const double yawRateDamping = std::clamp(
+            -kRateP * nav.estWz[id], -0.20, 0.20);
+        const double pitchAoaDamping = std::clamp(
+            -kAlphaP * alpha, -0.15, 0.15);
+        const double yawAoaDamping = std::clamp(
+            -kAlphaP * beta, -0.15, 0.15);
+
+        double pitchDeflection = pitchFeedForward + pitchRateDamping + pitchAoaDamping;
+        double yawDeflection   = yawFeedForward + yawRateDamping + yawAoaDamping;
+
+        // Do not create a lateral maneuver from sensor noise when guidance is
+        // asking for a straight-plane flight path. Once a real lateral demand
+        // exceeds the deadband, the normal yaw rate/AoA damping terms engage.
+        if (std::abs(ayCmdB) < 0.5) {
+            yawDeflection = 0.0;
+        }
 
         // 6. Roll stabilization: wings-level P-D, referenced to the local
         // gravity direction (attitude-independent — works for any initial
@@ -119,27 +117,13 @@ namespace StrikeEngine::Kernel {
         const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
         double rollDeflection = verticality * (-kRollP * rollError - kRollD * nav.estWx[id]);
 
-        // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority),
-        //    then back-calculate the integrals that would just reach the
-        //    clamp (anti-windup): when saturated, the integral is re-set so
-        //    the unclamped command equals the limit. Without this, a
-        //    sustained guidance demand pins the fins at max forever.
+        // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority).
         constexpr double maxDeflection = 0.43;
         const double pitchClamped = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
         const double yawClamped   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
         control.pitchCommand[id] = pitchClamped;
         control.yawCommand[id]   = yawClamped;
         control.rollCommand[id]  = std::clamp(rollDeflection,  -maxDeflection, maxDeflection);
-
-        if (pitchClamped != pitchDeflection) {
-            // pitchRateCmd = -(kAccelP*ez + kAccelI*iz); solve for iz at the clamp
-            const double rateAtLimit = (pitchClamped + kAlphaP * alpha) / kRateP + nav.estWy[id];
-            pitchIntegral[id] = std::clamp(-(rateAtLimit + kAccelP * ez) / kAccelI, -10.0, 10.0);
-        }
-        if (yawClamped != yawDeflection) {
-            const double rateAtLimit = (yawClamped + kAlphaP * beta) / kRateP + nav.estWz[id];
-            yawIntegral[id] = std::clamp(-(rateAtLimit + kAccelP * ey) / kAccelI, -10.0, 10.0);
-        }
     }
 
 } // namespace StrikeEngine::Kernel

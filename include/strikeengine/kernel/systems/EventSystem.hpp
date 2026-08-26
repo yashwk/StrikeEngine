@@ -29,7 +29,7 @@ namespace StrikeEngine::Kernel {
     public:
         // Evaluates continuous conditions (like ground impact) and fires events
         void evaluate(
-            const PhysicsBlock& physics,
+            PhysicsBlock& physics,
             EntityStatusBlock& status,
             double currentTime
         );
