@@ -174,6 +174,19 @@ namespace StrikeEngine::Kernel
                 coriolis[1] += centrifugal[1];
                 coriolis[2] += centrifugal[2];
             }
+            if (environment.earth.includeTransportRate) {
+                const Models::GeodeticCoordinate reference{
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad,
+                    0.0};
+                const auto position = Models::EarthFrames::enuToGeodetic(
+                    {s.px[i], s.py[i], s.pz[i]}, reference);
+                const auto transport = Models::localTransportAcceleration(
+                    position, {s.vx[i], s.vy[i], s.vz[i]});
+                coriolis[0] += transport[0];
+                coriolis[1] += transport[1];
+                coriolis[2] += transport[2];
+            }
 
             const double axWorld = afx * invMass + coriolis[0];
             const double ayWorld = afy * invMass + coriolis[1];

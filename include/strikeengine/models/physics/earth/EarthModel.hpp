@@ -40,6 +40,14 @@ namespace StrikeEngine::Models {
                 1.0 - eccentricitySquared * sinLatitude * sinLatitude);
         }
 
+        inline double meridionalRadiusM(double latitudeRad)
+        {
+            const double sinLatitude = std::sin(latitudeRad);
+            const double denominator = std::pow(
+                1.0 - eccentricitySquared * sinLatitude * sinLatitude, 1.5);
+            return semiMajorAxisM * (1.0 - eccentricitySquared) / denominator;
+        }
+
         /**
          * @brief Convert WGS84 geodetic coordinates to ECEF.
          */
@@ -148,11 +156,53 @@ namespace StrikeEngine::Models {
                 2.0 * omegaNorth * velocityEnu[0]};
         }
 
+        /**
+         * @brief ENU transport angular rate for a moving local-level frame.
+         *
+         * The input velocity is expressed in ENU. This is the NED transport
+         * rate, converted to ENU, using WGS84 curvature radii.
+         */
+        inline std::array<double, 3> localTransportRateEnu(
+            const GeodeticCoordinate& position,
+            const std::array<double, 3>& velocityEnu)
+        {
+            const double meridianRadius = meridionalRadiusM(position.latitudeRad);
+            const double primeRadius = primeVerticalRadiusM(position.latitudeRad);
+            const double height = position.altitudeM;
+            // NED transport rate is [vE/(Re+h), -vN/(Rn+h),
+            // -vE*tan(latitude)/(Re+h)]. Convert its [N,E,D] ordering to
+            // ENU [E,N,U].
+            const double eastRate = -velocityEnu[1] /
+                (meridianRadius + height);
+            const double northRate = velocityEnu[0] /
+                (primeRadius + height);
+            const double downRate = -velocityEnu[0] *
+                std::tan(position.latitudeRad) /
+                (primeRadius + height);
+            return {eastRate, northRate, -downRate};
+        }
+
+        /**
+         * @brief Acceleration contribution -omega_en x v in local ENU.
+         */
+        inline std::array<double, 3> localTransportAcceleration(
+            const GeodeticCoordinate& position,
+            const std::array<double, 3>& velocityEnu)
+        {
+            const auto rate = localTransportRateEnu(position, velocityEnu);
+            return {
+                -(rate[1] * velocityEnu[2] - rate[2] * velocityEnu[1]),
+                -(rate[2] * velocityEnu[0] - rate[0] * velocityEnu[2]),
+                -(rate[0] * velocityEnu[1] - rate[1] * velocityEnu[0])};
+        }
+
     } // namespace EarthModel
 
     using EarthModel::ecefToGeodetic;
     using EarthModel::geodeticToEcef;
     using EarthModel::localCoriolisAcceleration;
+    using EarthModel::localTransportAcceleration;
+    using EarthModel::localTransportRateEnu;
     using EarthModel::normalGravity;
 
 } // namespace StrikeEngine::Models

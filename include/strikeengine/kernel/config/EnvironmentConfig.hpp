@@ -16,6 +16,7 @@ namespace StrikeEngine::Kernel {
         bool useWgs84Gravity = false;
         bool includeCoriolis = false;
         bool includeCentrifugal = false;
+        bool includeTransportRate = false;
         double referenceLatitudeRad = 0.0;
         double referenceLongitudeRad = 0.0;
     };

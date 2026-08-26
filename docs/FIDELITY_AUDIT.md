@@ -52,6 +52,7 @@ earth, guidance, and scenario regressions.
 | W8 scenario/guidance contract | DONE for the integration MVP | Explicit PN/APN behavior, moving-target response, seeker handoff, scenario configuration propagation, and isolated batch execution are covered by `guidance_test` and `scenario_test` |
 | W9 earth model | DONE for the opt-in local-earth MVP | WGS84 geodetic/ECEF conversion, latitude/altitude-dependent normal gravity, and local ENU Coriolis acceleration are covered by `earth_test` |
 | W10 earth frames/acceleration | DONE for the local-earth MVP | Standalone ECEF/ENU/NED transforms, ENU/NED axis conversion, centrifugal acceleration, and CPU integration are covered by `earth_frames_test` |
+| W11 earth transport | DONE for the local moving-origin MVP | WGS84 curvature radii, local ENU-to-geodetic resolution, transport-rate acceleration, and CPU integration are covered by `earth_transport_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -96,6 +97,12 @@ centrifugal acceleration term derived from the WGS84 ECEF position. The
 existing local world state remains backward-compatible and uses the configured
 reference latitude/longitude for these corrections; full moving-origin
 earth-fixed transport rates remain future work.
+
+The W11 increment adds WGS84 meridional/prime-vertical curvature radii and an
+opt-in moving-origin transport-rate term. Each vehicle's local ENU position is
+resolved against the configured geodetic reference before the transport
+acceleration is evaluated. A global ECEF state propagator and full rotating
+earth frame state remain future work.
 
 ---
 

@@ -95,6 +95,16 @@ namespace StrikeEngine::Models {
             return toEcef(add(toVector(geodeticToEcef(origin)), delta));
         }
 
+        /**
+         * @brief Resolve a local ENU displacement into WGS84 geodetic state.
+         */
+        inline GeodeticCoordinate enuToGeodetic(
+            const Vector3& enu,
+            const GeodeticCoordinate& origin)
+        {
+            return ecefToGeodetic(enuToEcef(enu, origin));
+        }
+
         inline Vector3 enuToNed(const Vector3& enu)
         {
             return {enu[1], enu[0], -enu[2]};
