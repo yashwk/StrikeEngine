@@ -300,19 +300,26 @@ Available wrappers:
 
 | API | Contract | Status |
 | --- | --- | --- |
-| `SingleRun` | Runs one vehicle and writes a trajectory CSV. | Implemented MVP; versioned frame-aware output. |
-| `ParamSweep` | Repeats a scenario over a scalar callback and writes CSV. | Implemented MVP; reports the configured `primaryEntityIndex`. |
-| `MonteCarlo` | Perturbs copied scenarios and writes CSV outcomes. | Implemented MVP; reports the configured `primaryEntityIndex`; RNG controls remain limited. |
+| `SingleRun` | Runs one vehicle and writes trajectory records. | Implemented MVP; versioned CSV or binary frame-aware output. |
+| `ParamSweep` | Repeats a scenario over a scalar callback and writes result records. | Implemented MVP; reports the configured `primaryEntityIndex`. |
+| `MonteCarlo` | Perturbs copied scenarios and writes result records. | Implemented MVP; reports the configured `primaryEntityIndex`; RNG controls remain limited. |
 | `Optimizer` | Runs particle-swarm parameter studies with callbacks. | Implemented MVP. |
-| `BatchRunner` | Runs isolated scenarios and returns structured summary results. | Implemented MVP; frame-aware primary and aggregate metrics. |
+| `BatchRunner` | Runs isolated scenarios and returns structured summary results. | Implemented MVP; frame-aware primary and aggregate metrics can be serialized by `StudyOutputWriter`. |
 
-All wrapper CSV files use format version `1` metadata comments. Every row
-contains its `Frame` (`LOCAL_ENU` or `ECEF`) and selected-frame position and
-velocity columns. Rows also contain WGS84 latitude/longitude in radians and
-`Altitude_m`; local mode uses world Z for altitude, while ECEF mode derives
-altitude from the absolute ECEF position. `ScenarioConfig::primaryEntityIndex`
-selects the entity represented by sweep, Monte Carlo, and batch primary-state
-summaries; its default is zero for compatibility.
+`StudyOutputWriter` provides the common study-output contract. CSV files use
+format version `1` metadata comments; binary files use the eight-byte
+`STRKOUT1` magic followed by version, record type, field count, record count,
+field IDs, and typed little-endian record values. An empty field list selects
+the record-type defaults; a non-empty list selects unique supported fields in
+the requested order. Every default record contains status and frame identity.
+Every state record contains its `Frame` (`LOCAL_ENU` or `ECEF`) and
+selected-frame position and velocity columns, plus WGS84 latitude/longitude
+in radians and `Altitude_m`; local mode uses world Z for altitude, while ECEF
+mode derives altitude from the absolute ECEF position.
+`ScenarioConfig::primaryEntityIndex` selects the entity represented by sweep,
+Monte Carlo, and batch primary-state summaries; its default is zero for
+compatibility. Binary readers and richer telemetry schemas are not yet part of
+the supported contract.
 
 ## 9. Capability matrix and boundaries
 
@@ -326,8 +333,8 @@ installable CMake packaging.
 Planned or partial: coefficient tables and higher-fidelity aero, fuel/staging
 models, failure and damage semantics, advanced atmosphere, full global
 terrain/DEM ingestion, geoid models, richer sensors and seeker families,
-sensor fusion, trajectory/energy management, pursuit, LQR/MPC, richer
-versioned telemetry and binary recording, parallel CPU execution,
+sensor fusion, trajectory/energy management, pursuit, LQR/MPC, binary readers,
+richer telemetry schemas, parallel CPU execution,
 CUDA, and a production-grade GPU backend. Optional ECS/editor mapping,
 visualization, plotting/analysis/scenario-generation tooling, and an API
 server wrapper are integration or tooling ideas, not current kernel features.

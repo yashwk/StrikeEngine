@@ -1,7 +1,7 @@
 # StrikeEngine — Fidelity Audit
 
 **Audit date:** 2026-08-26<br>
-**Runtime checkpoint:** `d1bd26f`<br>
+**Runtime checkpoint:** `1ff6d1e`<br>
 **Validation result:** Release build, **20/20 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
@@ -45,6 +45,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W13 — Standalone global ECEF propagation | MVP / partial | `earth_fixed_test`; rotating-Earth gravity, Coriolis, centrifugal terms, caller force, and deterministic RK4 are covered. |
 | W14 — Kernel ECEF truth mode | MVP / partial | `ecef_kernel_test`; ECEF truth, geodetic atmosphere/ground handling, ECEF GPS/INS flow, and ellipsoid-clamped impact are covered. |
 | W15 — Frame-aware study reporting | MVP / partial | `reporting_test`; versioned local/ECEF CSV metadata, geodetic coordinates, normalized altitude, and explicit primary-entity selection are covered. |
+| W16 — Structured study output | MVP / partial | `reporting_test`; configurable fields, status/entity metadata, versioned CSV output, and binary recording are covered. Binary reading and richer telemetry remain open. |
 
 ## 3. Subsystem fidelity assessment
 
@@ -63,7 +64,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Seekers | RF RCS/radar-range and IR irradiance/extinction models; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, and friendly rejection. | **MVP / partial:** propagation is simplified and additional seeker families/phenomena are not implemented. |
 | Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, and seeker-lock APN handoff. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
 | Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, and timestamped ground-impact events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or failure-event system. |
-| Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, and isolated batch runner with versioned frame-aware CSV reporting. | **MVP / partial:** richer telemetry/binary output remains, and some optimizer paths remain primary-entity oriented. |
+| Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, and isolated batch runner with configurable versioned CSV/binary reporting. | **MVP / partial:** binary reading and richer telemetry remain, and some optimizer paths remain primary-entity oriented. |
 | Backends and packaging | Deterministic CPU/static library, CMake packaging, and optional Vulkan target. | **MVP / partial:** Vulkan parity is not validated, ECEF GPU support is open, and CUDA is not implemented. |
 
 ## 4. Quantitative validation evidence
@@ -87,8 +88,9 @@ calibration, or GPU equivalence.
 These are the remaining fidelity and integration gaps, ordered by their value
 to reliable downstream use:
 
-1. **Structured study output:** extend the versioned wrapper CSV contract with
-   richer telemetry, binary recording, and configurable output selection.
+1. **Study output consumers:** add a binary reader, richer telemetry schemas,
+   streaming record sinks, and configurable output selection beyond the current
+   wrapper records.
 2. **Global terrain:** add DEM/DTED ingestion, tile indexing and streaming,
    interpolation, datum/geoid policy, dateline/polar handling, and frame-aware
    collision queries. `tools/convert_srtm.cpp` is preparation, not runtime
@@ -109,7 +111,7 @@ to reliable downstream use:
 The pre-restart audit from 2026-08-25 recorded a 5/7 workstream result and
 identified failures in control signs, aerodynamic authority, integration,
 events, seeker fidelity, and navigation. Those measurements described the
-older implementation and are superseded by the W1–W15 verification above.
+older implementation and are superseded by the W1–W16 verification above.
 
 The historical measurements and commits remain available in repository
 history. They are not repeated here because retaining their stale tables in
