@@ -30,7 +30,8 @@ namespace StrikeEngine::Kernel {
             backend = std::make_unique<CPUBackend>(
                 std::move(integrator),
                 atmosphere,
-                aero
+                aero,
+                environment
             );
         }
         
@@ -45,6 +46,11 @@ namespace StrikeEngine::Kernel {
 
     void SimulationKernel::setRandomSeed(std::uint32_t seed) {
         sensorSystem.setSeed(seed);
+    }
+
+    void SimulationKernel::setEnvironment(const EnvironmentConfig& environmentConfig) {
+        environment = environmentConfig;
+        backend->setEnvironment(environment);
     }
 
     void SimulationKernel::reset() {
@@ -217,6 +223,8 @@ namespace StrikeEngine::Kernel {
     }
 
     void SimulationKernel::step(double dt) {
+        const std::vector<double> previousPx = physicsBlock.px;
+        const std::vector<double> previousPy = physicsBlock.py;
         const std::vector<double> previousPz = physicsBlock.pz;
         time.advance(dt);
         commandProcessor.process(guidanceBlock);
@@ -241,7 +249,8 @@ namespace StrikeEngine::Kernel {
         
         // 5. Evaluate truth events (impacts)
         eventSystem.evaluate(
-            physicsBlock, statusBlock, time.currentTime(), dt, previousPz);
+            physicsBlock, statusBlock, time.currentTime(), dt,
+            previousPx, previousPy, previousPz, environment);
         eventSystem.processQueue();
     }
 

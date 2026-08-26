@@ -4,6 +4,7 @@
 #include <functional>
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -42,6 +43,17 @@ namespace StrikeEngine::Kernel {
             double currentTime,
             double dt,
             const std::vector<double>& previousPz
+        );
+
+        void evaluate(
+            PhysicsBlock& physics,
+            EntityStatusBlock& status,
+            double currentTime,
+            double dt,
+            const std::vector<double>& previousPx,
+            const std::vector<double>& previousPy,
+            const std::vector<double>& previousPz,
+            const EnvironmentConfig& environment
         );
 
         // Dispatches an event directly

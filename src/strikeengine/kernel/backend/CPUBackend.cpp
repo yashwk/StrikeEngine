@@ -10,11 +10,13 @@ namespace StrikeEngine::Kernel
     CPUBackend::CPUBackend(
         std::unique_ptr<Integrator> integ,
         std::shared_ptr<Models::AtmosphereModel> atmos,
-        std::shared_ptr<Models::AeroModel> aeroModel
+        std::shared_ptr<Models::AeroModel> aeroModel,
+        EnvironmentConfig environmentConfig
     )
         : integrator(std::move(integ)),
           atmosphere(std::move(atmos)),
-          aero(std::move(aeroModel))
+          aero(std::move(aeroModel)),
+          environment(std::move(environmentConfig))
     {
         scheduler = std::make_unique<HybridScheduler>(*integrator);
     }
@@ -23,6 +25,11 @@ namespace StrikeEngine::Kernel
     {
         propulsionPool.push_back(std::move(model));
         return static_cast<int>(propulsionPool.size()) - 1;
+    }
+
+    void CPUBackend::setEnvironment(const EnvironmentConfig& environmentConfig)
+    {
+        environment = environmentConfig;
     }
 
     void CPUBackend::initialize(
@@ -96,10 +103,15 @@ namespace StrikeEngine::Kernel
             const double altitude = s.pz[i];
             const auto atm = atmosphere->evaluate(altitude);
 
-            // 2. Body-frame velocity
+            // 2. Body-frame air-relative velocity. Wind is the world-frame
+            // air-mass velocity, so it is removed before evaluating aero.
+            const auto wind = environment.windVelocity
+                ? environment.windVelocity(s.px[i], s.py[i], s.pz[i], t)
+                : std::array<double, 3>{0.0, 0.0, 0.0};
             double u, v, w;
             quatRotateToBody(s.qw[i], s.qx[i], s.qy[i], s.qz[i],
-                             s.vx[i], s.vy[i], s.vz[i], u, v, w);
+                             s.vx[i] - wind[0], s.vy[i] - wind[1],
+                             s.vz[i] - wind[2], u, v, w);
 
             // 3. Aerodynamics: body-frame forces and moments (W2/W3 spine)
             Models::AeroParams params;

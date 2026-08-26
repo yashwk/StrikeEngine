@@ -31,6 +31,9 @@ target_compile_definitions(seeker_test PRIVATE
 add_executable(navigation_test validation/navigation_test.cpp)
 target_link_libraries(navigation_test PRIVATE strikeengine)
 
+add_executable(environment_test validation/environment_test.cpp)
+target_link_libraries(environment_test PRIVATE strikeengine)
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -62,5 +65,8 @@ set_tests_properties(seeker PROPERTIES TIMEOUT 120)
 
 add_test(NAME navigation COMMAND navigation_test)
 set_tests_properties(navigation PROPERTIES TIMEOUT 120)
+
+add_test(NAME environment COMMAND environment_test)
+set_tests_properties(environment PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")

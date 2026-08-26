@@ -3,6 +3,7 @@
 #include <strikeengine/kernel/backend/PhysicsBackend.hpp>
 #include <strikeengine/kernel/integrator/Integrator.hpp>
 #include <strikeengine/kernel/scheduler/HybridScheduler.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <strikeengine/models/physics/atmosphere/AtmosphereModel.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
@@ -26,10 +27,13 @@ namespace StrikeEngine::Kernel
 		CPUBackend(
 			std::unique_ptr<Integrator> integrator,
 			std::shared_ptr<Models::AtmosphereModel> atmosphere,
-			std::shared_ptr<Models::AeroModel> aero
+			std::shared_ptr<Models::AeroModel> aero,
+			EnvironmentConfig environment = {}
 		);
 
 		int registerPropulsion(std::shared_ptr<const Models::PropulsionModel> model) override;
+
+		void setEnvironment(const EnvironmentConfig& environment) override;
 
 		void initialize(
 			PhysicsBlock& physics,
@@ -58,6 +62,7 @@ namespace StrikeEngine::Kernel
 
 		std::shared_ptr<Models::AtmosphereModel> atmosphere;
 		std::shared_ptr<Models::AeroModel> aero;
+		EnvironmentConfig environment;
 
 		// Per-entity propulsion pool (W1); entities reference by index.
 		std::vector<std::shared_ptr<const Models::PropulsionModel>> propulsionPool;

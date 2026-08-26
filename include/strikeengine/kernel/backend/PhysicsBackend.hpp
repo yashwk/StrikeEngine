@@ -11,6 +11,7 @@ namespace StrikeEngine::Kernel
 	// Forward declarations
 	struct PhysicsBlock;
 	struct ControlBlock;
+	struct EnvironmentConfig;
 
 	/**
 	 * @brief Abstract physics execution backend.
@@ -32,6 +33,11 @@ namespace StrikeEngine::Kernel
 		{
 			(void)model;
 			return -1;
+		}
+
+		virtual void setEnvironment(const EnvironmentConfig& environment)
+		{
+			(void)environment;
 		}
 
 		virtual void initialize(

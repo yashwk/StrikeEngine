@@ -21,6 +21,7 @@
 #include <strikeengine/kernel/systems/SensorSystem.hpp>
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -72,6 +73,9 @@ namespace StrikeEngine::Kernel {
          */
         void setRandomSeed(std::uint32_t seed);
 
+        // Configure terrain and world-frame wind before stepping.
+        void setEnvironment(const EnvironmentConfig& environment);
+
         // Accessors
         const PhysicsBlock& getPhysics() const { return physicsBlock; }
         const ControlBlock& getControl() const { return controlBlock; }
@@ -105,6 +109,7 @@ namespace StrikeEngine::Kernel {
 
         std::vector<PhysicsId> freeList;
         std::unique_ptr<PhysicsBackend> backend;
+        EnvironmentConfig environment;
     };
 
 } // namespace StrikeEngine::Kernel

@@ -37,7 +37,8 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 ## Current verification after restart
 
 The restart fixes were completed and re-run on 2026-08-26. The complete CTest
-suite is green: **10/10 tests passed** after adding the navigation regression.
+suite is green: **11/11 tests passed** after adding navigation and environment
+regressions.
 
 | Workstream | Current status | Evidence |
 | --- | --- | --- |
@@ -45,7 +46,7 @@ suite is green: **10/10 tests passed** after adding the navigation regression.
 | W2 6-DOF rigid body | DONE | `rigidbody_test` PASS: quaternion norm, gyro coupling, and commanded climb |
 | W3 control authority | DONE for the MVP DoD | `intercept_test` PASS: minimum miss 25.30 m; actuator and post-burnout control path exercised |
 | W4 true RK4/RK45 | DONE for the integrator/event MVP | Derivative callbacks, stage re-evaluation, bounded RK45 adaptation, and interpolated ground-crossing timestamps are covered by `integrator_test` |
-| W5 events/environment | PARTIAL | Ground impacts now clamp, deactivate, and stop entities with interpolated timestamps; terrain and wind remain |
+| W5 events/environment | DONE for the environment MVP | Terrain elevation callbacks, wind-relative aerodynamics, and interpolated terrain impacts are covered by `environment_test`; failure models and spherical earth remain |
 | W6 seeker/sensor | DONE for the seeker MVP | FOV cone, gimbal limits, lock hysteresis/dropout, filtered LOS rates, and configurable measurement latency are covered by `seeker_test` |
 | W7 navigation EKF | DONE for the navigation MVP | Full 15-state covariance propagation, coupled GPS corrections into attitude and IMU biases, covariance bounds, and deterministic accelerometer-bias convergence are covered by `navigation_test` |
 
@@ -70,6 +71,11 @@ the resulting correction to all coupled states while keeping covariance values
 finite and bounded. The bias regression constrains the known initial level
 attitude so it measures accelerometer-bias observability independently of the
 stationary tilt/bias ambiguity.
+
+The W5 environment increment adds public terrain and wind callbacks to the
+kernel. Terrain is evaluated at the current and previous positions for local
+ground crossing and clamping; wind is evaluated in the truth derivative and
+subtracted from world velocity before body-frame aerodynamic forces are formed.
 
 ---
 
