@@ -8,7 +8,7 @@
 namespace StrikeEngine::Kernel {
 
     /**
-     * @brief Strapdown INS + diagonal EKF navigation.
+     * @brief Strapdown INS + coupled error-state EKF navigation.
      *
      * Attitude is initialized from the truth quaternion at alignment
      * ("perfect initialization") and propagated from body gyro rates.

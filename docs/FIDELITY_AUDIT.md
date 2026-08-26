@@ -37,7 +37,7 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 ## Current verification after restart
 
 The restart fixes were completed and re-run on 2026-08-26. The complete CTest
-suite is green: **9/9 tests passed** in 17.95 s.
+suite is green: **10/10 tests passed** after adding the navigation regression.
 
 | Workstream | Current status | Evidence |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ suite is green: **9/9 tests passed** in 17.95 s.
 | W4 true RK4/RK45 | DONE for the integrator/event MVP | Derivative callbacks, stage re-evaluation, bounded RK45 adaptation, and interpolated ground-crossing timestamps are covered by `integrator_test` |
 | W5 events/environment | PARTIAL | Ground impacts now clamp, deactivate, and stop entities with interpolated timestamps; terrain and wind remain |
 | W6 seeker/sensor | DONE for the seeker MVP | FOV cone, gimbal limits, lock hysteresis/dropout, filtered LOS rates, and configurable measurement latency are covered by `seeker_test` |
-| W7 navigation EKF | NOT STARTED | Coupled-state corrections and bias convergence remain |
+| W7 navigation EKF | DONE for the navigation MVP | Full 15-state covariance propagation, coupled GPS corrections into attitude and IMU biases, covariance bounds, and deterministic accelerometer-bias convergence are covered by `navigation_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -59,7 +59,17 @@ explicit interim guidance model, not a claim of true PN fidelity.
 The W5 repair changes ground impact from a status-only notification to a true
 state transition: position is clamped to ground, velocity/acceleration are
 cleared, and `physics.active` is disabled. This removes the previously observed
-below-ground integration ghosts. Impact time is still step-granular.
+below-ground integration ghosts. Impact timestamps use the interpolated ground
+crossing within the final integration step.
+
+The W7 navigation repair adds a row-major full covariance for the 15-state
+error model (position, velocity, attitude, accelerometer bias, and gyro bias).
+Strapdown propagation carries position/velocity/attitude/bias coupling and
+sensor-configured process noise; sequential GPS position/velocity updates apply
+the resulting correction to all coupled states while keeping covariance values
+finite and bounded. The bias regression constrains the known initial level
+attitude so it measures accelerometer-bias observability independently of the
+stationary tilt/bias ambiguity.
 
 ---
 

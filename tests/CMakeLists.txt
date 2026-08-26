@@ -28,6 +28,9 @@ target_link_libraries(seeker_test PRIVATE strikeengine)
 target_compile_definitions(seeker_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+add_executable(navigation_test validation/navigation_test.cpp)
+target_link_libraries(navigation_test PRIVATE strikeengine)
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -56,5 +59,8 @@ set_tests_properties(integrator PROPERTIES TIMEOUT 120)
 
 add_test(NAME seeker COMMAND seeker_test)
 set_tests_properties(seeker PROPERTIES TIMEOUT 120)
+
+add_test(NAME navigation COMMAND navigation_test)
+set_tests_properties(navigation PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")

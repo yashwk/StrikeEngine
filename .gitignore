@@ -30,6 +30,7 @@
 
 # Build outputs and scratch
 build/
+build-linux/
 build_log.txt
 .cache/
 singlerun_output.csv

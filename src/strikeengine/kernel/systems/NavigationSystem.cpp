@@ -1,10 +1,99 @@
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
+#include <algorithm>
 #include <cmath>
-#include <iostream>
+#include <array>
+
+namespace {
+
+constexpr std::size_t kErrorStateSize = 15;
+constexpr double kMinCovariance = 1e-12;
+constexpr double kMaxCovariance = 1e6;
+using Covariance = std::array<double, kErrorStateSize * kErrorStateSize>;
+
+constexpr std::size_t covarianceIndex(std::size_t row, std::size_t column)
+{
+    return row * kErrorStateSize + column;
+}
+
+std::array<double, kErrorStateSize> initialCovarianceDiag()
+{
+    return {10.0, 10.0, 10.0, 1.0, 1.0, 1.0,
+            0.1, 0.1, 0.1, 0.01, 0.01, 0.01,
+            0.01, 0.01, 0.01};
+}
+
+void initializeCovariance(Covariance& covariance,
+                          const std::array<double, kErrorStateSize>& diagonal)
+{
+    covariance.fill(0.0);
+    for (std::size_t i = 0; i < kErrorStateSize; ++i) {
+        covariance[covarianceIndex(i, i)] = diagonal[i];
+    }
+}
+
+void boundCovariance(Covariance& covariance,
+                     std::array<double, kErrorStateSize>& diagonal)
+{
+    for (std::size_t i = 0; i < kErrorStateSize; ++i) {
+        double& variance = covariance[covarianceIndex(i, i)];
+        variance = std::clamp(variance, kMinCovariance, kMaxCovariance);
+    }
+
+    for (std::size_t i = 0; i < kErrorStateSize; ++i) {
+        for (std::size_t j = i + 1; j < kErrorStateSize; ++j) {
+            double& upper = covariance[covarianceIndex(i, j)];
+            double& lower = covariance[covarianceIndex(j, i)];
+            const double limit = std::sqrt(
+                covariance[covarianceIndex(i, i)] * covariance[covarianceIndex(j, j)]);
+            const double value = std::clamp(0.5 * (upper + lower), -limit, limit);
+            upper = value;
+            lower = value;
+        }
+    }
+
+    for (std::size_t i = 0; i < kErrorStateSize; ++i) {
+        diagonal[i] = covariance[covarianceIndex(i, i)];
+    }
+}
+
+void applyAttitudeError(StrikeEngine::Kernel::NavigationBlock& nav,
+                        std::size_t id,
+                        double dx,
+                        double dy,
+                        double dz)
+{
+    // Small attitude error is expressed in body axes. Right-multiply the
+    // body->world quaternion by the corresponding small-angle quaternion.
+    const double qw = nav.estQw[id];
+    const double qx = nav.estQx[id];
+    const double qy = nav.estQy[id];
+    const double qz = nav.estQz[id];
+    const double hX = 0.5 * dx;
+    const double hY = 0.5 * dy;
+    const double hZ = 0.5 * dz;
+
+    nav.estQw[id] = qw - qx * hX - qy * hY - qz * hZ;
+    nav.estQx[id] = qx + qw * hX + qy * hZ - qz * hY;
+    nav.estQy[id] = qy + qw * hY - qx * hZ + qz * hX;
+    nav.estQz[id] = qz + qw * hZ + qx * hY - qy * hX;
+
+    const double norm = std::sqrt(
+        nav.estQw[id] * nav.estQw[id] + nav.estQx[id] * nav.estQx[id] +
+        nav.estQy[id] * nav.estQy[id] + nav.estQz[id] * nav.estQz[id]);
+    if (norm > 1e-12) {
+        nav.estQw[id] /= norm;
+        nav.estQx[id] /= norm;
+        nav.estQy[id] /= norm;
+        nav.estQz[id] /= norm;
+    }
+}
+
+} // namespace
 
 namespace StrikeEngine::Kernel {
 
     void NavigationSystem::ensureCapacity(std::size_t size, NavigationBlock& nav) {
+        const auto defaultDiag = initialCovarianceDiag();
         if (nav.estPx.size() < size) {
             nav.estPx.resize(size, 0.0); nav.estPy.resize(size, 0.0); nav.estPz.resize(size, 0.0);
             nav.estVx.resize(size, 0.0); nav.estVy.resize(size, 0.0); nav.estVz.resize(size, 0.0);
@@ -12,8 +101,16 @@ namespace StrikeEngine::Kernel {
             nav.estWx.resize(size, 0.0); nav.estWy.resize(size, 0.0); nav.estWz.resize(size, 0.0);
             nav.estAccelBiasX.resize(size, 0.0); nav.estAccelBiasY.resize(size, 0.0); nav.estAccelBiasZ.resize(size, 0.0);
             nav.estGyroBiasX.resize(size, 0.0); nav.estGyroBiasY.resize(size, 0.0); nav.estGyroBiasZ.resize(size, 0.0);
-            nav.covarianceDiag.resize(size, std::array<double, 15>{10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01});
+            nav.covarianceDiag.resize(size, defaultDiag);
             nav.isAligned.resize(size, false);
+        }
+
+        const std::size_t oldCovarianceSize = nav.covarianceFull.size();
+        nav.covarianceFull.resize(size);
+        for (std::size_t i = oldCovarianceSize; i < size; ++i) {
+            const auto& diagonal = i < nav.covarianceDiag.size()
+                ? nav.covarianceDiag[i] : defaultDiag;
+            initializeCovariance(nav.covarianceFull[i], diagonal);
         }
     }
 
@@ -89,49 +186,157 @@ namespace StrikeEngine::Kernel {
             nav.estQz[id] = qz / norm;
         }
         
-        // Very simplified Covariance propagation (Random walk growth)
-        for (int i=0; i<15; ++i) {
-            nav.covarianceDiag[id][i] += 0.001 * dt; // Arbitrary process noise for MVP
+        auto& covariance = nav.covarianceFull[id];
+        Covariance transition{};
+        transition.fill(0.0);
+        for (std::size_t i = 0; i < kErrorStateSize; ++i) {
+            transition[covarianceIndex(i, i)] = 1.0;
         }
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            transition[covarianceIndex(axis, axis + 3)] = dt;
+            transition[covarianceIndex(axis + 6, axis + 12)] = -dt;
+        }
+
+        // Linearized velocity sensitivity to attitude and accelerometer bias.
+        const double skewBody[3][3] = {
+            {0.0, -fz, fy},
+            {fz, 0.0, -fx},
+            {-fy, fx, 0.0}};
+        double rotation[3][3]{};
+        rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                          1.0, 0.0, 0.0, rotation[0][0], rotation[1][0], rotation[2][0]);
+        rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                          0.0, 1.0, 0.0, rotation[0][1], rotation[1][1], rotation[2][1]);
+        rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                          0.0, 0.0, 1.0, rotation[0][2], rotation[1][2], rotation[2][2]);
+        for (std::size_t row = 0; row < 3; ++row) {
+            for (std::size_t column = 0; column < 3; ++column) {
+                double attitudeSensitivity = 0.0;
+                for (std::size_t axis = 0; axis < 3; ++axis) {
+                    attitudeSensitivity += rotation[row][axis] * skewBody[axis][column];
+                }
+                transition[covarianceIndex(row + 3, column + 6)] =
+                    -attitudeSensitivity * dt;
+                transition[covarianceIndex(row + 3, column + 9)] =
+                    -rotation[row][column] * dt;
+            }
+        }
+
+        Covariance temp{};
+        temp.fill(0.0);
+        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+            for (std::size_t column = 0; column < kErrorStateSize; ++column) {
+                double value = 0.0;
+                for (std::size_t k = 0; k < kErrorStateSize; ++k) {
+                    value += transition[covarianceIndex(row, k)] *
+                             covariance[covarianceIndex(k, column)];
+                }
+                temp[covarianceIndex(row, column)] = value;
+            }
+        }
+        Covariance propagated{};
+        propagated.fill(0.0);
+        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+            for (std::size_t column = 0; column < kErrorStateSize; ++column) {
+                double value = 0.0;
+                for (std::size_t k = 0; k < kErrorStateSize; ++k) {
+                    value += temp[covarianceIndex(row, k)] *
+                             transition[covarianceIndex(column, k)];
+                }
+                propagated[covarianceIndex(row, column)] = value;
+            }
+        }
+
+        const double accelNoise = std::max(0.0, sensors.accelNoiseStdDev[id]);
+        const double gyroNoise = std::max(0.0, sensors.gyroNoiseStdDev[id]);
+        const double accelBiasNoise = std::max(0.0, sensors.accelBiasStdDev[id]);
+        const double gyroBiasNoise = std::max(0.0, sensors.gyroBiasStdDev[id]);
+        const double processNoise[kErrorStateSize] = {
+            0.25 * accelNoise * accelNoise * dt * dt * dt,
+            0.25 * accelNoise * accelNoise * dt * dt * dt,
+            0.25 * accelNoise * accelNoise * dt * dt * dt,
+            accelNoise * accelNoise * dt,
+            accelNoise * accelNoise * dt,
+            accelNoise * accelNoise * dt,
+            gyroNoise * gyroNoise * dt,
+            gyroNoise * gyroNoise * dt,
+            gyroNoise * gyroNoise * dt,
+            accelBiasNoise * accelBiasNoise * dt,
+            accelBiasNoise * accelBiasNoise * dt,
+            accelBiasNoise * accelBiasNoise * dt,
+            gyroBiasNoise * gyroBiasNoise * dt,
+            gyroBiasNoise * gyroBiasNoise * dt,
+            gyroBiasNoise * gyroBiasNoise * dt};
+        for (std::size_t i = 0; i < kErrorStateSize; ++i) {
+            propagated[covarianceIndex(i, i)] += processNoise[i];
+        }
+        covariance = propagated;
+        boundCovariance(covariance, nav.covarianceDiag[id]);
     }
 
     void NavigationSystem::ekfUpdate(std::size_t id, const SensorBlock& sensors, NavigationBlock& nav) {
-        // Simplified loosely-coupled GPS update (Direct position/velocity observation)
-        // Innovation (Measurement - Estimate)
-        double dzP_x = sensors.gpsPosX[id] - nav.estPx[id];
-        double dzP_y = sensors.gpsPosY[id] - nav.estPy[id];
-        double dzP_z = sensors.gpsPosZ[id] - nav.estPz[id];
-        
-        double dzV_x = sensors.gpsVelX[id] - nav.estVx[id];
-        double dzV_y = sensors.gpsVelY[id] - nav.estVy[id];
-        double dzV_z = sensors.gpsVelZ[id] - nav.estVz[id];
-
-        // Measurement noise covariance (R)
+        // Sequential scalar GPS position/velocity updates. The full covariance
+        // couples the observed translational states to attitude and IMU bias
+        // corrections instead of applying independent diagonal gains.
         double rPos = sensors.gpsPosNoiseStdDev[id] * sensors.gpsPosNoiseStdDev[id];
         double rVel = sensors.gpsVelNoiseStdDev[id] * sensors.gpsVelNoiseStdDev[id];
 
-        // Compute Kalman Gain and update state (Simplified Scalar Update per diagonal element)
-        // K = P / (P + R)
-        auto updateState = [](double& state, double& pDiag, double z, double r) {
-            double k = pDiag / (pDiag + r);
-            state += k * z;
-            pDiag = (1.0 - k) * pDiag;
+        auto& covariance = nav.covarianceFull[id];
+        std::array<double, kErrorStateSize> correction{};
+        const std::array<double, kErrorStateSize> baseState = {
+            nav.estPx[id], nav.estPy[id], nav.estPz[id],
+            nav.estVx[id], nav.estVy[id], nav.estVz[id],
+            0.0, 0.0, 0.0,
+            nav.estAccelBiasX[id], nav.estAccelBiasY[id], nav.estAccelBiasZ[id],
+            nav.estGyroBiasX[id], nav.estGyroBiasY[id], nav.estGyroBiasZ[id]};
+
+        auto updateScalar = [&](std::size_t measurementIndex,
+                                double measurement,
+                                double variance) {
+            variance = std::max(variance, kMinCovariance);
+            const double innovation = measurement -
+                (baseState[measurementIndex] + correction[measurementIndex]);
+            const double innovationVariance = covariance[covarianceIndex(
+                measurementIndex, measurementIndex)] + variance;
+            if (innovationVariance <= kMinCovariance) return;
+
+            const Covariance prior = covariance;
+            for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+                correction[row] += prior[covarianceIndex(row, measurementIndex)] /
+                    innovationVariance * innovation;
+            }
+            for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+                for (std::size_t column = 0; column < kErrorStateSize; ++column) {
+                    covariance[covarianceIndex(row, column)] =
+                        prior[covarianceIndex(row, column)] -
+                        prior[covarianceIndex(row, measurementIndex)] *
+                        prior[covarianceIndex(measurementIndex, column)] /
+                        innovationVariance;
+                }
+            }
+            boundCovariance(covariance, nav.covarianceDiag[id]);
         };
 
-        updateState(nav.estPx[id], nav.covarianceDiag[id][0], dzP_x, rPos);
-        updateState(nav.estPy[id], nav.covarianceDiag[id][1], dzP_y, rPos);
-        updateState(nav.estPz[id], nav.covarianceDiag[id][2], dzP_z, rPos);
+        updateScalar(0, sensors.gpsPosX[id], rPos);
+        updateScalar(1, sensors.gpsPosY[id], rPos);
+        updateScalar(2, sensors.gpsPosZ[id], rPos);
+        updateScalar(3, sensors.gpsVelX[id], rVel);
+        updateScalar(4, sensors.gpsVelY[id], rVel);
+        updateScalar(5, sensors.gpsVelZ[id], rVel);
 
-        updateState(nav.estVx[id], nav.covarianceDiag[id][3], dzV_x, rVel);
-        updateState(nav.estVy[id], nav.covarianceDiag[id][4], dzV_y, rVel);
-        updateState(nav.estVz[id], nav.covarianceDiag[id][5], dzV_z, rVel);
-
-        // Attitude and biases would normally be updated via cross-correlation in the off-diagonal P matrix.
-        // For a diagonal-only MVP, we apply a tiny fixed gain to couple velocity error to attitude and accel bias.
-        double accelBiasGain = 0.001;
-        nav.estAccelBiasX[id] -= accelBiasGain * dzV_x;
-        nav.estAccelBiasY[id] -= accelBiasGain * dzV_y;
-        nav.estAccelBiasZ[id] -= accelBiasGain * dzV_z;
+        nav.estPx[id] += correction[0];
+        nav.estPy[id] += correction[1];
+        nav.estPz[id] += correction[2];
+        nav.estVx[id] += correction[3];
+        nav.estVy[id] += correction[4];
+        nav.estVz[id] += correction[5];
+        applyAttitudeError(nav, id, correction[6], correction[7], correction[8]);
+        nav.estAccelBiasX[id] += correction[9];
+        nav.estAccelBiasY[id] += correction[10];
+        nav.estAccelBiasZ[id] += correction[11];
+        nav.estGyroBiasX[id] += correction[12];
+        nav.estGyroBiasY[id] += correction[13];
+        nav.estGyroBiasZ[id] += correction[14];
     }
 
     void NavigationSystem::update(const SensorBlock& sensors, const PhysicsBlock& physics, NavigationBlock& nav, double dt) {

@@ -17,9 +17,13 @@ namespace StrikeEngine::Kernel {
         std::vector<double> estAccelBiasX, estAccelBiasY, estAccelBiasZ;
         std::vector<double> estGyroBiasX, estGyroBiasY, estGyroBiasZ;
 
-        // Error-State EKF Covariance (Diagonal elements for simplification in DoD for now)
-        // 15 states: pos(3), vel(3), att(3), accelBias(3), gyroBias(3)
+        // Error-state EKF covariance diagonal retained as a convenient public
+        // readout. The coupled matrix below is the filter's source of truth.
         std::vector<std::array<double, 15>> covarianceDiag;
+
+        // Full 15-state covariance: pos(3), vel(3), attitude(3),
+        // accelerometer bias(3), gyro bias(3), stored row-major.
+        std::vector<std::array<double, 225>> covarianceFull;
 
         // Status
         std::vector<bool> isAligned;
