@@ -126,12 +126,23 @@ namespace StrikeEngine::Kernel {
             seekerBlock.snrThresholdDb.push_back(13.0);
             seekerBlock.sensitivityW.push_back(1e-9);
             seekerBlock.wavelengthBand.push_back(0);
+            seekerBlock.fieldOfViewHalfAngleRad.push_back(1.0471975512); // 60 deg
+            seekerBlock.gimbalAzimuthLimitRad.push_back(1.0471975512);
+            seekerBlock.gimbalElevationLimitRad.push_back(1.0471975512);
+            seekerBlock.lockHysteresisDb.push_back(3.0);
+            seekerBlock.lockDropoutTimeSec.push_back(0.10);
             seekerBlock.isLocked.push_back(false);
             seekerBlock.lockedTargetId.push_back(0);
             seekerBlock.targetRange.push_back(0);
             seekerBlock.targetRangeRate.push_back(0);
             seekerBlock.targetAzimuth.push_back(0);
             seekerBlock.targetElevation.push_back(0);
+            seekerBlock.targetAzimuthRate.push_back(0);
+            seekerBlock.targetElevationRate.push_back(0);
+            seekerBlock.previousAzimuth.push_back(0);
+            seekerBlock.previousElevation.push_back(0);
+            seekerBlock.lockLostTimeSec.push_back(0);
+            seekerBlock.hasPreviousLos.push_back(false);
         }
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
@@ -170,7 +181,23 @@ namespace StrikeEngine::Kernel {
         statusBlock.irProfileId[id] = init.irProfileId;
 
         seekerBlock.type[id] = init.seekerType;
+        seekerBlock.fieldOfViewHalfAngleRad[id] = 1.0471975512;
+        seekerBlock.gimbalAzimuthLimitRad[id] = 1.0471975512;
+        seekerBlock.gimbalElevationLimitRad[id] = 1.0471975512;
+        seekerBlock.lockHysteresisDb[id] = 3.0;
+        seekerBlock.lockDropoutTimeSec[id] = 0.10;
         seekerBlock.isLocked[id] = false;
+        seekerBlock.lockedTargetId[id] = 0;
+        seekerBlock.targetRange[id] = 0.0;
+        seekerBlock.targetRangeRate[id] = 0.0;
+        seekerBlock.targetAzimuth[id] = 0.0;
+        seekerBlock.targetElevation[id] = 0.0;
+        seekerBlock.targetAzimuthRate[id] = 0.0;
+        seekerBlock.targetElevationRate[id] = 0.0;
+        seekerBlock.previousAzimuth[id] = 0.0;
+        seekerBlock.previousElevation[id] = 0.0;
+        seekerBlock.lockLostTimeSec[id] = 0.0;
+        seekerBlock.hasPreviousLos[id] = false;
 
         return id;
     }

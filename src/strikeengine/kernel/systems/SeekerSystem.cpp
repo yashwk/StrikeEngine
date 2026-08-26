@@ -1,5 +1,7 @@
 #include <strikeengine/kernel/systems/SeekerSystem.hpp>
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -17,115 +19,188 @@ namespace StrikeEngine::Kernel {
         SeekerBlock& seeker,
         double dt)
     {
-        std::size_t n = seeker.size;
+        const std::size_t n = std::min({seeker.size, physics.size, status.size});
+        const double stepDt = std::max(0.0, dt);
         for (std::size_t i = 0; i < n; ++i) {
             if (!physics.active[i] || !status.isAlive[i] || seeker.type[i] == SeekerType::None) {
                 seeker.isLocked[i] = false;
+                seeker.lockLostTimeSec[i] = 0.0;
+                seeker.hasPreviousLos[i] = false;
+                seeker.targetAzimuthRate[i] = 0.0;
+                seeker.targetElevationRate[i] = 0.0;
                 continue;
             }
 
-            bool lockMaintained = false;
-
             glm::dvec3 seekerPos(physics.px[i], physics.py[i], physics.pz[i]);
             glm::dvec3 seekerVel(physics.vx[i], physics.vy[i], physics.vz[i]);
+
+            struct Candidate {
+                bool geometryValid = false;
+                bool acquisitionValid = false;
+                bool maintenanceValid = false;
+                double range = 0.0;
+                double rangeRate = 0.0;
+                double azimuth = 0.0;
+                double elevation = 0.0;
+            };
+
+            auto evaluateTarget = [&](std::size_t target) {
+                Candidate candidate;
+                glm::dvec3 targetPos(physics.px[target], physics.py[target], physics.pz[target]);
+                glm::dvec3 targetVel(physics.vx[target], physics.vy[target], physics.vz[target]);
+                glm::dvec3 rangeVec = targetPos - seekerPos;
+                candidate.range = glm::length(rangeVec);
+                if (candidate.range <= 1e-9) return candidate;
+
+                const glm::dvec3 losWorld = rangeVec / candidate.range;
+                glm::dvec3 relVel = targetVel - seekerVel;
+                candidate.rangeRate = glm::dot(losWorld, relVel);
+
+                glm::dquat seekerQ(physics.qw[i], physics.qx[i], physics.qy[i], physics.qz[i]);
+                const glm::dvec3 losInSeekerFrame =
+                    rotateVector(glm::inverse(seekerQ), losWorld);
+                candidate.azimuth = std::atan2(losInSeekerFrame.y, losInSeekerFrame.x);
+                candidate.elevation = std::asin(std::clamp(-losInSeekerFrame.z, -1.0, 1.0));
+
+                const double fov = std::max(0.0, seeker.fieldOfViewHalfAngleRad[i]);
+                const double gimbalAz = std::max(0.0, seeker.gimbalAzimuthLimitRad[i]);
+                const double gimbalEl = std::max(0.0, seeker.gimbalElevationLimitRad[i]);
+                const double offBoresight = std::acos(
+                    std::clamp(losInSeekerFrame.x, -1.0, 1.0));
+                candidate.geometryValid =
+                    offBoresight <= fov &&
+                    std::abs(candidate.azimuth) <= gimbalAz &&
+                    std::abs(candidate.elevation) <= gimbalEl;
+                if (!candidate.geometryValid) return candidate;
+
+                // Target aspect is measured in the target frame for signature
+                // lookup; seeker geometry above is measured in the seeker frame.
+                glm::dquat targetQ(physics.qw[target], physics.qx[target],
+                                   physics.qy[target], physics.qz[target]);
+                const glm::dvec3 losInTargetFrame =
+                    rotateVector(glm::inverse(targetQ), losWorld);
+                const double targetAzimuth = std::atan2(
+                    losInTargetFrame.y, losInTargetFrame.x);
+                const double targetElevation = std::asin(
+                    std::clamp(-losInTargetFrame.z, -1.0, 1.0));
+                const double hysteresisDb = std::max(0.0, seeker.lockHysteresisDb[i]);
+
+                if (seeker.type[i] == SeekerType::RF) {
+                    const std::string& profileId = status.rcsProfileId[target];
+                    if (profileId.empty()) return candidate;
+
+                    if (!rcsCache.contains(profileId)) {
+                        auto db = std::make_unique<Models::RCSDatabase>();
+                        if (db->loadProfile(profileId)) rcsCache[profileId] = std::move(db);
+                        else return candidate;
+                    }
+
+                    const double rcsM2 = rcsCache.at(profileId)->getRCS(
+                        targetAzimuth, targetElevation);
+                    const double pt = std::max(0.0, seeker.transmitterPowerW[i]);
+                    const double gain = std::pow(10.0, seeker.antennaGainDb[i] / 10.0);
+                    const double lambda = std::max(0.0, seeker.wavelengthM[i]);
+                    const double noise = std::max(
+                        seeker.noiseFloorW[i], std::numeric_limits<double>::min());
+                    const double receivedPower = (pt * gain * gain * lambda * lambda * rcsM2) /
+                        (std::pow(4.0 * std::numbers::pi, 3.0) *
+                         std::pow(candidate.range, 4.0));
+                    const double snrDb = 10.0 * std::log10(
+                        std::max(receivedPower, std::numeric_limits<double>::min()) / noise);
+                    candidate.acquisitionValid = snrDb > seeker.snrThresholdDb[i];
+                    candidate.maintenanceValid = snrDb >
+                        seeker.snrThresholdDb[i] - hysteresisDb;
+                } else if (seeker.type[i] == SeekerType::IR) {
+                    const std::string& profileId = status.irProfileId[target];
+                    if (profileId.empty()) return candidate;
+
+                    if (!irCache.contains(profileId)) {
+                        auto db = std::make_unique<Models::IRSignatureDatabase>();
+                        if (db->loadProfile(profileId)) irCache[profileId] = std::move(db);
+                        else return candidate;
+                    }
+
+                    const double radiantIntensity = irCache.at(profileId)->getRadiantIntensity(
+                        targetAzimuth, targetElevation);
+                    const double irradiance = radiantIntensity /
+                        (candidate.range * candidate.range);
+                    const double transmissivity = std::exp(-0.1 * (candidate.range / 1000.0));
+                    const double finalPower = irradiance * transmissivity;
+                    const double sensitivity = std::max(
+                        seeker.sensitivityW[i], std::numeric_limits<double>::min());
+                    const double maintenanceSensitivity = sensitivity /
+                        std::pow(10.0, hysteresisDb / 10.0);
+                    candidate.acquisitionValid = finalPower > sensitivity;
+                    candidate.maintenanceValid = finalPower > maintenanceSensitivity;
+                }
+
+                return candidate;
+            };
+
+            auto commitTrack = [&](std::size_t target, const Candidate& candidate) {
+                const bool sameTrack = seeker.isLocked[i] &&
+                    seeker.lockedTargetId[i] == target && seeker.hasPreviousLos[i];
+                if (sameTrack && stepDt > 0.0) {
+                    constexpr double filterTau = 0.05;
+                    const double rawAzRate = std::remainder(
+                        candidate.azimuth - seeker.previousAzimuth[i],
+                        2.0 * std::numbers::pi) / stepDt;
+                    const double rawElRate =
+                        (candidate.elevation - seeker.previousElevation[i]) / stepDt;
+                    const double blend = 1.0 - std::exp(-stepDt / filterTau);
+                    seeker.targetAzimuthRate[i] += blend *
+                        (rawAzRate - seeker.targetAzimuthRate[i]);
+                    seeker.targetElevationRate[i] += blend *
+                        (rawElRate - seeker.targetElevationRate[i]);
+                } else {
+                    seeker.targetAzimuthRate[i] = 0.0;
+                    seeker.targetElevationRate[i] = 0.0;
+                }
+                seeker.isLocked[i] = true;
+                seeker.lockedTargetId[i] = target;
+                seeker.targetRange[i] = candidate.range;
+                seeker.targetRangeRate[i] = candidate.rangeRate;
+                seeker.targetAzimuth[i] = candidate.azimuth;
+                seeker.targetElevation[i] = candidate.elevation;
+                seeker.previousAzimuth[i] = candidate.azimuth;
+                seeker.previousElevation[i] = candidate.elevation;
+                seeker.hasPreviousLos[i] = true;
+                seeker.lockLostTimeSec[i] = 0.0;
+            };
+
+            const bool hadLock = seeker.isLocked[i];
+            if (hadLock && seeker.lockedTargetId[i] < physics.size) {
+                const std::size_t target = seeker.lockedTargetId[i];
+                if (target != i && physics.active[target] && status.isAlive[target] &&
+                    status.allegiance[i] != status.allegiance[target]) {
+                    const Candidate candidate = evaluateTarget(target);
+                    if (candidate.geometryValid && candidate.maintenanceValid) {
+                        commitTrack(target, candidate);
+                        continue;
+                    }
+                    if (candidate.geometryValid) {
+                        seeker.lockLostTimeSec[i] += stepDt;
+                        const double dropout = std::max(0.0, seeker.lockDropoutTimeSec[i]);
+                        if (seeker.lockLostTimeSec[i] <= dropout) continue;
+                    }
+                }
+            }
+
+            seeker.isLocked[i] = false;
+            seeker.lockLostTimeSec[i] = 0.0;
+            seeker.hasPreviousLos[i] = false;
+            seeker.targetAzimuthRate[i] = 0.0;
+            seeker.targetElevationRate[i] = 0.0;
 
             // Iterate through all potential targets
             for (std::size_t t = 0; t < physics.size; ++t) {
                 if (t == i || !physics.active[t] || !status.isAlive[t]) continue;
                 if (status.allegiance[i] == status.allegiance[t]) continue; // Don't lock onto friendlies
-
-                glm::dvec3 targetPos(physics.px[t], physics.py[t], physics.pz[t]);
-                glm::dvec3 targetVel(physics.vx[t], physics.vy[t], physics.vz[t]);
-
-                glm::dvec3 rangeVec = targetPos - seekerPos;
-                double range = glm::length(rangeVec);
-
-                // Target relative velocity
-                glm::dvec3 relVel = targetVel - seekerVel;
-                double rangeRate = glm::dot(glm::normalize(rangeVec), relVel);
-
-                // Transform LOS into target's local frame
-                glm::dquat targetQ(physics.qw[t], physics.qx[t], physics.qy[t], physics.qz[t]);
-                glm::dvec3 losInTargetFrame = rotateVector(glm::inverse(targetQ), glm::normalize(rangeVec));
-
-                double azimuthRad = std::atan2(losInTargetFrame.y, losInTargetFrame.x);
-                double elevationRad = std::asin(-losInTargetFrame.z);
-
-                if (seeker.type[i] == SeekerType::RF) {
-                    const std::string& profileId = status.rcsProfileId[t];
-                    if (profileId.empty()) continue; // Skip targets with no signature
-
-                    if (!rcsCache.contains(profileId)) {
-                        auto db = std::make_unique<Models::RCSDatabase>();
-                        if (db->loadProfile(profileId)) rcsCache[profileId] = std::move(db);
-                        else continue;
-                    }
-
-                    double rcs_m2 = rcsCache.at(profileId)->getRCS(azimuthRad, elevationRad);
-
-                    double pt = seeker.transmitterPowerW[i];
-                    double gain = std::pow(10.0, seeker.antennaGainDb[i] / 10.0);
-                    double lambda = seeker.wavelengthM[i];
-
-                    double receivedPower = (pt * gain * gain * lambda * lambda * rcs_m2) /
-                                           (std::pow(4.0 * std::numbers::pi, 3.0) * std::pow(range, 4.0));
-
-                    double snrDb = 10.0 * std::log10(receivedPower / seeker.noiseFloorW[i]);
-
-                    if (snrDb > seeker.snrThresholdDb[i]) {
-                        seeker.isLocked[i] = true;
-                        seeker.lockedTargetId[i] = t;
-                        seeker.targetRange[i] = range;
-                        seeker.targetRangeRate[i] = rangeRate;
-                        
-                        // Body-frame LOS angles (for guidance)
-                        glm::dquat seekerQ(physics.qw[i], physics.qx[i], physics.qy[i], physics.qz[i]);
-                        glm::dvec3 losInSeekerFrame = rotateVector(glm::inverse(seekerQ), glm::normalize(rangeVec));
-                        seeker.targetAzimuth[i] = std::atan2(losInSeekerFrame.y, losInSeekerFrame.x);
-                        seeker.targetElevation[i] = std::asin(-losInSeekerFrame.z);
-
-                        lockMaintained = true;
-                        break;
-                    }
-                } 
-                else if (seeker.type[i] == SeekerType::IR) {
-                    const std::string& profileId = status.irProfileId[t];
-                    if (profileId.empty()) continue;
-
-                    if (!irCache.contains(profileId)) {
-                        auto db = std::make_unique<Models::IRSignatureDatabase>();
-                        if (db->loadProfile(profileId)) irCache[profileId] = std::move(db);
-                        else continue;
-                    }
-
-                    double radiantIntensity = irCache.at(profileId)->getRadiantIntensity(azimuthRad, elevationRad);
-                    double irradiance = radiantIntensity / (range * range);
-
-                    // Basic Transmissivity Placeholder
-                    double extinctionCoefficient = 0.1; // km^-1
-                    double transmissivity = std::exp(-extinctionCoefficient * (range / 1000.0));
-
-                    double finalPowerW = irradiance * transmissivity;
-
-                    if (finalPowerW > seeker.sensitivityW[i]) {
-                        seeker.isLocked[i] = true;
-                        seeker.lockedTargetId[i] = t;
-                        seeker.targetRange[i] = range;
-                        seeker.targetRangeRate[i] = rangeRate;
-
-                        glm::dquat seekerQ(physics.qw[i], physics.qx[i], physics.qy[i], physics.qz[i]);
-                        glm::dvec3 losInSeekerFrame = rotateVector(glm::inverse(seekerQ), glm::normalize(rangeVec));
-                        seeker.targetAzimuth[i] = std::atan2(losInSeekerFrame.y, losInSeekerFrame.x);
-                        seeker.targetElevation[i] = std::asin(-losInSeekerFrame.z);
-
-                        lockMaintained = true;
-                        break;
-                    }
+                const Candidate candidate = evaluateTarget(t);
+                if (candidate.acquisitionValid) {
+                    commitTrack(t, candidate);
+                    break;
                 }
-            }
-
-            if (!lockMaintained) {
-                seeker.isLocked[i] = false;
             }
         }
     }

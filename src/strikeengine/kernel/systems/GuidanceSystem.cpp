@@ -68,24 +68,19 @@ namespace StrikeEngine::Kernel {
         const SeekerBlock& seeker,
         GuidanceBlock& guidance)
     {
-        // Augmented Proportional Navigation using Seeker LOS rates
-        // In the real world, LOS rate is estimated by tracking loops. We'll use a simplified mapping from seeker angles.
-        // The seeker gives targetAzimuth and targetElevation relative to the missile's body.
+        // Augmented Proportional Navigation using filtered seeker LOS rates.
+        // The seeker angles and rates are relative to the missile body.
         
         // a_cmd = N * V_c * d(lambda)/dt
         const double N = 3.5;
         double vc = std::abs(seeker.targetRangeRate[id]); // positive closing velocity
         if (vc < 1.0) vc = 1.0;
 
-        // Since the seeker gives us Az/El, the rate of change of Az/El *is* the LOS rate in the body frame.
-        // MVP: We approximate the required body-frame acceleration and rotate it back to world-frame
-        // for the Autopilot (which expects world-frame commands).
-        
-        // To properly implement APN, we would need the actual derivative of the angles (dAz/dt, dEl/dt).
-        // For MVP, we will use a pseudo-LOS rate proportional to the angle itself (steering to zero).
-        // This acts like a pursuit guidance on the body frame angles.
-        double dAz_dt = seeker.targetAzimuth[id] * 5.0; // Pseudo-rate
-        double dEl_dt = seeker.targetElevation[id] * 5.0;
+        // SeekerSystem supplies filtered finite-difference LOS rates in the
+        // seeker body frame. These are delayed/noisy track derivatives rather
+        // than the old angle-times-gain pursuit approximation.
+        const double dAz_dt = seeker.targetAzimuthRate[id];
+        const double dEl_dt = seeker.targetElevationRate[id];
 
         // Commanded acceleration in Body Frame
         double a_cmd_y_body = N * vc * dEl_dt; // Pitch

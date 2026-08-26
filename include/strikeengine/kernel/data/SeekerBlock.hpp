@@ -27,6 +27,15 @@ namespace StrikeEngine::Kernel {
         std::vector<double> sensitivityW;
         std::vector<int> wavelengthBand; // To pass to atmosphere
 
+        // Geometry and tracking configuration. Angular limits are half-angles
+        // in the seeker body frame; gimbal limits are independent azimuth and
+        // elevation mechanical stops.
+        std::vector<double> fieldOfViewHalfAngleRad;
+        std::vector<double> gimbalAzimuthLimitRad;
+        std::vector<double> gimbalElevationLimitRad;
+        std::vector<double> lockHysteresisDb;
+        std::vector<double> lockDropoutTimeSec;
+
         // Output tracking state
         std::vector<bool> isLocked;
         std::vector<std::size_t> lockedTargetId;
@@ -35,6 +44,12 @@ namespace StrikeEngine::Kernel {
         std::vector<double> targetRangeRate;
         std::vector<double> targetAzimuth;
         std::vector<double> targetElevation;
+        std::vector<double> targetAzimuthRate;
+        std::vector<double> targetElevationRate;
+        std::vector<double> previousAzimuth;
+        std::vector<double> previousElevation;
+        std::vector<double> lockLostTimeSec;
+        std::vector<bool> hasPreviousLos;
 
         std::size_t size = 0;
     };

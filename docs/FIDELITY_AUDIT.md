@@ -37,7 +37,7 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 ## Current verification after restart
 
 The restart fixes were completed and re-run on 2026-08-26. The complete CTest
-suite is green: **8/8 tests passed** in 18.32 s.
+suite is green: **9/9 tests passed** in 17.95 s.
 
 | Workstream | Current status | Evidence |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ suite is green: **8/8 tests passed** in 18.32 s.
 | W3 control authority | DONE for the MVP DoD | `intercept_test` PASS: minimum miss 25.30 m; actuator and post-burnout control path exercised |
 | W4 true RK4/RK45 | DONE for the integrator/event MVP | Derivative callbacks, stage re-evaluation, bounded RK45 adaptation, and interpolated ground-crossing timestamps are covered by `integrator_test` |
 | W5 events/environment | PARTIAL | Ground impacts now clamp, deactivate, and stop entities with interpolated timestamps; terrain and wind remain |
-| W6 seeker/sensor | NOT STARTED | FOV, gimbal limits, hysteresis, and latency remain |
+| W6 seeker/sensor | PARTIAL | FOV cone, gimbal limits, lock hysteresis/dropout, and filtered LOS rates are covered by `seeker_test`; measurement latency remains |
 | W7 navigation EKF | NOT STARTED | Coupled-state corrections and bias convergence remain |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
