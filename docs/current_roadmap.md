@@ -248,11 +248,11 @@ Goal: Hardware acceleration.
             - [x] Coriolis.hpp (local ENU helper is implemented in EarthModel.hpp)
             - [~] WGS84.hpp (constants and geodetic/ECEF conversion are in EarthModel.hpp)
 
-        - [~] frames/ (conversion foundation is integrated in EarthModel)
-            - [~] ECEF.hpp (ECEF coordinate and conversion API exists in EarthModel.hpp)
-            - [ ] NED.hpp
-            - [ ] ENU.hpp
-            - [~] Geodetic.hpp (geodetic coordinate and conversion API exists in EarthModel.hpp)
+        - [~] frames/ (conversion foundation is integrated in EarthModel/EarthFrames)
+            - [x] ECEF.hpp (ECEF coordinate and conversion API exists in EarthModel.hpp)
+            - [x] NED.hpp (standalone frame transforms are in EarthFrames.hpp)
+            - [x] ENU.hpp (standalone frame transforms are in EarthFrames.hpp)
+            - [x] Geodetic.hpp (geodetic coordinate and conversion API exists in EarthModel.hpp)
 
         - [~] guidance/ (MVP logic is in `kernel/systems/GuidanceSystem`)
             - [~] ProNav.hpp (explicit PN MVP; standalone model is in `models/guidance`)
@@ -415,8 +415,8 @@ Goal: Hardware acceleration.
 - [x] Optimizer
 
 ## Phase 6
-- [~] ECEF (WGS84 conversion MVP)
+- [x] ECEF (WGS84 conversion and local frame transforms)
 - [x] WGS84 Gravity (opt-in normal gravity)
-- [~] Earth Rotation (rotation-rate foundation)
+- [~] Earth Rotation (rotation-rate and local centrifugal foundation)
 - [x] Coriolis Effects (opt-in local ENU acceleration)
 - [~] GPU Backend (optional Vulkan implementation exists; broader backend support pending)

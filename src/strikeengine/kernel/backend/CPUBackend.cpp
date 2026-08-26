@@ -3,6 +3,7 @@
 #include <strikeengine/kernel/data/ControlBlock.hpp>
 #include <strikeengine/kernel/math/Quaternion.hpp>
 #include <strikeengine/models/physics/earth/EarthModel.hpp>
+#include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <array>
 #include <cmath>
 
@@ -163,6 +164,15 @@ namespace StrikeEngine::Kernel
                 coriolis = Models::localCoriolisAcceleration(
                     environment.earth.referenceLatitudeRad,
                     {s.vx[i], s.vy[i], s.vz[i]});
+            }
+            if (environment.earth.includeCentrifugal) {
+                const auto centrifugal = Models::EarthFrames::localCentrifugalAcceleration({
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad,
+                    altitude});
+                coriolis[0] += centrifugal[0];
+                coriolis[1] += centrifugal[1];
+                coriolis[2] += centrifugal[2];
             }
 
             const double axWorld = afx * invMass + coriolis[0];

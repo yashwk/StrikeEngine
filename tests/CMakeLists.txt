@@ -37,6 +37,9 @@ target_link_libraries(environment_test PRIVATE strikeengine)
 add_executable(earth_test validation/earth_test.cpp)
 target_link_libraries(earth_test PRIVATE strikeengine)
 
+add_executable(earth_frames_test validation/earth_frames_test.cpp)
+target_link_libraries(earth_frames_test PRIVATE strikeengine)
+
 add_executable(guidance_test validation/guidance_test.cpp)
 target_link_libraries(guidance_test PRIVATE strikeengine)
 
@@ -80,6 +83,9 @@ set_tests_properties(environment PROPERTIES TIMEOUT 120)
 
 add_test(NAME earth COMMAND earth_test)
 set_tests_properties(earth PROPERTIES TIMEOUT 120)
+
+add_test(NAME earth_frames COMMAND earth_frames_test)
+set_tests_properties(earth_frames PROPERTIES TIMEOUT 120)
 
 add_test(NAME guidance COMMAND guidance_test)
 set_tests_properties(guidance PROPERTIES TIMEOUT 120)

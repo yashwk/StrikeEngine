@@ -46,11 +46,12 @@ earth, guidance, and scenario regressions.
 | W2 6-DOF rigid body | DONE | `rigidbody_test` PASS: quaternion norm, gyro coupling, and commanded climb |
 | W3 control authority | DONE for the MVP DoD | `intercept_test` PASS: minimum miss 25.30 m; actuator and post-burnout control path exercised |
 | W4 true RK4/RK45 | DONE for the integrator/event MVP | Derivative callbacks, stage re-evaluation, bounded RK45 adaptation, and interpolated ground-crossing timestamps are covered by `integrator_test` |
-| W5 events/environment | DONE for the environment MVP | Terrain elevation callbacks, wind-relative aerodynamics, and interpolated terrain impacts are covered by `environment_test`; failure models and spherical earth remain |
+| W5 events/environment | DONE for the environment MVP | Terrain elevation callbacks, wind-relative aerodynamics, and interpolated terrain impacts are covered by `environment_test`; failure models and spherical terrain remain |
 | W6 seeker/sensor | DONE for the seeker MVP | FOV cone, gimbal limits, lock hysteresis/dropout, filtered LOS rates, and configurable measurement latency are covered by `seeker_test` |
 | W7 navigation EKF | DONE for the navigation MVP | Full 15-state covariance propagation, coupled GPS corrections into attitude and IMU biases, covariance bounds, and deterministic accelerometer-bias convergence are covered by `navigation_test` |
 | W8 scenario/guidance contract | DONE for the integration MVP | Explicit PN/APN behavior, moving-target response, seeker handoff, scenario configuration propagation, and isolated batch execution are covered by `guidance_test` and `scenario_test` |
 | W9 earth model | DONE for the opt-in local-earth MVP | WGS84 geodetic/ECEF conversion, latitude/altitude-dependent normal gravity, and local ENU Coriolis acceleration are covered by `earth_test` |
+| W10 earth frames/acceleration | DONE for the local-earth MVP | Standalone ECEF/ENU/NED transforms, ENU/NED axis conversion, centrifugal acceleration, and CPU integration are covered by `earth_frames_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -87,8 +88,14 @@ The W9 earth increment adds an opt-in `EnvironmentConfig::earth` block. It
 provides WGS84 geodetic/ECEF conversion helpers, Somigliana normal gravity with
 altitude correction, and local ENU Coriolis acceleration in the CPU truth
 backend. The legacy flat-earth gravity and no-Coriolis behavior remain the
-default; full earth-fixed transport/centrifugal dynamics and standalone frame
-modules remain future work.
+default; full moving-origin earth-fixed transport and spherical terrain remain
+future work.
+
+The W10 increment adds standalone ECEF/ENU/NED frame transforms and an opt-in
+centrifugal acceleration term derived from the WGS84 ECEF position. The
+existing local world state remains backward-compatible and uses the configured
+reference latitude/longitude for these corrections; full moving-origin
+earth-fixed transport rates remain future work.
 
 ---
 
@@ -96,7 +103,7 @@ modules remain future work.
 
 | Aspect | State | Fidelity |
 | ------ | ----- | -------- |
-| Gravity | Flat-earth constant by default; opt-in WGS84 normal gravity with altitude correction | GOOD for the local-earth MVP; full earth-fixed gravity/frame coupling remains pending |
+| Gravity | Flat-earth constant by default; opt-in WGS84 normal gravity with altitude correction and centrifugal term | GOOD for the local-earth MVP; spherical gravity and full earth-fixed transport coupling remain pending |
 | Drag | `CD = 0.3` constant, `S = 0.1 m²` hardcoded, force along velocity only | LOW |
 | Lift | **`CL = 0.0`** in MVP kernel config — zero aerodynamic lift | **CRITICAL GAP** |
 | Atmosphere | ISA1976 layered (T/P/ρ/a), clamped to 86 km | GOOD |
