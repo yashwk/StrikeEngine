@@ -1,6 +1,7 @@
 #pragma once
 
 #include <strikeengine/kernel/config/ScenarioConfig.hpp>
+#include <strikeengine/simulation/StudyOutput.hpp>
 
 #include <cstddef>
 #include <string>
@@ -14,6 +15,7 @@ namespace StrikeEngine::Simulation {
         double endTime = 0.0;
         std::size_t entityCount = 0;
         std::size_t activeEntities = 0;
+        std::string status = "COMPLETED";
         double finalPositionX = 0.0;
         double finalPositionY = 0.0;
         double finalPositionZ = 0.0;

@@ -1,11 +1,10 @@
 #include <strikeengine/simulation/MonteCarlo.hpp>
 #include <strikeengine/simulation/Reporting.hpp>
-#include <fstream>
 #include <iostream>
-#include <iomanip>
 #include <chrono>
 #include <algorithm>
 #include <stdexcept>
+#include <vector>
 
 namespace StrikeEngine::Simulation {
 
@@ -14,24 +13,17 @@ namespace StrikeEngine::Simulation {
 
     void MonteCarlo::execute(
         const Kernel::ScenarioConfig& baseConfig,
-        int iterations,
-        std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturbate,
-        const std::string& outputFile)
+            int iterations,
+            std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturbate,
+            const std::string& outputFile,
+            const StudyOutputConfig& outputConfig)
     {
         if (iterations < 0) {
             throw std::invalid_argument("MonteCarlo iterations cannot be negative");
         }
 
-        std::ofstream out(outputFile);
-        if (!out.is_open()) {
-            std::cerr << "Failed to open output file: " << outputFile << std::endl;
-            return;
-        }
-
-        writeCsvMetadata(out, "monte_carlo");
-        out << "Iteration,EntityId,Frame,EndTime_s,"
-               "PositionX_m,PositionY_m,PositionZ_m,"
-               "Latitude_rad,Longitude_rad,Altitude_m\n";
+        std::vector<StudyOutputRecord> records;
+        records.reserve(static_cast<std::size_t>(iterations));
 
         // Initialize RNG
         unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -65,17 +57,22 @@ namespace StrikeEngine::Simulation {
             }
 
             const auto finalState = reportState(physics, targetId, config.environment);
-            out << std::fixed << std::setprecision(9)
-                << i << ","
-                << targetId << ","
-                << reportingFrameName(finalState.frame) << ","
-                << kernel.getSimulationTime() << ","
-                << finalState.positionX << ","
-                << finalState.positionY << ","
-                << finalState.positionZ << ","
-                << finalState.latitudeRad << ","
-                << finalState.longitudeRad << ","
-                << finalState.altitudeM << "\n";
+            StudyOutputRecord record;
+            record.iteration = static_cast<std::size_t>(i);
+            record.entityId = targetId;
+            record.timeS = kernel.getSimulationTime();
+            record.frame = finalState.frame;
+            record.positionX = finalState.positionX;
+            record.positionY = finalState.positionY;
+            record.positionZ = finalState.positionZ;
+            record.latitudeRad = finalState.latitudeRad;
+            record.longitudeRad = finalState.longitudeRad;
+            record.altitudeM = finalState.altitudeM;
+            record.active = physics.active[targetId];
+            record.status = !record.active
+                ? StudyStatus::Impacted
+                : (record.timeS >= maxTime ? StudyStatus::Completed : StudyStatus::Active);
+            records.push_back(record);
 
             // Print progress occasionally
             if ((i + 1) % 10 == 0 || i == iterations - 1) {
@@ -83,7 +80,8 @@ namespace StrikeEngine::Simulation {
             }
         }
 
-        out.close();
+        StudyOutputWriter::write(
+            outputFile, StudyRecordType::MonteCarlo, records, outputConfig);
         std::cout << "Monte Carlo Analysis completed. Data saved to " << outputFile << std::endl;
     }
 

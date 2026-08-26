@@ -1,26 +1,36 @@
 #include <strikeengine/simulation/SingleRun.hpp>
 #include <strikeengine/simulation/Reporting.hpp>
-#include <fstream>
 #include <iostream>
-#include <iomanip>
 #include <algorithm>
+#include <stdexcept>
+#include <vector>
 
 namespace StrikeEngine::Simulation {
 
     SingleRun::SingleRun(double timeStep_s, double maxTime_s) 
-        : dt(timeStep_s), maxTime(maxTime_s) {}
+        : dt(timeStep_s), maxTime(maxTime_s)
+    {
+        if (dt <= 0.0) {
+            throw std::invalid_argument("SingleRun timestep must be positive");
+        }
+        if (maxTime < 0.0) {
+            throw std::invalid_argument("SingleRun max time cannot be negative");
+        }
+    }
 
     void SingleRun::execute(
         const Kernel::VehicleInitState& init,
-        const std::string& outputFile)
+        const std::string& outputFile,
+        const StudyOutputConfig& outputConfig)
     {
-        execute(init, Kernel::EnvironmentConfig{}, outputFile);
+        execute(init, Kernel::EnvironmentConfig{}, outputFile, outputConfig);
     }
 
     void SingleRun::execute(
         const Kernel::VehicleInitState& init,
         const Kernel::EnvironmentConfig& environment,
-        const std::string& outputFile)
+        const std::string& outputFile,
+        const StudyOutputConfig& outputConfig)
     {
         Kernel::SimulationKernel kernel;
         kernel.setEnvironment(environment);
@@ -28,37 +38,41 @@ namespace StrikeEngine::Simulation {
 
         Kernel::PhysicsId id = kernel.createVehicle(init);
 
-        std::ofstream out(outputFile);
-        if (!out.is_open()) {
-            std::cerr << "Failed to open output file: " << outputFile << std::endl;
-            return;
-        }
-
-        writeCsvMetadata(out, "trajectory", reportingFrameName(reportingFrame(environment)));
-        out << "Time_s,Frame,PositionX_m,PositionY_m,PositionZ_m,"
-               "Latitude_rad,Longitude_rad,Altitude_m,"
-               "VelocityX_mps,VelocityY_mps,VelocityZ_mps,Speed_mps,Mass_kg\n";
-
         const auto& physics = kernel.getPhysics();
+        std::vector<StudyOutputRecord> records;
 
         while (kernel.getSimulationTime() <= maxTime) {
-            if (!physics.active[id]) break;
-
             const auto state = reportState(physics, id, environment);
-            out << std::fixed << std::setprecision(9)
-                << kernel.getSimulationTime() << ","
-                << reportingFrameName(state.frame) << ","
-                << state.positionX << "," << state.positionY << "," << state.positionZ << ","
-                << state.latitudeRad << "," << state.longitudeRad << "," << state.altitudeM << ","
-                << state.velocityX << "," << state.velocityY << "," << state.velocityZ << ","
-                << state.speedMps << "," << state.massKg << "\n";
+            StudyOutputRecord record;
+            record.entityId = id;
+            record.timeS = kernel.getSimulationTime();
+            record.frame = state.frame;
+            record.positionX = state.positionX;
+            record.positionY = state.positionY;
+            record.positionZ = state.positionZ;
+            record.latitudeRad = state.latitudeRad;
+            record.longitudeRad = state.longitudeRad;
+            record.altitudeM = state.altitudeM;
+            record.velocityX = state.velocityX;
+            record.velocityY = state.velocityY;
+            record.velocityZ = state.velocityZ;
+            record.speedMps = state.speedMps;
+            record.massKg = state.massKg;
+            record.active = physics.active[id];
+            record.status = !record.active
+                ? StudyStatus::Impacted
+                : (record.timeS >= maxTime ? StudyStatus::Completed : StudyStatus::Active);
+            records.push_back(record);
+
+            if (!physics.active[id]) break;
 
             const double remaining = maxTime - kernel.getSimulationTime();
             if (remaining <= 0.0) break;
             kernel.step(std::min(dt, remaining));
         }
 
-        out.close();
+        StudyOutputWriter::write(
+            outputFile, StudyRecordType::Trajectory, records, outputConfig);
         std::cout << "Simulation completed. Impact/End time: " << kernel.getSimulationTime() << "s. Output saved to " << outputFile << std::endl;
     }
 

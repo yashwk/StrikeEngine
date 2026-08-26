@@ -75,6 +75,7 @@ namespace StrikeEngine::Simulation {
                 result.finalAltitudeM = primaryState.altitudeM;
                 result.primaryEntityActive = physics.active[result.primaryEntityId];
             }
+            result.status = result.primaryEntityActive ? "COMPLETED" : "IMPACTED";
             result.maxAltitude = result.maxAltitudeM;
             result.maxSpeed = result.maxSpeedMps;
             results.push_back(result);

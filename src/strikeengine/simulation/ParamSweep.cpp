@@ -1,12 +1,10 @@
 #include <strikeengine/simulation/ParamSweep.hpp>
 #include <strikeengine/simulation/Reporting.hpp>
-#include <fstream>
 #include <iostream>
-#include <iomanip>
-#include <cmath>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace StrikeEngine::Simulation {
 
@@ -17,25 +15,17 @@ namespace StrikeEngine::Simulation {
         const Kernel::ScenarioConfig& baseConfig,
         double startValue,
         double endValue,
-        int steps,
-        std::function<void(Kernel::ScenarioConfig&, double)> applyParam,
-        const std::string& outputFile)
+            int steps,
+            std::function<void(Kernel::ScenarioConfig&, double)> applyParam,
+            const std::string& outputFile,
+            const StudyOutputConfig& outputConfig)
     {
         if (steps < 0) {
             throw std::invalid_argument("ParamSweep steps cannot be negative");
         }
 
-        std::ofstream out(outputFile);
-        if (!out.is_open()) {
-            std::cerr << "Failed to open output file: " << outputFile << std::endl;
-            return;
-        }
-
-        writeCsvMetadata(out, "parameter_sweep");
-        out << "SweepValue,EntityId,Frame,EndTime_s,"
-               "PositionX_m,PositionY_m,PositionZ_m,"
-               "Latitude_rad,Longitude_rad,Altitude_m,"
-               "MaxAltitude_m,MaxSpeed_mps\n";
+        std::vector<StudyOutputRecord> records;
+        records.reserve(static_cast<std::size_t>(steps));
 
         double stepSize = (steps > 1) ? (endValue - startValue) / (steps - 1) : 0.0;
 
@@ -77,25 +67,32 @@ namespace StrikeEngine::Simulation {
             }
 
             const auto finalState = reportState(physics, targetId, config.environment);
-            out << std::fixed << std::setprecision(9)
-                << currentParam << ","
-                << targetId << ","
-                << reportingFrameName(finalState.frame) << ","
-                << kernel.getSimulationTime() << ","
-                << finalState.positionX << ","
-                << finalState.positionY << ","
-                << finalState.positionZ << ","
-                << finalState.latitudeRad << ","
-                << finalState.longitudeRad << ","
-                << finalState.altitudeM << ","
-                << (std::isfinite(maxAlt) ? maxAlt : finalState.altitudeM) << ","
-                << maxVel << "\n";
+            StudyOutputRecord record;
+            record.scenarioIndex = static_cast<std::size_t>(i);
+            record.sweepValue = currentParam;
+            record.entityId = targetId;
+            record.timeS = kernel.getSimulationTime();
+            record.frame = finalState.frame;
+            record.positionX = finalState.positionX;
+            record.positionY = finalState.positionY;
+            record.positionZ = finalState.positionZ;
+            record.latitudeRad = finalState.latitudeRad;
+            record.longitudeRad = finalState.longitudeRad;
+            record.altitudeM = finalState.altitudeM;
+            record.maxAltitudeM = std::isfinite(maxAlt) ? maxAlt : finalState.altitudeM;
+            record.maxSpeedMps = maxVel;
+            record.active = physics.active[targetId];
+            record.status = !record.active
+                ? StudyStatus::Impacted
+                : (record.timeS >= maxTime ? StudyStatus::Completed : StudyStatus::Active);
+            records.push_back(record);
 
             std::cout << "Sweep Step " << (i+1) << "/" << steps << " | Param: " << currentParam 
                       << " | PositionX: " << finalState.positionX << "m" << std::endl;
         }
 
-        out.close();
+        StudyOutputWriter::write(
+            outputFile, StudyRecordType::ParameterSweep, records, outputConfig);
         std::cout << "Parameter Sweep completed. Data saved to " << outputFile << std::endl;
     }
 

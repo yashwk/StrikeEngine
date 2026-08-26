@@ -2,6 +2,7 @@
 
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
+#include <strikeengine/simulation/StudyOutput.hpp>
 #include <string>
 
 namespace StrikeEngine::Simulation {
@@ -15,7 +16,10 @@ namespace StrikeEngine::Simulation {
          * @param init The initial state of the vehicle.
          * @param outputFile Path to the CSV file to output data to.
          */
-        void execute(const Kernel::VehicleInitState& init, const std::string& outputFile);
+        void execute(
+            const Kernel::VehicleInitState& init,
+            const std::string& outputFile,
+            const StudyOutputConfig& outputConfig = {});
 
         /**
          * @brief Runs a single simulation with an explicit environment.
@@ -27,7 +31,8 @@ namespace StrikeEngine::Simulation {
         void execute(
             const Kernel::VehicleInitState& init,
             const Kernel::EnvironmentConfig& environment,
-            const std::string& outputFile);
+            const std::string& outputFile,
+            const StudyOutputConfig& outputConfig = {});
 
     private:
         double dt;

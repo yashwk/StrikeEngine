@@ -2,6 +2,7 @@
 
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/ScenarioConfig.hpp>
+#include <strikeengine/simulation/StudyOutput.hpp>
 #include <string>
 #include <functional>
 #include <vector>
@@ -53,7 +54,8 @@ namespace StrikeEngine::Simulation {
             double endValue,
             int steps,
             std::function<void(Kernel::ScenarioConfig&, double)> applyParam,
-            const std::string& outputFile
+            const std::string& outputFile,
+            const StudyOutputConfig& outputConfig = {}
         );
 
     private:

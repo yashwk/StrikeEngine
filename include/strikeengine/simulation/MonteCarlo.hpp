@@ -2,6 +2,7 @@
 
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/ScenarioConfig.hpp>
+#include <strikeengine/simulation/StudyOutput.hpp>
 #include <string>
 #include <functional>
 #include <vector>
@@ -24,7 +25,8 @@ namespace StrikeEngine::Simulation {
             const Kernel::ScenarioConfig& baseConfig,
             int iterations,
             std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturbate,
-            const std::string& outputFile
+            const std::string& outputFile,
+            const StudyOutputConfig& outputConfig = {}
         );
 
     private:

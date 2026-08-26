@@ -24,6 +24,7 @@ std::vector<std::string> dataRows(const std::string& path)
     while (std::getline(input, line)) {
         if (!line.empty() && line[0] != '#') {
             if (line.rfind("Time_s,", 0) != 0 &&
+                line.rfind("EntityId,", 0) != 0 &&
                 line.rfind("SweepValue,", 0) != 0 &&
                 line.rfind("Iteration,", 0) != 0) {
                 rows.push_back(line);
@@ -83,6 +84,8 @@ int main()
     const std::string ecefPath = "reporting_ecef.csv";
     const std::string sweepPath = "reporting_sweep.csv";
     const std::string monteCarloPath = "reporting_monte_carlo.csv";
+    const std::string binaryPath = "reporting_trajectory.bin";
+    const std::string batchPath = "reporting_batch.bin";
 
     Kernel::VehicleInitState localInit{};
     localInit.pz = 1000.0;
@@ -95,14 +98,14 @@ int main()
         std::stringstream contents;
         contents << input.rdbuf();
         const auto rows = dataRows(localPath);
-        check(contents.str().find("# strikeengine_csv_format=1") != std::string::npos,
+        check(contents.str().find("# strikeengine_output_format=1") != std::string::npos,
               "SingleRun writes the versioned CSV metadata", failures);
-        check(contents.str().find("# frame=LOCAL_ENU") != std::string::npos &&
+        check(contents.str().find("# frame=PER_ROW") != std::string::npos &&
                   contents.str().find("Latitude_rad") != std::string::npos,
               "SingleRun declares the local frame and geodetic columns", failures);
-        check(rows.size() == 1 && fields(rows.front()).size() == 13 &&
-                  fields(rows.front())[1] == "LOCAL_ENU" &&
-                  std::abs(std::stod(fields(rows.front())[7]) - 1000.0) < 1e-9,
+        check(rows.size() == 1 && fields(rows.front()).size() == 16 &&
+                  fields(rows.front())[2] == "LOCAL_ENU" &&
+                  std::abs(std::stod(fields(rows.front())[8]) - 1000.0) < 1e-9,
               "SingleRun reports local altitude from world Z", failures);
     }
 
@@ -118,12 +121,12 @@ int main()
     {
         const auto rows = dataRows(ecefPath);
         const auto row = fields(rows.front());
-        check(rows.size() == 1 && row.size() == 13 && row[1] == "ECEF",
+        check(rows.size() == 1 && row.size() == 16 && row[2] == "ECEF",
               "SingleRun reports the absolute ECEF frame", failures);
-        check(std::abs(std::stod(row[2])) > 6.0e6 &&
-                  std::abs(std::stod(row[7]) - 1000.0) < 1e-5 &&
-                  std::abs(std::stod(row[5]) - 0.1) < 1e-10 &&
-                  std::abs(std::stod(row[6]) - 0.2) < 1e-10,
+        check(std::abs(std::stod(row[3])) > 6.0e6 &&
+                  std::abs(std::stod(row[8]) - 1000.0) < 1e-5 &&
+                  std::abs(std::stod(row[6]) - 0.1) < 1e-10 &&
+                  std::abs(std::stod(row[7]) - 0.2) < 1e-10,
               "SingleRun derives WGS84 coordinates from ECEF position", failures);
     }
 
@@ -134,9 +137,29 @@ int main()
     {
         const auto rows = dataRows(sweepPath);
         const auto row = fields(rows.front());
-        check(rows.size() == 1 && row.size() == 12 && row[1] == "1" &&
+        check(rows.size() == 1 && row.size() == 14 && row[1] == "1" &&
                   row[2] == "ECEF" && std::abs(std::stod(row[9]) - 1500.0) < 1e-5,
               "ParamSweep uses the explicit primary entity and ECEF altitude", failures);
+    }
+
+    Simulation::StudyOutputConfig selectedFields;
+    selectedFields.fields = {
+        Simulation::StudyOutputField::SweepValue,
+        Simulation::StudyOutputField::EntityId,
+        Simulation::StudyOutputField::Frame,
+        Simulation::StudyOutputField::AltitudeM,
+        Simulation::StudyOutputField::Status};
+    sweep.execute(
+        ecefScenario, 1.0, 1.0, 1,
+        [](Kernel::ScenarioConfig&, double) {}, sweepPath, selectedFields);
+    {
+        std::ifstream input(sweepPath);
+        std::stringstream contents;
+        contents << input.rdbuf();
+        check(contents.str().find(
+                  "SweepValue,EntityId,Frame,Altitude_m,Status") != std::string::npos &&
+                  contents.str().find("MaxAltitude_m") == std::string::npos,
+              "study output supports explicit field selection", failures);
     }
 
     Simulation::MonteCarlo monteCarlo(0.01, 0.0);
@@ -146,7 +169,7 @@ int main()
     {
         const auto rows = dataRows(monteCarloPath);
         const auto row = fields(rows.front());
-        check(rows.size() == 1 && row.size() == 10 && row[1] == "1" &&
+        check(rows.size() == 1 && row.size() == 12 && row[1] == "1" &&
                   row[2] == "ECEF" && std::abs(std::stod(row[9]) - 1500.0) < 1e-5,
               "MonteCarlo uses the explicit primary entity and ECEF altitude", failures);
     }
@@ -159,10 +182,38 @@ int main()
               results[0].maxAltitudeM >= results[0].finalAltitudeM,
           "BatchRunner returns frame-aware primary and aggregate metrics", failures);
 
+    Simulation::StudyOutputConfig binaryConfig;
+    binaryConfig.format = Simulation::StudyOutputFormat::Binary;
+    binaryConfig.fields = {
+        Simulation::StudyOutputField::EntityId,
+        Simulation::StudyOutputField::Frame,
+        Simulation::StudyOutputField::AltitudeM,
+        Simulation::StudyOutputField::Status};
+    singleRun.execute(ecefInit, ecefScenario.environment, binaryPath, binaryConfig);
+    {
+        std::ifstream input(binaryPath, std::ios::binary);
+        char magic[8]{};
+        input.read(magic, sizeof(magic));
+        check(std::string(magic, sizeof(magic)) == "STRKOUT1" &&
+                  input.good(),
+              "study output writes the versioned binary magic", failures);
+    }
+
+    Simulation::StudyOutputWriter::writeBatchResults(batchPath, results, binaryConfig);
+    {
+        std::ifstream input(batchPath, std::ios::binary);
+        char magic[8]{};
+        input.read(magic, sizeof(magic));
+        check(std::string(magic, sizeof(magic)) == "STRKOUT1" && input.good(),
+              "BatchRunner results can be serialized as binary", failures);
+    }
+
     std::remove(localPath.c_str());
     std::remove(ecefPath.c_str());
     std::remove(sweepPath.c_str());
     std::remove(monteCarloPath.c_str());
+    std::remove(binaryPath.c_str());
+    std::remove(batchPath.c_str());
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
