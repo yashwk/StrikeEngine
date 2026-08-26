@@ -4,12 +4,15 @@
 #include <string>
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/data/GuidanceBlock.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
+#include <strikeengine/kernel/config/VehicleConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
     // Represents an initial state and configuration for an entity in a scenario
     struct ScenarioEntityConfig {
         VehicleInitState initState;
+        VehicleConfig vehicleConfig;
         GuidanceMode initialGuidanceMode = GuidanceMode::None;
         
         double initialTargetX = 0.0;
@@ -22,20 +25,25 @@ namespace StrikeEngine::Kernel {
         double initialTargetVx = 0.0;
         double initialTargetVy = 0.0;
         double initialTargetVz = 0.0;
+        double initialMaxAccel = 0.0;
     };
 
     struct ScenarioConfig {
         std::string name;
         std::string description;
+
+        EnvironmentConfig environment;
         
         std::vector<ScenarioEntityConfig> entities;
 
         // Apply this scenario to the given kernel
         void loadInto(SimulationKernel& kernel) const {
             kernel.reset();
+            kernel.setEnvironment(environment);
 
             for (const auto& entityCfg : entities) {
-                PhysicsId id = kernel.createVehicle(entityCfg.initState);
+                PhysicsId id = kernel.createVehicle(
+                    entityCfg.initState, entityCfg.vehicleConfig);
                 
                 if (entityCfg.initialGuidanceMode != GuidanceMode::None) {
                     SimulationCommand cmd;
@@ -47,6 +55,7 @@ namespace StrikeEngine::Kernel {
                     cmd.targetVx = entityCfg.initialTargetVx;
                     cmd.targetVy = entityCfg.initialTargetVy;
                     cmd.targetVz = entityCfg.initialTargetVz;
+                    cmd.maxAccel = entityCfg.initialMaxAccel;
                     kernel.queueCommand(cmd);
                 }
             }

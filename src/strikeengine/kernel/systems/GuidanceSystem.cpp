@@ -1,4 +1,5 @@
 #include <strikeengine/kernel/systems/GuidanceSystem.hpp>
+#include <strikeengine/models/guidance/GuidanceModels.hpp>
 #include <cmath>
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -54,7 +55,7 @@ namespace StrikeEngine::Kernel {
             }
 
             if (mode == GuidanceMode::ProportionalNavigation) {
-                updatePredictiveIntercept(i, nav, guidance);
+                updateProportionalNavigation(i, nav, guidance);
             } else if (mode == GuidanceMode::Waypoint) {
                 updateWaypoint(i, nav, guidance);
             }
@@ -96,7 +97,7 @@ namespace StrikeEngine::Kernel {
         guidance.commandedAccelZ[id] = a_cmd_world.z;
     }
 
-    void GuidanceSystem::updatePredictiveIntercept(
+    void GuidanceSystem::updateProportionalNavigation(
         std::size_t id,
         const NavigationBlock& nav,
         GuidanceBlock& guidance)
@@ -109,40 +110,20 @@ namespace StrikeEngine::Kernel {
         double rvy = guidance.targetVy[id] - nav.estVy[id];
         double rvz = guidance.targetVz[id] - nav.estVz[id];
 
-        double r_mag_sq = rx*rx + ry*ry + rz*rz;
-        if (r_mag_sq < 1.0) {
+        const Models::Vec3 relativePosition{rx, ry, rz};
+        const Models::Vec3 relativeVelocity{rvx, rvy, rvz};
+        const Models::GuidanceSolution solution = Models::proportionalNavigation(
+            relativePosition, relativeVelocity);
+        if (!solution.valid) {
             guidance.commandedAccelX[id] = 0.0;
             guidance.commandedAccelY[id] = 0.0;
             guidance.commandedAccelZ[id] = 0.0;
             return;
         }
 
-        // Predictive constant-acceleration intercept correction. Pure LOS-rate PN is
-        // appropriate for a vehicle that already has a well-shaped flight
-        // path, but this MVP also models gravity explicitly and has no
-        // trajectory manager. Use a bounded time-to-go estimate so vertical
-        // gravity error is corrected early instead of producing a saturated
-        // last-second command near the ground.
-        const double v_mag = std::max(
-            1.0,
-            std::sqrt(nav.estVx[id] * nav.estVx[id] +
-                      nav.estVy[id] * nav.estVy[id] +
-                      nav.estVz[id] * nav.estVz[id]));
-        const double tgo = std::clamp(std::sqrt(r_mag_sq) / v_mag, 1.0, 30.0);
-        const double tgoSq = tgo * tgo;
-
-        guidance.commandedAccelX[id] = 2.0 * (rx + rvx * tgo) / tgoSq;
-        guidance.commandedAccelY[id] = 2.0 * (ry + rvy * tgo) / tgoSq;
-        guidance.commandedAccelZ[id] = 2.0 * (rz + rvz * tgo) / tgoSq;
-
-        // The current airframe has no lateral trajectory manager and the
-        // cross-track state is sensor-estimated. Limit lateral demand to keep
-        // a small measurement error from becoming a large side excursion;
-        // the per-entity maxAccel limit still bounds the complete command.
-        constexpr double maxLateralAccel = 5.0; // m/s^2
-        guidance.commandedAccelY[id] = (std::abs(ry) < 50.0)
-            ? 0.0
-            : std::clamp(guidance.commandedAccelY[id], -maxLateralAccel, maxLateralAccel);
+        guidance.commandedAccelX[id] = solution.acceleration[0];
+        guidance.commandedAccelY[id] = solution.acceleration[1];
+        guidance.commandedAccelZ[id] = solution.acceleration[2];
     }
 
     void GuidanceSystem::updateWaypoint(

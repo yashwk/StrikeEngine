@@ -10,14 +10,15 @@ nothing is deleted before it exists in git history.**
 
 ### Current engine checkpoint — 2026-08-26
 
-The interrupted engine-fidelity repair was resumed and completed through W7.
-The CPU build succeeds and the full CTest suite passes **11/11**. The repair
+The interrupted engine-fidelity repair was resumed and completed through W8.
+The CPU build succeeds and the full CTest suite passes **13/13**. The repair
 covered the autopilot frame/sign chain,
 bounded aerodynamic control authority, predictive intercept guidance,
 ground-impact deactivation, interpolated impact timestamps, and bounded RK45
 adaptation, the W6 seeker MVP (geometry gates, tracking hysteresis, LOS rates,
 and measurement latency), the coupled navigation EKF and bounded
-covariance/bias regression, and the W5 terrain/wind environment MVP. The
+covariance/bias regression, the W5 terrain/wind environment MVP, and the W8
+scenario/guidance contract with structured batch execution. The
 historical
 starting state and phase plan below are retained as the restart record.
 

@@ -255,8 +255,8 @@ Goal: Hardware acceleration.
             - [ ] Geodetic.hpp
 
         - [~] guidance/ (MVP logic is in `kernel/systems/GuidanceSystem`)
-            - [~] ProNav.hpp (predictive intercept MVP; true standalone PN pending)
-            - [~] AugmentedProNav.hpp (seeker APN MVP; standalone model pending)
+            - [~] ProNav.hpp (explicit PN MVP; standalone model is in `models/guidance`)
+            - [~] AugmentedProNav.hpp (explicit APN MVP; standalone model is in `models/guidance`)
             - [ ] Pursuit.hpp
             - [~] WaypointGuidance.hpp (waypoint mode exists in the kernel)
 
@@ -331,7 +331,7 @@ Goal: Hardware acceleration.
         - [x] SingleRun.hpp
         - [x] ParamSweep.hpp
         - [x] MonteCarlo.hpp
-        - [ ] BatchRunner.hpp
+        - [x] BatchRunner.hpp
         - [x] Optimizer.hpp
 
     - [ ] ecs/
@@ -404,9 +404,9 @@ Goal: Hardware acceleration.
 - [x] GPS Fusion (integrated into NavigationSystem)
 
 ## Phase 4
-- [~] Midcourse Guidance (predictive intercept MVP)
+- [x] Midcourse Guidance (explicit PN MVP)
 - [x] Autopilot
-- [~] Terminal Guidance (seeker APN MVP)
+- [x] Terminal Guidance (filtered-rate seeker APN MVP)
 - [x] Seekers (radar/IR MVP)
 
 ## Phase 5

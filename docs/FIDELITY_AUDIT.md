@@ -37,8 +37,8 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 ## Current verification after restart
 
 The restart fixes were completed and re-run on 2026-08-26. The complete CTest
-suite is green: **11/11 tests passed** after adding navigation and environment
-regressions.
+suite is green: **13/13 tests passed** after adding navigation, environment,
+guidance, and scenario regressions.
 
 | Workstream | Current status | Evidence |
 | --- | --- | --- |
@@ -49,13 +49,13 @@ regressions.
 | W5 events/environment | DONE for the environment MVP | Terrain elevation callbacks, wind-relative aerodynamics, and interpolated terrain impacts are covered by `environment_test`; failure models and spherical earth remain |
 | W6 seeker/sensor | DONE for the seeker MVP | FOV cone, gimbal limits, lock hysteresis/dropout, filtered LOS rates, and configurable measurement latency are covered by `seeker_test` |
 | W7 navigation EKF | DONE for the navigation MVP | Full 15-state covariance propagation, coupled GPS corrections into attitude and IMU biases, covariance bounds, and deterministic accelerometer-bias convergence are covered by `navigation_test` |
+| W8 scenario/guidance contract | DONE for the integration MVP | Explicit PN/APN behavior, moving-target response, seeker handoff, scenario configuration propagation, and isolated batch execution are covered by `guidance_test` and `scenario_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
-signs. The direct ProNav LOS-rate calculation was replaced in this MVP by a
-bounded predictive constant-acceleration intercept correction; the public
-guidance mode remains `ProportionalNavigation` for compatibility. This is an
-explicit interim guidance model, not a claim of true PN fidelity.
+signs. W8 now supplies explicit classical PN from relative position/velocity
+and filtered-rate seeker APN behavior; trajectory management and additional
+guidance laws remain future work.
 
 The W5 repair changes ground impact from a status-only notification to a true
 state transition: position is clamped to ground, velocity/acceleration are
@@ -76,6 +76,11 @@ The W5 environment increment adds public terrain and wind callbacks to the
 kernel. Terrain is evaluated at the current and previous positions for local
 ground crossing and clamping; wind is evaluated in the truth derivative and
 subtracted from world velocity before body-frame aerodynamic forces are formed.
+
+The W8 integration increment makes `ScenarioConfig` carry per-vehicle and
+environment configuration, including guidance demand limits, and adds a
+structured `BatchRunner` result API. Guidance math is exposed as stateless PN
+and APN model helpers while the kernel retains seeker-lock handoff behavior.
 
 ---
 

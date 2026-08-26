@@ -35,7 +35,7 @@ This roadmap outlines the complete Data-Oriented Design (SoA) architecture for S
 
 ## Phase 4: Advanced GNC (The Brain)
 **Goal:** Intercept capabilities and autonomy.
-* **Tasks — [~] MVP DONE:** Midcourse Guidance, Autopilot, Terminal Guidance, and Seekers (IR/Radar models). True standalone PN/APN, trajectory management, and additional seeker types remain pending.
+* **Tasks — [x] MVP DONE:** Midcourse Guidance, Autopilot, Terminal Guidance, and Seekers (IR/Radar models). Explicit PN/APN behavior is implemented; trajectory management and additional seeker types remain pending.
 
 ## Phase 5: High-Fidelity Physics & Hardware Acceleration
 **Goal:** Real-world planet models and massive scale.
@@ -43,7 +43,7 @@ This roadmap outlines the complete Data-Oriented Design (SoA) architecture for S
 
 ## Phase 6: Simulation Power Tools (The Lab)
 **Goal:** Research-grade analytical capabilities.
-* **Tasks — [~] PARTIAL:** `ParamSweep`, `MonteCarlo`, `BatchRunner`, and `Optimizer`. `ParamSweep`, `MonteCarlo`, and `Optimizer` are implemented; `BatchRunner` remains pending.
+* **Tasks — [x] MVP DONE:** `ParamSweep`, `MonteCarlo`, `BatchRunner`, and `Optimizer`. Structured batch execution is implemented; richer output writers remain pending.
 
 ### Current validation checkpoint
 

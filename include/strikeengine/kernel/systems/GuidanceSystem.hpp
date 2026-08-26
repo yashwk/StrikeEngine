@@ -22,7 +22,7 @@ namespace StrikeEngine::Kernel {
         );
 
     private:
-        void updatePredictiveIntercept(
+        void updateProportionalNavigation(
             std::size_t id,
             const NavigationBlock& nav,
             GuidanceBlock& guidance
