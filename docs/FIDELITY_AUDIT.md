@@ -46,7 +46,7 @@ suite is green: **9/9 tests passed** in 17.95 s.
 | W3 control authority | DONE for the MVP DoD | `intercept_test` PASS: minimum miss 25.30 m; actuator and post-burnout control path exercised |
 | W4 true RK4/RK45 | DONE for the integrator/event MVP | Derivative callbacks, stage re-evaluation, bounded RK45 adaptation, and interpolated ground-crossing timestamps are covered by `integrator_test` |
 | W5 events/environment | PARTIAL | Ground impacts now clamp, deactivate, and stop entities with interpolated timestamps; terrain and wind remain |
-| W6 seeker/sensor | PARTIAL | FOV cone, gimbal limits, lock hysteresis/dropout, and filtered LOS rates are covered by `seeker_test`; measurement latency remains |
+| W6 seeker/sensor | DONE for the seeker MVP | FOV cone, gimbal limits, lock hysteresis/dropout, filtered LOS rates, and configurable measurement latency are covered by `seeker_test` |
 | W7 navigation EKF | NOT STARTED | Coupled-state corrections and bias convergence remain |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware

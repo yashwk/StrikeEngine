@@ -15,9 +15,9 @@ DoD that was red in the prior checkpoint. The CPU build succeeds and the full
 CTest suite passes **9/9**. The repair covered the autopilot frame/sign chain,
 bounded aerodynamic control authority, predictive intercept guidance,
 ground-impact deactivation, interpolated impact timestamps, and bounded RK45
-adaptation. W6 is now partial (measurement latency remains); W7 remains future
-work. The historical starting state and phase plan below are retained as the
-restart record.
+adaptation, and the W6 seeker MVP (geometry gates, tracking hysteresis, LOS
+rates, and measurement latency). W7 remains future work. The historical
+starting state and phase plan below are retained as the restart record.
 
 ---
 

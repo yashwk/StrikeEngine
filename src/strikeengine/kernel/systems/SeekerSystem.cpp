@@ -13,6 +13,12 @@ namespace StrikeEngine::Kernel {
         return q * v;
     }
 
+    void SeekerSystem::reset()
+    {
+        measurementHistory.clear();
+        historyEntityCount = 0;
+    }
+
     void SeekerSystem::update(
         const PhysicsBlock& physics,
         const EntityStatusBlock& status,
@@ -21,8 +27,17 @@ namespace StrikeEngine::Kernel {
     {
         const std::size_t n = std::min({seeker.size, physics.size, status.size});
         const double stepDt = std::max(0.0, dt);
+        if (historyEntityCount != seeker.size) {
+            measurementHistory.clear();
+            measurementHistory.resize(n);
+            historyEntityCount = seeker.size;
+        } else if (measurementHistory.size() < n) {
+            measurementHistory.resize(n);
+        }
+
         for (std::size_t i = 0; i < n; ++i) {
             if (!physics.active[i] || !status.isAlive[i] || seeker.type[i] == SeekerType::None) {
+                measurementHistory[i].clear();
                 seeker.isLocked[i] = false;
                 seeker.lockLostTimeSec[i] = 0.0;
                 seeker.hasPreviousLos[i] = false;
@@ -33,6 +48,22 @@ namespace StrikeEngine::Kernel {
 
             glm::dvec3 seekerPos(physics.px[i], physics.py[i], physics.pz[i]);
             glm::dvec3 seekerVel(physics.vx[i], physics.vy[i], physics.vz[i]);
+            for (auto& measurement : measurementHistory[i]) measurement.age += stepDt;
+
+            auto publishAvailable = [&]() {
+                auto& history = measurementHistory[i];
+                const double latency = std::max(0.0, seeker.measurementLatencySec[i]);
+                while (!history.empty() && history.front().age + 1e-12 >= latency) {
+                    const DelayedMeasurement measurement = history.front();
+                    history.pop_front();
+                    seeker.targetRange[i] = measurement.range;
+                    seeker.targetRangeRate[i] = measurement.rangeRate;
+                    seeker.targetAzimuth[i] = measurement.azimuth;
+                    seeker.targetElevation[i] = measurement.elevation;
+                    seeker.targetAzimuthRate[i] = measurement.azimuthRate;
+                    seeker.targetElevationRate[i] = measurement.elevationRate;
+                }
+            };
 
             struct Candidate {
                 bool geometryValid = false;
@@ -158,14 +189,14 @@ namespace StrikeEngine::Kernel {
                 }
                 seeker.isLocked[i] = true;
                 seeker.lockedTargetId[i] = target;
-                seeker.targetRange[i] = candidate.range;
-                seeker.targetRangeRate[i] = candidate.rangeRate;
-                seeker.targetAzimuth[i] = candidate.azimuth;
-                seeker.targetElevation[i] = candidate.elevation;
                 seeker.previousAzimuth[i] = candidate.azimuth;
                 seeker.previousElevation[i] = candidate.elevation;
                 seeker.hasPreviousLos[i] = true;
                 seeker.lockLostTimeSec[i] = 0.0;
+                measurementHistory[i].push_back({
+                    target, 0.0, candidate.range, candidate.rangeRate,
+                    candidate.azimuth, candidate.elevation,
+                    seeker.targetAzimuthRate[i], seeker.targetElevationRate[i]});
             };
 
             const bool hadLock = seeker.isLocked[i];
@@ -176,17 +207,22 @@ namespace StrikeEngine::Kernel {
                     const Candidate candidate = evaluateTarget(target);
                     if (candidate.geometryValid && candidate.maintenanceValid) {
                         commitTrack(target, candidate);
+                        publishAvailable();
                         continue;
                     }
                     if (candidate.geometryValid) {
                         seeker.lockLostTimeSec[i] += stepDt;
                         const double dropout = std::max(0.0, seeker.lockDropoutTimeSec[i]);
-                        if (seeker.lockLostTimeSec[i] <= dropout) continue;
+                        if (seeker.lockLostTimeSec[i] <= dropout) {
+                            publishAvailable();
+                            continue;
+                        }
                     }
                 }
             }
 
             seeker.isLocked[i] = false;
+            measurementHistory[i].clear();
             seeker.lockLostTimeSec[i] = 0.0;
             seeker.hasPreviousLos[i] = false;
             seeker.targetAzimuthRate[i] = 0.0;
@@ -202,6 +238,7 @@ namespace StrikeEngine::Kernel {
                     break;
                 }
             }
+            publishAvailable();
         }
     }
 

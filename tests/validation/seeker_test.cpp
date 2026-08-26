@@ -39,6 +39,7 @@ void makeBlocks(PhysicsBlock& physics, EntityStatusBlock& status, SeekerBlock& s
     seeker.gimbalElevationLimitRad = {pi / 3.0, pi / 3.0};
     seeker.lockHysteresisDb = {3.0, 3.0};
     seeker.lockDropoutTimeSec = {0.10, 0.10};
+    seeker.measurementLatencySec = {0.0, 0.0};
     seeker.isLocked = {false, false};
     seeker.lockedTargetId = {0, 0};
     seeker.targetRange = {0.0, 0.0};
@@ -98,6 +99,16 @@ int main()
     system.update(physics, status, seeker, 0.01);
     check(seeker.targetAzimuthRate[0] > 0.0,
           "tracked azimuth produces a positive filtered LOS rate");
+
+    seeker.measurementLatencySec[0] = 0.05;
+    const double publishedAzimuth = seeker.targetAzimuth[0];
+    physics.py[1] = 30.0;
+    system.update(physics, status, seeker, 0.01);
+    check(std::abs(seeker.targetAzimuth[0] - publishedAzimuth) < 1e-12,
+          "configured seeker latency delays the new angle measurement");
+    for (int step = 0; step < 5; ++step) system.update(physics, status, seeker, 0.01);
+    check(seeker.targetAzimuth[0] > 0.0,
+          "delayed seeker measurement becomes available after its latency");
 
     seeker.noiseFloorW[0] = 3.0e-3; // below acquisition SNR, above hold SNR
     system.update(physics, status, seeker, 0.01);

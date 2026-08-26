@@ -55,6 +55,7 @@ namespace StrikeEngine::Kernel {
         sensorBlock = SensorBlock();
         navigationBlock = NavigationBlock();
         seekerBlock = SeekerBlock();
+        seekerSystem.reset();
         freeList.clear();
         time.reset();
     }
@@ -131,6 +132,7 @@ namespace StrikeEngine::Kernel {
             seekerBlock.gimbalElevationLimitRad.push_back(1.0471975512);
             seekerBlock.lockHysteresisDb.push_back(3.0);
             seekerBlock.lockDropoutTimeSec.push_back(0.10);
+            seekerBlock.measurementLatencySec.push_back(0.0);
             seekerBlock.isLocked.push_back(false);
             seekerBlock.lockedTargetId.push_back(0);
             seekerBlock.targetRange.push_back(0);
@@ -186,6 +188,7 @@ namespace StrikeEngine::Kernel {
         seekerBlock.gimbalElevationLimitRad[id] = 1.0471975512;
         seekerBlock.lockHysteresisDb[id] = 3.0;
         seekerBlock.lockDropoutTimeSec[id] = 0.10;
+        seekerBlock.measurementLatencySec[id] = 0.0;
         seekerBlock.isLocked[id] = false;
         seekerBlock.lockedTargetId[id] = 0;
         seekerBlock.targetRange[id] = 0.0;

@@ -35,6 +35,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> gimbalElevationLimitRad;
         std::vector<double> lockHysteresisDb;
         std::vector<double> lockDropoutTimeSec;
+        std::vector<double> measurementLatencySec;
 
         // Output tracking state
         std::vector<bool> isLocked;
