@@ -1,51 +1,59 @@
 ## new roadmap
 
-- [ ] strikeengine/
+> **Status overlay — verified 2026-08-26:** `[x]` means implemented and
+> covered by the current validation suite; `[~]` means an MVP or integrated
+> equivalent exists but the exact standalone structure is not complete; `[ ]`
+> remains pending. The original roadmap text and future items are retained.
+> The active implementation uses `models/` plus `kernel/systems/`; the older
+> `domain/`, `navigation/`, and `seekers/` names below are preserved as design
+> intent rather than literal current paths.
 
-    - [ ] kernel/ (simulation core)
-        - [ ] SimulationKernel.hpp
-        - [ ] SimulationKernel.cpp
+- [x] strikeengine/
 
-        - [ ] config/
-            - [ ] KernelConfig.hpp
-            - [ ] ScenarioConfig.hpp
+    - [x] kernel/ (simulation core)
+        - [x] SimulationKernel.hpp
+        - [x] SimulationKernel.cpp
 
-        - [ ] data/ (Pure SoA state)
-            - [ ] PhysicsBlock.hpp
-            - [ ] ControlBlock.hpp
-            - [ ] GuidanceBlock.hpp
-            - [ ] EntityStatusBlock.hpp
+        - [~] config/
+            - [ ] KernelConfig.hpp (placeholder remains empty)
+            - [x] ScenarioConfig.hpp
 
-        - [ ] systems/ (Internal kernel systems)
-            - [ ] GuidanceSystem.hpp
-            - [ ] EventSystem.hpp
-            - [ ] CommandProcessor.hpp
+        - [x] data/ (Pure SoA state)
+            - [x] PhysicsBlock.hpp
+            - [x] ControlBlock.hpp
+            - [x] GuidanceBlock.hpp
+            - [x] EntityStatusBlock.hpp
 
-        - [ ] backend/ (Physics execution backends)
-            - [ ] PhysicsBackend.hpp
-            - [ ] CPUBackend.hpp
-            - [ ] GPUBackend.hpp (future)
+        - [x] systems/ (Internal kernel systems)
+            - [x] GuidanceSystem.hpp
+            - [x] EventSystem.hpp
+            - [x] CommandProcessor.hpp
 
-        - [ ] integrator/
-            - [ ] Integrator.hpp
-            - [ ] RK4Integrator.hpp
+        - [~] backend/ (Physics execution backends)
+            - [x] PhysicsBackend.hpp
+            - [x] CPUBackend.hpp
+            - [~] GPUBackend.hpp (future; optional Vulkan backend exists under `backend/vulkan/`)
 
-        - [ ] time/
-            - [ ] KernelTime.hpp
+        - [x] integrator/
+            - [x] Integrator.hpp
+            - [x] RK4Integrator.hpp
 
-    - [ ] domain/ (Pure math models)
-        - [ ] atmosphere/
-        - [ ] aerodynamics/
-        - [ ] propulsion/
-        - [ ] guidance/
-        - [ ] radar/ (Later)
-        - [ ] terrain/ (Later)
+        - [x] time/
+            - [x] KernelTime.hpp
 
-    - [ ] simulation/ (Wraps SimulationKernel)
-        - [ ] SingleRun.hpp
-        - [ ] ParamSweep.hpp
-        - [ ] MonteCarlo.hpp
-        - [ ] Optimizer.hpp
+    - [~] domain/ (Pure math models; implemented under `models/`)
+        - [x] atmosphere/
+        - [x] aerodynamics/
+        - [x] propulsion/
+        - [~] guidance/ (implemented in `kernel/systems/GuidanceSystem`)
+        - [~] radar/ (RCS/IR signature databases and seeker MVP exist; standalone radar model pending)
+        - [~] terrain/ (terrain callback MVP exists; DEM/query module pending)
+
+    - [x] simulation/ (Wraps SimulationKernel)
+        - [x] SingleRun.hpp
+        - [x] ParamSweep.hpp
+        - [x] MonteCarlo.hpp
+        - [x] Optimizer.hpp
 
     - [ ] ecs/ (Optional orchestration layer)
         - [ ] Registry.hpp
@@ -57,7 +65,7 @@
     - [ ] io/
     - [ ] tooling/
     - [ ] utils/
-    - [ ] tests/
+    - [x] tests/
 
 [domain math models]
 ↓
@@ -75,157 +83,159 @@
 
 
 
-##  PHASE 1 — Deterministic Single Missile (MVP Core)
+##  PHASE 1 — Deterministic Single Missile (MVP Core) — [x] DONE
 
 Goal: One missile, deterministic physics, CPU only.
 
 ### Build in this order:
 
--  domain/atmosphere (minimal ISA)
+- [x] domain/atmosphere (minimal ISA)
 
--  domain/aerodynamics (basic Cd model)
+- [x] domain/aerodynamics (basic Cd model)
 
--  domain/propulsion (thrust curve)
+- [x] domain/propulsion (thrust curve)
 
--  PhysicsBlock (single entity only)
+- [x] PhysicsBlock (expanded beyond the original single-entity scope)
 
--  KernelTime
+- [x] KernelTime
 
--  RK4Integrator
+- [x] RK4Integrator
 
--  CPUBackend (single entity loop)
+- [x] CPUBackend (multi-entity loop)
 
--  SimulationKernel (minimal orchestration)
+- [x] SimulationKernel (minimal orchestration)
 
--  SingleRun wrapper
+- [x] SingleRun wrapper
 
 
 
 ---
 
-##  PHASE 2 — Multi-Entity SoA Engine
+##  PHASE 2 — Multi-Entity SoA Engine — [x] DONE
 
 Goal: True scalable architecture.
 
 Add:
 
--  Expand PhysicsBlock to arrays
+- [x] Expand PhysicsBlock to arrays
 
--  ControlBlock
+- [x] ControlBlock
 
--  GuidanceBlock
+- [x] GuidanceBlock
 
--  EntityStatusBlock
+- [x] EntityStatusBlock
 
--  GuidanceSystem
+- [x] GuidanceSystem
 
--  EventSystem
+- [x] EventSystem
 
--  CommandProcessor
+- [x] CommandProcessor
 
--  ScenarioConfig
+- [x] ScenarioConfig
 
 
 
 ---
 
-##  PHASE 3 — Simulation Power Tools
+##  PHASE 3 — Simulation Power Tools — [x] DONE
 
 Goal: Research-grade capability.
 
--  ParamSweep
+- [x] ParamSweep
 
--  MonteCarlo
+- [x] MonteCarlo
 
--  Optimizer
+- [x] Optimizer
 
 ---
 
-##  PHASE 4 — Backend Abstraction
+##  PHASE 4 — Backend Abstraction — [~] MVP PARTIAL
 
 Goal: Hardware acceleration.
 
--  PhysicsBackend interface refinement
+- [x] PhysicsBackend interface refinement
 
--  Parallel CPU backend
+- [ ] Parallel CPU backend
 
--  GPUBackend (Vulkan compute or CUDA)
+- [~] GPUBackend (optional Vulkan compute exists; CUDA/general support pending)
 
 ---
 
-##  PHASE 5 — Extended Domains
+##  PHASE 5 — Extended Domains — [~] MVP PARTIAL
 
--  radar/
+- [~] radar/ (signature/seeker MVP exists; standalone radar model pending)
 
--  terrain/
+- [~] terrain/ (terrain callback MVP exists; DEM/query module pending)
 
--  advanced atmosphere
+- [ ] advanced atmosphere
 
--  adaptive RK45
+- [x] adaptive RK45
 
--  symplectic integrator
+- [x] symplectic integrator
 
 
 # A more detailed structure
 
-- [ ] strikeengine/
+> Status is annotated below using the same `[x]` / `[~]` / `[ ]` convention.
 
-    - [ ] kernel/ (Simulation Core)
+- [x] strikeengine/
 
-        - [ ] SimulationKernel.hpp
-        - [ ] SimulationKernel.cpp
+    - [x] kernel/ (Simulation Core)
 
-        - [ ] config/
-            - [ ] KernelConfig.hpp
-            - [ ] ScenarioConfig.hpp
-            - [ ] VehicleConfig.hpp
+        - [x] SimulationKernel.hpp
+        - [x] SimulationKernel.cpp
 
-        - [ ] data/
-            - [ ] PhysicsBlock.hpp
-            - [ ] ControlBlock.hpp
-            - [ ] GuidanceBlock.hpp
-            - [ ] NavigationBlock.hpp
-            - [ ] SensorBlock.hpp
-            - [ ] EntityStatusBlock.hpp
+        - [~] config/
+            - [ ] KernelConfig.hpp (placeholder remains empty)
+            - [x] ScenarioConfig.hpp
+            - [x] VehicleConfig.hpp
 
-        - [ ] systems/
-            - [ ] PhysicsSystem.hpp
-            - [ ] SensorSystem.hpp
-            - [ ] NavigationSystem.hpp
-            - [ ] GuidanceSystem.hpp
-            - [ ] ControlSystem.hpp
-            - [ ] EventSystem.hpp
-            - [ ] CommandProcessor.hpp
+        - [x] data/
+            - [x] PhysicsBlock.hpp
+            - [x] ControlBlock.hpp
+            - [x] GuidanceBlock.hpp
+            - [x] NavigationBlock.hpp
+            - [x] SensorBlock.hpp
+            - [x] EntityStatusBlock.hpp
 
-        - [ ] backend/
-            - [ ] PhysicsBackend.hpp
-            - [ ] CPUBackend.hpp
-            - [ ] GPUBackend.hpp
+        - [~] systems/
+            - [~] PhysicsSystem.hpp (physics execution is in `CPUBackend`)
+            - [x] SensorSystem.hpp
+            - [x] NavigationSystem.hpp
+            - [x] GuidanceSystem.hpp
+            - [~] ControlSystem.hpp (implemented as `AutopilotSystem`)
+            - [x] EventSystem.hpp
+            - [x] CommandProcessor.hpp
 
-        - [ ] integrator/
-            - [ ] Integrator.hpp
-            - [ ] RK4Integrator.hpp
-            - [ ] RK45Integrator.hpp
-            - [ ] EulerIntegrator.hpp
+        - [~] backend/
+            - [x] PhysicsBackend.hpp
+            - [x] CPUBackend.hpp
+            - [~] GPUBackend.hpp (placeholder; optional Vulkan backend exists)
 
-        - [ ] time/
-            - [ ] KernelTime.hpp
+        - [x] integrator/
+            - [x] Integrator.hpp
+            - [x] RK4Integrator.hpp
+            - [x] RK45Integrator.hpp
+            - [x] EulerIntegrator.hpp
 
-    - [ ] domain/ (Pure Mathematical Models)
+        - [x] time/
+            - [x] KernelTime.hpp
 
-        - [ ] atmosphere/
-            - [ ] AtmosphereModel.hpp
-            - [ ] ISA1976.hpp
-            - [ ] AtmosphereState.hpp
+    - [~] domain/ (Pure Mathematical Models; implemented under `models/`)
 
-        - [ ] aerodynamics/
-            - [ ] AeroModel.hpp
+        - [x] atmosphere/
+            - [x] AtmosphereModel.hpp
+            - [x] ISA1976.hpp
+            - [~] AtmosphereState.hpp (state is defined in `AtmosphereModel.hpp`)
+
+        - [~] aerodynamics/
+            - [x] AeroModel.hpp
             - [ ] CoefficientTables.hpp
             - [ ] AeroForces.hpp
 
-        - [ ] propulsion/
-            - [ ] PropulsionModel.hpp
-            - [ ] ThrustCurve.hpp
+        - [~] propulsion/
+            - [x] PropulsionModel.hpp
+            - [x] ThrustCurve.hpp
             - [ ] FuelModel.hpp
 
         - [ ] gravity/
@@ -244,85 +254,85 @@ Goal: Hardware acceleration.
             - [ ] ENU.hpp
             - [ ] Geodetic.hpp
 
-        - [ ] guidance/
-            - [ ] ProNav.hpp
-            - [ ] AugmentedProNav.hpp
+        - [~] guidance/ (MVP logic is in `kernel/systems/GuidanceSystem`)
+            - [~] ProNav.hpp (predictive intercept MVP; true standalone PN pending)
+            - [~] AugmentedProNav.hpp (seeker APN MVP; standalone model pending)
             - [ ] Pursuit.hpp
-            - [ ] WaypointGuidance.hpp
+            - [~] WaypointGuidance.hpp (waypoint mode exists in the kernel)
 
-        - [ ] control/
-            - [ ] PID.hpp
+        - [~] control/
+            - [~] PID.hpp (PD-like autopilot MVP exists; standalone PID pending)
             - [ ] LQR.hpp
             - [ ] MPC.hpp
 
-        - [ ] radar/ (Future)
+        - [~] radar/ (Future; signature/seeker MVP exists)
             - [ ] RadarModel.hpp
             - [ ] DetectionModel.hpp
             - [ ] TrackingModel.hpp
 
-        - [ ] terrain/ (Future)
-            - [ ] TerrainModel.hpp
+        - [~] terrain/ (Future; callback MVP exists)
+            - [~] TerrainModel.hpp (callback equivalent exists)
             - [ ] DEMLoader.hpp
             - [ ] TerrainQuery.hpp
 
-    - [ ] navigation/
+    - [~] navigation/ (integrated into `kernel/systems`)
 
-        - [ ] ins/
-            - [ ] StrapdownINS.hpp
-            - [ ] INSState.hpp
+        - [~] ins/
+            - [x] StrapdownINS.hpp (integrated into `NavigationSystem`)
+            - [~] INSState.hpp (navigation state is in `NavigationBlock`)
 
-        - [ ] filters/
+        - [~] filters/
             - [ ] KalmanFilter.hpp
-            - [ ] ErrorStateEKF.hpp
+            - [x] ErrorStateEKF.hpp (integrated into `NavigationSystem`)
             - [ ] UKF.hpp
-            - [ ] Covariance.hpp
+            - [x] Covariance.hpp (full covariance is stored in `NavigationBlock`)
 
-        - [ ] sensors/
-            - [ ] IMU.hpp
-            - [ ] GPS.hpp
+        - [~] sensors/
+            - [x] IMU.hpp (integrated into `SensorSystem`)
+            - [x] GPS.hpp (integrated into `SensorSystem`)
             - [ ] Magnetometer.hpp
             - [ ] Barometer.hpp
             - [ ] RadarAltimeter.hpp
-            - [ ] SensorNoise.hpp
+            - [~] SensorNoise.hpp (noise configuration is in `SensorBlock`)
 
         - [ ] fusion/
             - [ ] SensorFusion.hpp
 
-    - [ ] guidance/
+    - [~] guidance/
 
         - [ ] midcourse/
             - [ ] TrajectoryManager.hpp
             - [ ] WaypointManager.hpp
             - [ ] EnergyManager.hpp
 
-        - [ ] terminal/
-            - [ ] TerminalGuidance.hpp
-            - [ ] TargetTracker.hpp
+        - [~] terminal/
+            - [~] TerminalGuidance.hpp (seeker APN MVP exists)
+            - [~] TargetTracker.hpp (seeker lock/tracking MVP exists)
             - [ ] SeekerManager.hpp
 
-        - [ ] autopilot/
-            - [ ] AttitudeController.hpp
-            - [ ] FlightController.hpp
-            - [ ] ActuatorMixer.hpp
+        - [~] autopilot/
+            - [~] AttitudeController.hpp (integrated into `AutopilotSystem`)
+            - [~] FlightController.hpp (integrated into `AutopilotSystem`)
+            - [~] ActuatorMixer.hpp (integrated into the autopilot/actuator path)
 
-    - [ ] seekers/
+    - [~] seekers/ (MVP implemented in `kernel/systems/SeekerSystem`)
 
-        - [ ] radar/
-            - [ ] ActiveRadarSeeker.hpp
+        - [~] radar/
+            - [~] ActiveRadarSeeker.hpp
             - [ ] SemiActiveRadarSeeker.hpp
 
-        - [ ] infrared/
-            - [ ] IRSeeker.hpp
+        - [~] infrared/
+            - [~] IRSeeker.hpp
 
         - [ ] optical/
             - [ ] EOSeeker.hpp
 
-    - [ ] simulation/
-        - [ ] SingleRun.hpp
-        - [ ] ParamSweep.hpp
-        - [ ] MonteCarlo.hpp
+    - [~] simulation/
+        - [x] SingleRun.hpp
+        - [x] ParamSweep.hpp
+        - [x] MonteCarlo.hpp
         - [ ] BatchRunner.hpp
-        - [ ] Optimizer.hpp
+        - [x] Optimizer.hpp
 
     - [ ] ecs/
 
@@ -366,47 +376,47 @@ Goal: Hardware acceleration.
         - [ ] validation/
 
 
-# MVP implementation order
+# MVP implementation order (status overlay)
 
-- [ ] PhysicsBlock
-- [ ] KernelTime
-- [ ] Integrator Interface
-- [ ] RK4Integrator
-- [ ] AtmosphereModel
-- [ ] PropulsionModel
-- [ ] AeroModel
-- [ ] CPUBackend
-- [ ] SimulationKernel
-- [ ] SingleRun
-- [ ] Validation Tests
+- [x] PhysicsBlock
+- [x] KernelTime
+- [x] Integrator Interface
+- [x] RK4Integrator
+- [x] AtmosphereModel
+- [x] PropulsionModel
+- [x] AeroModel
+- [x] CPUBackend
+- [x] SimulationKernel
+- [x] SingleRun
+- [x] Validation Tests
 
 ## Phase 2
-- [ ] Multi-entity SoA support
-- [ ] GuidanceBlock
-- [ ] ControlBlock
-- [ ] GuidanceSystem
-- [ ] EventSystem
+- [x] Multi-entity SoA support
+- [x] GuidanceBlock
+- [x] ControlBlock
+- [x] GuidanceSystem
+- [x] EventSystem
 
 ## Phase 3
-- [ ] StrapdownINS
-- [ ] IMU Sensor Model
-- [ ] ErrorStateEKF
-- [ ] GPS Fusion
+- [x] StrapdownINS (integrated into NavigationSystem)
+- [x] IMU Sensor Model (integrated into SensorSystem)
+- [x] ErrorStateEKF (integrated into NavigationSystem)
+- [x] GPS Fusion (integrated into NavigationSystem)
 
 ## Phase 4
-- [ ] Midcourse Guidance
-- [ ] Autopilot
-- [ ] Terminal Guidance
-- [ ] Seekers
+- [~] Midcourse Guidance (predictive intercept MVP)
+- [x] Autopilot
+- [~] Terminal Guidance (seeker APN MVP)
+- [x] Seekers (radar/IR MVP)
 
 ## Phase 5
-- [ ] MonteCarlo
-- [ ] ParamSweep
-- [ ] Optimizer
+- [x] MonteCarlo
+- [x] ParamSweep
+- [x] Optimizer
 
 ## Phase 6
 - [ ] ECEF
 - [ ] WGS84 Gravity
 - [ ] Earth Rotation
 - [ ] Coriolis Effects
-- [ ] GPU Backend
+- [~] GPU Backend (optional Vulkan implementation exists; broader backend support pending)
