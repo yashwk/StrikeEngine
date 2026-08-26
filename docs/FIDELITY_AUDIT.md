@@ -54,6 +54,7 @@ earth, guidance, and scenario regressions.
 | W10 earth frames/acceleration | DONE for the local-earth MVP | Standalone ECEF/ENU/NED transforms, ENU/NED axis conversion, centrifugal acceleration, and CPU integration are covered by `earth_frames_test` |
 | W11 earth transport | DONE for the local moving-origin MVP | WGS84 curvature radii, local ENU-to-geodetic resolution, transport-rate acceleration, and CPU integration are covered by `earth_transport_test` |
 | W12 spherical gravity | DONE for the opt-in local-earth MVP | Radial ECEF point-mass gravity, local ENU projection, and CPU integration are covered by `spherical_gravity_test` |
+| W13 global ECEF propagator | DONE for the standalone model MVP | Rotating-Earth ECEF gravity/Coriolis/centrifugal equations, configurable terms, and deterministic RK4 propagation are covered by `earth_fixed_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -111,6 +112,12 @@ projected into local ENU coordinates at each vehicle position before it is
 applied to the CPU truth model. If both gravity options are requested,
 WGS84 normal gravity remains the selected model; the default flat-earth model
 is unchanged when neither option is enabled.
+
+The W13 increment adds a standalone rotating-Earth ECEF state propagator. It
+evaluates gravity, Coriolis, centrifugal, and caller-supplied ECEF force terms
+with configurable inclusion flags and integrates position/velocity using fixed
+substep RK4. The existing kernel remains local ENU/flat-earth by default; a
+kernel-wide ECEF state migration and global terrain/event coupling remain open.
 
 ---
 
