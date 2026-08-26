@@ -12,11 +12,11 @@ nothing is deleted before it exists in git history.**
 
 The interrupted engine-fidelity repair was resumed and completed for the W3/W5
 DoD that was red in the prior checkpoint. The CPU build succeeds and the full
-CTest suite passes **7/7**. The repair covered the autopilot frame/sign chain,
-bounded aerodynamic control authority, predictive intercept guidance, and
-ground-impact deactivation. W4 remains partial (impact interpolation and full
-adaptive policies), while W6/W7 remain future work. The historical starting
-state and phase plan below are retained as the restart record.
+CTest suite passes **8/8**. The repair covered the autopilot frame/sign chain,
+bounded aerodynamic control authority, predictive intercept guidance,
+ground-impact deactivation, interpolated impact timestamps, and bounded RK45
+adaptation. W6/W7 remain future work. The historical starting state and phase
+plan below are retained as the restart record.
 
 ---
 

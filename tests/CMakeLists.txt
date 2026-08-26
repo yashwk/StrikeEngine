@@ -20,6 +20,9 @@ target_link_libraries(vehicleconfig_test PRIVATE strikeengine)
 add_executable(intercept_test validation/intercept_test.cpp)
 target_link_libraries(intercept_test PRIVATE strikeengine)
 
+add_executable(integrator_test validation/integrator_test.cpp)
+target_link_libraries(integrator_test PRIVATE strikeengine)
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -42,5 +45,8 @@ set_tests_properties(vehicleconfig PROPERTIES TIMEOUT 120)
 
 add_test(NAME intercept COMMAND intercept_test)
 set_tests_properties(intercept PROPERTIES TIMEOUT 120)
+
+add_test(NAME integrator COMMAND integrator_test)
+set_tests_properties(integrator PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")

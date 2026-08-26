@@ -18,7 +18,13 @@ namespace StrikeEngine::Kernel
 			double t,
 			double dt) override;
 		bool isAdaptive() const override { return true; }
+
+		// Diagnostics for validation and runtime telemetry.
+		std::size_t acceptedSteps() const { return acceptedStepCount; }
+		std::size_t rejectedSteps() const { return rejectedStepCount; }
 	private:
 		double tolerance;
+		std::size_t acceptedStepCount = 0;
+		std::size_t rejectedStepCount = 0;
 	};
 } // namespace StrikeEngine::Kernel

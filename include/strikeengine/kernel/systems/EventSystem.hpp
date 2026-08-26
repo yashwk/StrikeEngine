@@ -34,6 +34,16 @@ namespace StrikeEngine::Kernel {
             double currentTime
         );
 
+        // Evaluates events using the previous step's ground heights so a
+        // crossing event can be timestamped within the step.
+        void evaluate(
+            PhysicsBlock& physics,
+            EntityStatusBlock& status,
+            double currentTime,
+            double dt,
+            const std::vector<double>& previousPz
+        );
+
         // Dispatches an event directly
         void dispatch(const SimulationEvent& evt);
 

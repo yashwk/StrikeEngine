@@ -187,6 +187,7 @@ namespace StrikeEngine::Kernel {
     }
 
     void SimulationKernel::step(double dt) {
+        const std::vector<double> previousPz = physicsBlock.pz;
         time.advance(dt);
         commandProcessor.process(guidanceBlock);
         
@@ -209,7 +210,8 @@ namespace StrikeEngine::Kernel {
         autopilotSystem.update(statusBlock, navigationBlock, sensorBlock, guidanceBlock, controlBlock, dt);
         
         // 5. Evaluate truth events (impacts)
-        eventSystem.evaluate(physicsBlock, statusBlock, time.currentTime());
+        eventSystem.evaluate(
+            physicsBlock, statusBlock, time.currentTime(), dt, previousPz);
         eventSystem.processQueue();
     }
 

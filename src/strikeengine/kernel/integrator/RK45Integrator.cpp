@@ -59,6 +59,9 @@ double RK45Integrator::integrate(
     double remaining = dt;
     double h = dt;
 
+    acceptedStepCount = 0;
+    rejectedStepCount = 0;
+
     PhysicsBlock k1 = state;
     PhysicsBlock k2 = state;
     PhysicsBlock k3 = state;
@@ -133,17 +136,24 @@ double RK45Integrator::integrate(
                 acc4.finRoll[i]  = b41 * k1.finRoll[i] + b43 * k3.finRoll[i] + b44 * k4.finRoll[i] + b45 * k5.finRoll[i];
                 acc5.finRoll[i]  = b51 * k1.finRoll[i] + b53 * k3.finRoll[i] + b54 * k4.finRoll[i] + b55 * k5.finRoll[i] + b56 * k6.finRoll[i];
 
-                // Error estimate: |h*(y4 - y5)| relative to component scale
+                // Error estimate: |h*(y4 - y5)| relative to each component's
+                // state scale. Include every integrated state group so the
+                // controller cannot accept a step that is accurate in
+                // translation but poor in attitude or actuator dynamics.
                 const double scale = 1.0 + std::abs(state.px[i]);
                 errMax = std::max(errMax, std::abs(h * (acc4.px[i] - acc5.px[i])) / scale);
-                errMax = std::max(errMax, std::abs(h * (acc4.py[i] - acc5.py[i])) / scale);
-                errMax = std::max(errMax, std::abs(h * (acc4.pz[i] - acc5.pz[i])) / scale);
+                errMax = std::max(errMax, std::abs(h * (acc4.py[i] - acc5.py[i])) / (1.0 + std::abs(state.py[i])));
+                errMax = std::max(errMax, std::abs(h * (acc4.pz[i] - acc5.pz[i])) / (1.0 + std::abs(state.pz[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.vx[i] - acc5.vx[i])) / (1.0 + std::abs(state.vx[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.vy[i] - acc5.vy[i])) / (1.0 + std::abs(state.vy[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.vz[i] - acc5.vz[i])) / (1.0 + std::abs(state.vz[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.wx[i] - acc5.wx[i])) / (1.0 + std::abs(state.wx[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.wy[i] - acc5.wy[i])) / (1.0 + std::abs(state.wy[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.wz[i] - acc5.wz[i])) / (1.0 + std::abs(state.wz[i])));
+                errMax = std::max(errMax, std::abs(h * (acc4.qw[i] - acc5.qw[i])) / (1.0 + std::abs(state.qw[i])));
+                errMax = std::max(errMax, std::abs(h * (acc4.qx[i] - acc5.qx[i])) / (1.0 + std::abs(state.qx[i])));
+                errMax = std::max(errMax, std::abs(h * (acc4.qy[i] - acc5.qy[i])) / (1.0 + std::abs(state.qy[i])));
+                errMax = std::max(errMax, std::abs(h * (acc4.qz[i] - acc5.qz[i])) / (1.0 + std::abs(state.qz[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.mass[i] - acc5.mass[i])) / (1.0 + std::abs(state.mass[i])));
                 errMax = std::max(errMax, std::abs(h * (acc4.finPitch[i] - acc5.finPitch[i])) / (1.0 + 0.43));
                 errMax = std::max(errMax, std::abs(h * (acc4.finYaw[i] - acc5.finYaw[i])) / (1.0 + 0.43));
@@ -153,10 +163,12 @@ double RK45Integrator::integrate(
             if (errMax <= tolerance || h <= 1e-6)
             {
                 accepted = true;
+                ++acceptedStepCount;
             }
             else
             {
-                h *= 0.5;
+                h = std::max(1e-6, h * 0.5);
+                ++rejectedStepCount;
                 ++attempts;
             }
         }
@@ -170,7 +182,10 @@ double RK45Integrator::integrate(
         if (errMax > 0.0)
         {
             const double factor = 0.9 * std::pow(tolerance / errMax, 0.2);
-            h = std::clamp(h * factor, 1e-6, dt);
+            // Keep adaptation conservative: a bad stage is shrunk quickly,
+            // while a smooth region grows by at most 4x per accepted step.
+            h = std::clamp(h * factor, 1e-6, std::max(1e-6, 4.0 * h));
+            h = std::min(h, dt);
         }
     }
 
