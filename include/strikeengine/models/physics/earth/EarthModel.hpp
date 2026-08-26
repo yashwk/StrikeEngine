@@ -32,6 +32,8 @@ namespace StrikeEngine::Models {
         inline constexpr double eccentricitySquared =
             flattening * (2.0 - flattening);
         inline constexpr double earthRotationRateRadPerSec = 7.2921150e-5;
+        inline constexpr double standardGravitationalParameterM3PerSec2 =
+            3.986004418e14;
 
         inline double primeVerticalRadiusM(double latitudeRad)
         {
@@ -135,6 +137,31 @@ namespace StrikeEngine::Models {
         }
 
         /**
+         * @brief Point-mass gravity magnitude at an ECEF radius.
+         */
+        inline double sphericalGravityMagnitude(double radiusM)
+        {
+            if (radiusM <= 0.0) return 0.0;
+            return standardGravitationalParameterM3PerSec2 /
+                (radiusM * radiusM);
+        }
+
+        /**
+         * @brief Point-mass gravity vector in ECEF, directed toward Earth's
+         * center.
+         */
+        inline EcefCoordinate sphericalGravityAccelerationEcef(
+            const EcefCoordinate& position)
+        {
+            const double radius = std::hypot(
+                std::hypot(position.x, position.y), position.z);
+            if (radius <= 0.0) return {};
+            const double scale = -standardGravitationalParameterM3PerSec2 /
+                (radius * radius * radius);
+            return {scale * position.x, scale * position.y, scale * position.z};
+        }
+
+        /**
          * @brief Coriolis acceleration in a local ENU frame.
          *
          * The local world convention is X=east, Y=north, Z=up. The returned
@@ -203,6 +230,8 @@ namespace StrikeEngine::Models {
     using EarthModel::localCoriolisAcceleration;
     using EarthModel::localTransportAcceleration;
     using EarthModel::localTransportRateEnu;
+    using EarthModel::sphericalGravityAccelerationEcef;
+    using EarthModel::sphericalGravityMagnitude;
     using EarthModel::normalGravity;
 
 } // namespace StrikeEngine::Models

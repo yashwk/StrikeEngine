@@ -240,7 +240,7 @@ Goal: Hardware acceleration.
 
         - [~] gravity/ (WGS84 normal gravity is integrated in EarthModel)
             - [~] GravityModel.hpp (normal-gravity API exists in EarthModel.hpp)
-            - [ ] SphericalGravity.hpp
+            - [x] SphericalGravity.hpp (point-mass gravity is implemented in EarthModel.hpp)
             - [~] WGS84Gravity.hpp (normal gravity is implemented in EarthModel.hpp)
 
         - [~] earth/ (opt-in local-earth MVP)
@@ -416,7 +416,7 @@ Goal: Hardware acceleration.
 
 ## Phase 6
 - [x] ECEF (WGS84 conversion and local frame transforms)
-- [x] WGS84 Gravity (opt-in normal gravity)
+- [x] WGS84 Gravity (opt-in normal gravity and spherical point-mass option)
 - [~] Earth Rotation (rotation-rate, centrifugal, and local transport foundation)
 - [x] Coriolis Effects (opt-in local ENU acceleration)
 - [~] GPU Backend (optional Vulkan implementation exists; broader backend support pending)

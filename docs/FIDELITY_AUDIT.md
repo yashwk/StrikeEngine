@@ -53,6 +53,7 @@ earth, guidance, and scenario regressions.
 | W9 earth model | DONE for the opt-in local-earth MVP | WGS84 geodetic/ECEF conversion, latitude/altitude-dependent normal gravity, and local ENU Coriolis acceleration are covered by `earth_test` |
 | W10 earth frames/acceleration | DONE for the local-earth MVP | Standalone ECEF/ENU/NED transforms, ENU/NED axis conversion, centrifugal acceleration, and CPU integration are covered by `earth_frames_test` |
 | W11 earth transport | DONE for the local moving-origin MVP | WGS84 curvature radii, local ENU-to-geodetic resolution, transport-rate acceleration, and CPU integration are covered by `earth_transport_test` |
+| W12 spherical gravity | DONE for the opt-in local-earth MVP | Radial ECEF point-mass gravity, local ENU projection, and CPU integration are covered by `spherical_gravity_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -104,13 +105,20 @@ resolved against the configured geodetic reference before the transport
 acceleration is evaluated. A global ECEF state propagator and full rotating
 earth frame state remain future work.
 
+The W12 increment adds a separate opt-in spherical point-mass gravity model
+using the WGS84 standard gravitational parameter. The ECEF radial vector is
+projected into local ENU coordinates at each vehicle position before it is
+applied to the CPU truth model. If both gravity options are requested,
+WGS84 normal gravity remains the selected model; the default flat-earth model
+is unchanged when neither option is enabled.
+
 ---
 
 ## 1. Truth dynamics — translational
 
 | Aspect | State | Fidelity |
 | ------ | ----- | -------- |
-| Gravity | Flat-earth constant by default; opt-in WGS84 normal gravity with altitude correction and centrifugal term | GOOD for the local-earth MVP; spherical gravity and full earth-fixed transport coupling remain pending |
+| Gravity | Flat-earth constant by default; opt-in WGS84 normal gravity or spherical ECEF point-mass gravity, with optional centrifugal term | GOOD for the local-earth MVP; full earth-fixed state coupling remains pending |
 | Drag | `CD = 0.3` constant, `S = 0.1 m²` hardcoded, force along velocity only | LOW |
 | Lift | **`CL = 0.0`** in MVP kernel config — zero aerodynamic lift | **CRITICAL GAP** |
 | Atmosphere | ISA1976 layered (T/P/ρ/a), clamped to 86 km | GOOD |

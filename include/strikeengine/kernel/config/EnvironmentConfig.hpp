@@ -14,6 +14,7 @@ namespace StrikeEngine::Kernel {
      */
     struct EarthEnvironmentConfig {
         bool useWgs84Gravity = false;
+        bool useSphericalGravity = false;
         bool includeCoriolis = false;
         bool includeCentrifugal = false;
         bool includeTransportRate = false;

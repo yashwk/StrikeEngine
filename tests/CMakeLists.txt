@@ -43,6 +43,9 @@ target_link_libraries(earth_frames_test PRIVATE strikeengine)
 add_executable(earth_transport_test validation/earth_transport_test.cpp)
 target_link_libraries(earth_transport_test PRIVATE strikeengine)
 
+add_executable(spherical_gravity_test validation/spherical_gravity_test.cpp)
+target_link_libraries(spherical_gravity_test PRIVATE strikeengine)
+
 add_executable(guidance_test validation/guidance_test.cpp)
 target_link_libraries(guidance_test PRIVATE strikeengine)
 
@@ -92,6 +95,9 @@ set_tests_properties(earth_frames PROPERTIES TIMEOUT 120)
 
 add_test(NAME earth_transport COMMAND earth_transport_test)
 set_tests_properties(earth_transport PROPERTIES TIMEOUT 120)
+
+add_test(NAME spherical_gravity COMMAND spherical_gravity_test)
+set_tests_properties(spherical_gravity PROPERTIES TIMEOUT 120)
 
 add_test(NAME guidance COMMAND guidance_test)
 set_tests_properties(guidance PROPERTIES TIMEOUT 120)

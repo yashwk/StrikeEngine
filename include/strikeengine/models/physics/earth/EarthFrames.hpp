@@ -138,6 +138,19 @@ namespace StrikeEngine::Models {
                 centrifugalEcef);
         }
 
+        /**
+         * @brief Point-mass gravity expressed in the local ENU frame.
+         */
+        inline Vector3 localSphericalGravityAcceleration(
+            const GeodeticCoordinate& position)
+        {
+            const auto gravityEcef = toVector(
+                sphericalGravityAccelerationEcef(geodeticToEcef(position)));
+            return multiply(
+                ecefToEnuRotation(position.latitudeRad, position.longitudeRad),
+                gravityEcef);
+        }
+
     } // namespace EarthFrames
 
 } // namespace StrikeEngine::Models

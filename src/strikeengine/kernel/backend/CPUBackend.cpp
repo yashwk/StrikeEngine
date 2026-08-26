@@ -155,10 +155,20 @@ namespace StrikeEngine::Kernel
             double afx, afy, afz;
             quatRotateToWorld(s.qw[i], s.qx[i], s.qy[i], s.qz[i], fbx, fby, fbz, afx, afy, afz);
 
-            const double gravity = environment.earth.useWgs84Gravity
-                ? -Models::normalGravity(
-                    environment.earth.referenceLatitudeRad, altitude)
-                : -9.80665;
+            std::array<double, 3> gravity{0.0, 0.0, -9.80665};
+            if (environment.earth.useWgs84Gravity) {
+                gravity[2] = -Models::normalGravity(
+                    environment.earth.referenceLatitudeRad, altitude);
+            } else if (environment.earth.useSphericalGravity) {
+                const Models::GeodeticCoordinate reference{
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad,
+                    0.0};
+                const auto position = Models::EarthFrames::enuToGeodetic(
+                    {s.px[i], s.py[i], s.pz[i]}, reference);
+                gravity = Models::EarthFrames::localSphericalGravityAcceleration(
+                    position);
+            }
             std::array<double, 3> coriolis{0.0, 0.0, 0.0};
             if (environment.earth.includeCoriolis) {
                 coriolis = Models::localCoriolisAcceleration(
@@ -188,9 +198,9 @@ namespace StrikeEngine::Kernel
                 coriolis[2] += transport[2];
             }
 
-            const double axWorld = afx * invMass + coriolis[0];
-            const double ayWorld = afy * invMass + coriolis[1];
-            const double azWorld = afz * invMass + gravity + coriolis[2];
+            const double axWorld = afx * invMass + gravity[0] + coriolis[0];
+            const double ayWorld = afy * invMass + gravity[1] + coriolis[1];
+            const double azWorld = afz * invMass + gravity[2] + coriolis[2];
 
             d.vx[i] = axWorld;
             d.vy[i] = ayWorld;
