@@ -238,21 +238,21 @@ Goal: Hardware acceleration.
             - [x] ThrustCurve.hpp
             - [ ] FuelModel.hpp
 
-        - [ ] gravity/
-            - [ ] GravityModel.hpp
+        - [~] gravity/ (WGS84 normal gravity is integrated in EarthModel)
+            - [~] GravityModel.hpp (normal-gravity API exists in EarthModel.hpp)
             - [ ] SphericalGravity.hpp
-            - [ ] WGS84Gravity.hpp
+            - [~] WGS84Gravity.hpp (normal gravity is implemented in EarthModel.hpp)
 
-        - [ ] earth/
-            - [ ] EarthRotation.hpp
-            - [ ] Coriolis.hpp
-            - [ ] WGS84.hpp
+        - [~] earth/ (opt-in local-earth MVP)
+            - [~] EarthRotation.hpp (rotation rate used by Coriolis helper)
+            - [x] Coriolis.hpp (local ENU helper is implemented in EarthModel.hpp)
+            - [~] WGS84.hpp (constants and geodetic/ECEF conversion are in EarthModel.hpp)
 
-        - [ ] frames/
-            - [ ] ECEF.hpp
+        - [~] frames/ (conversion foundation is integrated in EarthModel)
+            - [~] ECEF.hpp (ECEF coordinate and conversion API exists in EarthModel.hpp)
             - [ ] NED.hpp
             - [ ] ENU.hpp
-            - [ ] Geodetic.hpp
+            - [~] Geodetic.hpp (geodetic coordinate and conversion API exists in EarthModel.hpp)
 
         - [~] guidance/ (MVP logic is in `kernel/systems/GuidanceSystem`)
             - [~] ProNav.hpp (explicit PN MVP; standalone model is in `models/guidance`)
@@ -415,8 +415,8 @@ Goal: Hardware acceleration.
 - [x] Optimizer
 
 ## Phase 6
-- [ ] ECEF
-- [ ] WGS84 Gravity
-- [ ] Earth Rotation
-- [ ] Coriolis Effects
+- [~] ECEF (WGS84 conversion MVP)
+- [x] WGS84 Gravity (opt-in normal gravity)
+- [~] Earth Rotation (rotation-rate foundation)
+- [x] Coriolis Effects (opt-in local ENU acceleration)
 - [~] GPU Backend (optional Vulkan implementation exists; broader backend support pending)

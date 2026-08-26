@@ -39,7 +39,7 @@ This roadmap outlines the complete Data-Oriented Design (SoA) architecture for S
 
 ## Phase 5: High-Fidelity Physics & Hardware Acceleration
 **Goal:** Real-world planet models and massive scale.
-* **Tasks — [~] PARTIAL:** WGS84 Gravity, Earth Rotation, Coriolis effects, Adaptive `RK45Integrator`, and the `GPUBackend` (Vulkan/CUDA). Adaptive RK45 and an optional Vulkan backend are implemented; WGS84/earth effects and CUDA remain pending.
+* **Tasks — [~] PARTIAL:** WGS84 Gravity, Earth Rotation, Coriolis effects, Adaptive `RK45Integrator`, and the `GPUBackend` (Vulkan/CUDA). Adaptive RK45, an optional Vulkan backend, WGS84 normal gravity, and local Coriolis effects are implemented; full earth-fixed frames/transport, centrifugal terms, and CUDA remain pending.
 
 ## Phase 6: Simulation Power Tools (The Lab)
 **Goal:** Research-grade analytical capabilities.
@@ -47,8 +47,9 @@ This roadmap outlines the complete Data-Oriented Design (SoA) architecture for S
 
 ### Current validation checkpoint
 
-The current engine checkpoint has **11/11 CTest tests passing**. W1–W7 MVP
+The current engine checkpoint has **14/14 CTest tests passing**. W1–W9 MVP
 fidelity work is recorded in `docs/FIDELITY_AUDIT.md`; terrain/wind MVP support
-is included in W5. Remaining roadmap items are the high-fidelity earth/frame
-models, expanded sensors/seekers/controllers, structured I/O/tooling, failure
-models, and a generalized GPU backend.
+is included in W5 and opt-in WGS84/local-earth effects in W9. Remaining
+roadmap items are full earth-fixed frame/transport models, expanded
+sensors/seekers/controllers, structured I/O/tooling, failure models, and a
+generalized GPU backend.

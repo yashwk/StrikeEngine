@@ -37,8 +37,8 @@ Per-subsystem: what is modeled, what is crude, what is missing. Evidence in
 ## Current verification after restart
 
 The restart fixes were completed and re-run on 2026-08-26. The complete CTest
-suite is green: **13/13 tests passed** after adding navigation, environment,
-guidance, and scenario regressions.
+suite is green: **14/14 tests passed** after adding navigation, environment,
+earth, guidance, and scenario regressions.
 
 | Workstream | Current status | Evidence |
 | --- | --- | --- |
@@ -50,6 +50,7 @@ guidance, and scenario regressions.
 | W6 seeker/sensor | DONE for the seeker MVP | FOV cone, gimbal limits, lock hysteresis/dropout, filtered LOS rates, and configurable measurement latency are covered by `seeker_test` |
 | W7 navigation EKF | DONE for the navigation MVP | Full 15-state covariance propagation, coupled GPS corrections into attitude and IMU biases, covariance bounds, and deterministic accelerometer-bias convergence are covered by `navigation_test` |
 | W8 scenario/guidance contract | DONE for the integration MVP | Explicit PN/APN behavior, moving-target response, seeker handoff, scenario configuration propagation, and isolated batch execution are covered by `guidance_test` and `scenario_test` |
+| W9 earth model | DONE for the opt-in local-earth MVP | WGS84 geodetic/ECEF conversion, latitude/altitude-dependent normal gravity, and local ENU Coriolis acceleration are covered by `earth_test` |
 
 The W3 repair uses a bounded acceleration-command autopilot with gravity-aware
 specific-force conversion, body-rate/AoA damping, and corrected yaw-fin force
@@ -82,13 +83,20 @@ environment configuration, including guidance demand limits, and adds a
 structured `BatchRunner` result API. Guidance math is exposed as stateless PN
 and APN model helpers while the kernel retains seeker-lock handoff behavior.
 
+The W9 earth increment adds an opt-in `EnvironmentConfig::earth` block. It
+provides WGS84 geodetic/ECEF conversion helpers, Somigliana normal gravity with
+altitude correction, and local ENU Coriolis acceleration in the CPU truth
+backend. The legacy flat-earth gravity and no-Coriolis behavior remain the
+default; full earth-fixed transport/centrifugal dynamics and standalone frame
+modules remain future work.
+
 ---
 
 ## 1. Truth dynamics — translational
 
 | Aspect | State | Fidelity |
 | ------ | ----- | -------- |
-| Gravity | Flat-earth constant `-9.80665` | MID (fine for short-range MVP; no earth rotation/Coriolis, no altitude dependence) |
+| Gravity | Flat-earth constant by default; opt-in WGS84 normal gravity with altitude correction | GOOD for the local-earth MVP; full earth-fixed gravity/frame coupling remains pending |
 | Drag | `CD = 0.3` constant, `S = 0.1 m²` hardcoded, force along velocity only | LOW |
 | Lift | **`CL = 0.0`** in MVP kernel config — zero aerodynamic lift | **CRITICAL GAP** |
 | Atmosphere | ISA1976 layered (T/P/ρ/a), clamped to 86 km | GOOD |

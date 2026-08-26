@@ -6,6 +6,19 @@
 namespace StrikeEngine::Kernel {
 
     /**
+     * @brief Optional local-earth corrections for the truth model.
+     *
+     * When enabled, the existing local world axes are interpreted as ENU
+     * (east, north, up) for Coriolis. The default remains the legacy
+     * flat-earth constant-gravity model.
+     */
+    struct EarthEnvironmentConfig {
+        bool useWgs84Gravity = false;
+        bool includeCoriolis = false;
+        double referenceLatitudeRad = 0.0;
+    };
+
+    /**
      * @brief Flat-earth environment hooks used by the CPU truth model.
      *
      * Terrain elevation is expressed in world metres above the reference
@@ -15,6 +28,8 @@ namespace StrikeEngine::Kernel {
      * environment.
      */
     struct EnvironmentConfig {
+        EarthEnvironmentConfig earth{};
+
         std::function<double(double x, double y)> terrainElevation =
             [](double, double) { return 0.0; };
 

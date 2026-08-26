@@ -2,6 +2,8 @@
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
 #include <strikeengine/kernel/data/ControlBlock.hpp>
 #include <strikeengine/kernel/math/Quaternion.hpp>
+#include <strikeengine/models/physics/earth/EarthModel.hpp>
+#include <array>
 #include <cmath>
 
 namespace StrikeEngine::Kernel
@@ -77,7 +79,6 @@ namespace StrikeEngine::Kernel
         PhysicsBlock& d)
     {
         const std::size_t n = s.size;
-        constexpr double gravity = -9.80665; // flat-earth gravity, world Z up
         constexpr double servoTimeConstant = 0.02; // first-order actuator lag (s)
 
         for (std::size_t i = 0; i < n; ++i)
@@ -153,9 +154,20 @@ namespace StrikeEngine::Kernel
             double afx, afy, afz;
             quatRotateToWorld(s.qw[i], s.qx[i], s.qy[i], s.qz[i], fbx, fby, fbz, afx, afy, afz);
 
-            const double axWorld = afx * invMass;
-            const double ayWorld = afy * invMass;
-            const double azWorld = afz * invMass + gravity;
+            const double gravity = environment.earth.useWgs84Gravity
+                ? -Models::normalGravity(
+                    environment.earth.referenceLatitudeRad, altitude)
+                : -9.80665;
+            std::array<double, 3> coriolis{0.0, 0.0, 0.0};
+            if (environment.earth.includeCoriolis) {
+                coriolis = Models::localCoriolisAcceleration(
+                    environment.earth.referenceLatitudeRad,
+                    {s.vx[i], s.vy[i], s.vz[i]});
+            }
+
+            const double axWorld = afx * invMass + coriolis[0];
+            const double ayWorld = afy * invMass + coriolis[1];
+            const double azWorld = afz * invMass + gravity + coriolis[2];
 
             d.vx[i] = axWorld;
             d.vy[i] = ayWorld;
