@@ -1,16 +1,29 @@
 #include <strikeengine/simulation/SingleRun.hpp>
+#include <strikeengine/simulation/Reporting.hpp>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
-#include <cmath>
+#include <algorithm>
 
 namespace StrikeEngine::Simulation {
 
     SingleRun::SingleRun(double timeStep_s, double maxTime_s) 
         : dt(timeStep_s), maxTime(maxTime_s) {}
 
-    void SingleRun::execute(const Kernel::VehicleInitState& init, const std::string& outputFile) {
+    void SingleRun::execute(
+        const Kernel::VehicleInitState& init,
+        const std::string& outputFile)
+    {
+        execute(init, Kernel::EnvironmentConfig{}, outputFile);
+    }
+
+    void SingleRun::execute(
+        const Kernel::VehicleInitState& init,
+        const Kernel::EnvironmentConfig& environment,
+        const std::string& outputFile)
+    {
         Kernel::SimulationKernel kernel;
+        kernel.setEnvironment(environment);
         kernel.initialize();
 
         Kernel::PhysicsId id = kernel.createVehicle(init);
@@ -21,27 +34,28 @@ namespace StrikeEngine::Simulation {
             return;
         }
 
-        // CSV Header
-        out << "Time,X,Y,Z,Vx,Vy,Vz,Mass\n";
+        writeCsvMetadata(out, "trajectory", reportingFrameName(reportingFrame(environment)));
+        out << "Time_s,Frame,PositionX_m,PositionY_m,PositionZ_m,"
+               "Latitude_rad,Longitude_rad,Altitude_m,"
+               "VelocityX_mps,VelocityY_mps,VelocityZ_mps,Speed_mps,Mass_kg\n";
 
         const auto& physics = kernel.getPhysics();
 
         while (kernel.getSimulationTime() <= maxTime) {
             if (!physics.active[id]) break;
 
-            // Log state
-            out << std::fixed << std::setprecision(4)
+            const auto state = reportState(physics, id, environment);
+            out << std::fixed << std::setprecision(9)
                 << kernel.getSimulationTime() << ","
-                << physics.px[id] << "," << physics.py[id] << "," << physics.pz[id] << ","
-                << physics.vx[id] << "," << physics.vy[id] << "," << physics.vz[id] << ","
-                << physics.mass[id] << "\n";
+                << reportingFrameName(state.frame) << ","
+                << state.positionX << "," << state.positionY << "," << state.positionZ << ","
+                << state.latitudeRad << "," << state.longitudeRad << "," << state.altitudeM << ","
+                << state.velocityX << "," << state.velocityY << "," << state.velocityZ << ","
+                << state.speedMps << "," << state.massKg << "\n";
 
-            // Assuming Z is altitude (flat earth approximation). Stop if we hit ground after launch.
-            if (kernel.getSimulationTime() > 1.0 && physics.pz[id] < 0.0) {
-                break; 
-            }
-
-            kernel.step(dt);
+            const double remaining = maxTime - kernel.getSimulationTime();
+            if (remaining <= 0.0) break;
+            kernel.step(std::min(dt, remaining));
         }
 
         out.close();

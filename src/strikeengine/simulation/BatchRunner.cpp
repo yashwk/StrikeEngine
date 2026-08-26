@@ -1,4 +1,5 @@
 #include <strikeengine/simulation/BatchRunner.hpp>
+#include <strikeengine/simulation/Reporting.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +31,15 @@ namespace StrikeEngine::Simulation {
             BatchRunResult result;
             result.scenarioIndex = scenarioIndex;
             result.entityCount = kernel.getPhysics().size;
+            result.frame = reportingFrameName(reportingFrame(
+                scenarios[scenarioIndex].environment));
+
+            if (result.entityCount > 0 &&
+                scenarios[scenarioIndex].primaryEntityIndex >= result.entityCount) {
+                throw std::invalid_argument(
+                    "BatchRunner primaryEntityIndex is outside the scenario entity list");
+            }
+            result.primaryEntityId = scenarios[scenarioIndex].primaryEntityIndex;
 
             while (kernel.getSimulationTime() < maxTime) {
                 bool anyActive = false;
@@ -46,13 +56,27 @@ namespace StrikeEngine::Simulation {
             result.endTime = kernel.getSimulationTime();
             for (std::size_t id = 0; id < physics.size; ++id) {
                 if (physics.active[id]) ++result.activeEntities;
-                result.maxAltitude = std::max(result.maxAltitude, physics.pz[id]);
-                const double speed = std::sqrt(
-                    physics.vx[id] * physics.vx[id] +
-                    physics.vy[id] * physics.vy[id] +
-                    physics.vz[id] * physics.vz[id]);
-                result.maxSpeed = std::max(result.maxSpeed, speed);
+                const auto state = reportState(
+                    physics, id, scenarios[scenarioIndex].environment);
+                result.maxAltitudeM = std::max(result.maxAltitudeM, state.altitudeM);
+                result.maxSpeedMps = std::max(result.maxSpeedMps, state.speedMps);
             }
+
+            if (result.entityCount > 0) {
+                const auto primaryState = reportState(
+                    physics,
+                    result.primaryEntityId,
+                    scenarios[scenarioIndex].environment);
+                result.finalPositionX = primaryState.positionX;
+                result.finalPositionY = primaryState.positionY;
+                result.finalPositionZ = primaryState.positionZ;
+                result.finalLatitudeRad = primaryState.latitudeRad;
+                result.finalLongitudeRad = primaryState.longitudeRad;
+                result.finalAltitudeM = primaryState.altitudeM;
+                result.primaryEntityActive = physics.active[result.primaryEntityId];
+            }
+            result.maxAltitude = result.maxAltitudeM;
+            result.maxSpeed = result.maxSpeedMps;
             results.push_back(result);
         }
         return results;

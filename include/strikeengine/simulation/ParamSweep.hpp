@@ -5,18 +5,33 @@
 #include <string>
 #include <functional>
 #include <vector>
+#include <cstddef>
 
 namespace StrikeEngine::Simulation {
 
-    // Represents a single outcome from a simulation run
+    // Represents a single frame-aware outcome from a sweep run.
     struct SimulationResult {
-        double sweepValue;
-        double impactTime;
-        double impactX;
-        double impactY;
-        double impactZ;
-        double maxAltitude;
-        double maxVelocity;
+        double sweepValue = 0.0;
+        std::size_t entityId = 0;
+        double endTime = 0.0;
+        double positionX = 0.0;
+        double positionY = 0.0;
+        double positionZ = 0.0;
+        double latitudeRad = 0.0;
+        double longitudeRad = 0.0;
+        double altitudeM = 0.0;
+        double maxAltitudeM = 0.0;
+        double maxSpeedMps = 0.0;
+        std::string frame = "LOCAL_ENU";
+
+        // Legacy field names retained for source compatibility with callers
+        // that used this internal result shape before the versioned CSV output.
+        double impactTime = 0.0;
+        double impactX = 0.0;
+        double impactY = 0.0;
+        double impactZ = 0.0;
+        double maxAltitude = 0.0;
+        double maxVelocity = 0.0;
     };
 
     class ParamSweep {

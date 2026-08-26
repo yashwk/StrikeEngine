@@ -1,8 +1,12 @@
 #include <strikeengine/simulation/ParamSweep.hpp>
+#include <strikeengine/simulation/Reporting.hpp>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
 
 namespace StrikeEngine::Simulation {
 
@@ -17,14 +21,21 @@ namespace StrikeEngine::Simulation {
         std::function<void(Kernel::ScenarioConfig&, double)> applyParam,
         const std::string& outputFile)
     {
+        if (steps < 0) {
+            throw std::invalid_argument("ParamSweep steps cannot be negative");
+        }
+
         std::ofstream out(outputFile);
         if (!out.is_open()) {
             std::cerr << "Failed to open output file: " << outputFile << std::endl;
             return;
         }
 
-        // CSV Header
-        out << "SweepValue,ImpactTime,ImpactX,ImpactY,ImpactZ,MaxAltitude,MaxVelocity\n";
+        writeCsvMetadata(out, "parameter_sweep");
+        out << "SweepValue,EntityId,Frame,EndTime_s,"
+               "PositionX_m,PositionY_m,PositionZ_m,"
+               "Latitude_rad,Longitude_rad,Altitude_m,"
+               "MaxAltitude_m,MaxSpeed_mps\n";
 
         double stepSize = (steps > 1) ? (endValue - startValue) / (steps - 1) : 0.0;
 
@@ -40,46 +51,48 @@ namespace StrikeEngine::Simulation {
             config.loadInto(kernel);
 
             const auto& physics = kernel.getPhysics();
-            
-            // Assuming single entity tracking for MVP sweep
-            // For true multi-entity scenarios, we'd need to identify which entity we care about.
-            // Here we assume entity 0 is the primary vehicle being analyzed.
-            std::size_t targetId = 0;
 
-            double maxAlt = 0.0;
+            if (config.entities.empty()) {
+                throw std::invalid_argument("ParamSweep scenario must contain an entity");
+            }
+            if (config.primaryEntityIndex >= config.entities.size()) {
+                throw std::invalid_argument(
+                    "ParamSweep primaryEntityIndex is outside the scenario entity list");
+            }
+            const std::size_t targetId = config.primaryEntityIndex;
+
+            double maxAlt = -std::numeric_limits<double>::infinity();
             double maxVel = 0.0;
 
             while (kernel.getSimulationTime() <= maxTime) {
                 if (!physics.active[targetId]) break; // Entity destroyed
 
-                double alt = physics.pz[targetId];
-                if (alt > maxAlt) maxAlt = alt;
+                const auto state = reportState(physics, targetId, config.environment);
+                maxAlt = std::max(maxAlt, state.altitudeM);
+                maxVel = std::max(maxVel, state.speedMps);
 
-                double vel = std::sqrt(physics.vx[targetId]*physics.vx[targetId] + 
-                                       physics.vy[targetId]*physics.vy[targetId] + 
-                                       physics.vz[targetId]*physics.vz[targetId]);
-                if (vel > maxVel) maxVel = vel;
-
-                // Stop if hitting ground (Z <= 0)
-                if (kernel.getSimulationTime() > 1.0 && physics.pz[targetId] < 0.0) {
-                    break;
-                }
-
-                kernel.step(dt);
+                const double remaining = maxTime - kernel.getSimulationTime();
+                if (remaining <= 0.0) break;
+                kernel.step(std::min(dt, remaining));
             }
 
-            // Write result row
-            out << std::fixed << std::setprecision(4)
+            const auto finalState = reportState(physics, targetId, config.environment);
+            out << std::fixed << std::setprecision(9)
                 << currentParam << ","
+                << targetId << ","
+                << reportingFrameName(finalState.frame) << ","
                 << kernel.getSimulationTime() << ","
-                << physics.px[targetId] << ","
-                << physics.py[targetId] << ","
-                << physics.pz[targetId] << ","
-                << maxAlt << ","
+                << finalState.positionX << ","
+                << finalState.positionY << ","
+                << finalState.positionZ << ","
+                << finalState.latitudeRad << ","
+                << finalState.longitudeRad << ","
+                << finalState.altitudeM << ","
+                << (std::isfinite(maxAlt) ? maxAlt : finalState.altitudeM) << ","
                 << maxVel << "\n";
 
             std::cout << "Sweep Step " << (i+1) << "/" << steps << " | Param: " << currentParam 
-                      << " | Range: " << physics.px[targetId] << "m" << std::endl;
+                      << " | PositionX: " << finalState.positionX << "m" << std::endl;
         }
 
         out.close();

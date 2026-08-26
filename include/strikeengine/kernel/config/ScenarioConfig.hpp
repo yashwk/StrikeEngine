@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <vector>
 #include <string>
 #include <strikeengine/kernel/SimulationKernel.hpp>
@@ -35,6 +36,10 @@ namespace StrikeEngine::Kernel {
         EnvironmentConfig environment;
         
         std::vector<ScenarioEntityConfig> entities;
+
+        // Entity selected by study wrappers for per-scenario summaries and
+        // sweep/Monte Carlo rows. Zero preserves legacy behavior.
+        std::size_t primaryEntityIndex = 0;
 
         // Apply this scenario to the given kernel
         void loadInto(SimulationKernel& kernel) const {

@@ -58,6 +58,9 @@ target_link_libraries(guidance_test PRIVATE strikeengine)
 add_executable(scenario_test validation/scenario_test.cpp)
 target_link_libraries(scenario_test PRIVATE strikeengine)
 
+add_executable(reporting_test validation/reporting_test.cpp)
+target_link_libraries(reporting_test PRIVATE strikeengine)
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -116,5 +119,8 @@ set_tests_properties(guidance PROPERTIES TIMEOUT 120)
 
 add_test(NAME scenario COMMAND scenario_test)
 set_tests_properties(scenario PROPERTIES TIMEOUT 120)
+
+add_test(NAME reporting COMMAND reporting_test)
+set_tests_properties(reporting PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")
