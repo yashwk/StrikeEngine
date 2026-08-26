@@ -111,7 +111,7 @@ identified failures in control signs, aerodynamic authority, integration,
 events, seeker fidelity, and navigation. Those measurements described the
 older implementation and are superseded by the W1–W14 verification above.
 
-The historical source documents and commits remain available in repository
+The historical measurements and commits remain available in repository
 history. They are not repeated here because retaining their stale tables in
 the current audit made the document contradictory and obscured the current
 status.

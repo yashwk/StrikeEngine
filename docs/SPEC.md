@@ -11,9 +11,8 @@ not supported. Requirements use **MUST**, **MUST NOT**, **SHOULD**, and **MAY**
 in their usual normative sense.
 
 `docs/IMPLEMENTATION.md` is the companion authoritative implementation record.
-The older `docs/current_roadmap.md`, `docs/roadmap.md`,
-`docs/FIDELITY_AUDIT.md`, and `docs/RESTART_PLAN.md` are retained historical
-records and status evidence; they do not override this specification.
+`docs/FIDELITY_AUDIT.md` is the measured evidence report; it does not override
+this specification.
 
 ## 1. Product boundary
 
@@ -31,6 +30,21 @@ or StrikeCEM physical-optics solver. Those systems may consume this library
 through an explicit integration layer. Design identity, geometry provenance,
 and exported asset validation belong to the producer/consumer contract of the
 owning application, not to an implicit StrikeEngine side effect.
+
+The project boundaries are explicit:
+
+- StrikeEngine is library-only. An executable shell, editor, visualization
+  layer, or optional ECS/editor-entity mapping belongs to a consuming
+  application and must not become an implicit kernel dependency.
+- StrikeSim is the intended application owner for Design, Simulate, and CEM
+  surfaces. It consumes the versioned/installable StrikeEngine package.
+- StrikeCEM remains a separate project. Its CLI is retained for offline batch
+  work and its `strikecem_lib` shared library is the intended embedding
+  boundary for StrikeSim; StrikeCEM source is not part of StrikeEngine.
+- StrikeDesigner owns design intent and identity, StrikeCEM owns computation,
+  validation, and provenance, and StrikeEngine owns runtime simulation and
+  signature/database lookup. Integration must carry identity and revision
+  metadata explicitly.
 
 ## 2. Capability status vocabulary
 
@@ -301,10 +315,14 @@ MVP, PN/APN/waypoint guidance, autopilot, WGS84/ECEF/local-earth models,
 optional ECEF kernel truth, batch/sweep/Monte Carlo/optimizer tooling, and
 installable CMake packaging.
 
-Planned or partial: coefficient tables, fuel/failure models, full global
-terrain/DEM ingestion, geoid models, advanced guidance/controllers, richer
-sensor and seeker physics, ECEF-aware study-wrapper outputs, structured
-versioned telemetry, CUDA, and a production-grade GPU backend.
+Planned or partial: coefficient tables and higher-fidelity aero, fuel/staging
+models, failure and damage semantics, advanced atmosphere, full global
+terrain/DEM ingestion, geoid models, richer sensors and seeker families,
+sensor fusion, trajectory/energy management, pursuit, LQR/MPC, ECEF-aware
+study-wrapper outputs, structured versioned telemetry, parallel CPU execution,
+CUDA, and a production-grade GPU backend. Optional ECS/editor mapping,
+visualization, plotting/analysis/scenario-generation tooling, and an API
+server wrapper are integration or tooling ideas, not current kernel features.
 
 Unsupported behavior MUST fail clearly or remain opt-in. The engine MUST NOT
 silently substitute a future solver, GPU path, terrain database, material

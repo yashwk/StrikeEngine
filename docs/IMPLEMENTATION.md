@@ -7,8 +7,8 @@
 
 This document maps the normative behavior in [`SPEC.md`](SPEC.md) to source
 files, build targets, execution order, validation, packaging, and remaining
-work. The older roadmap, audit, and restart documents are retained as evidence
-and history; they are not alternative authority.
+work. [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) supplies measured evidence;
+it is not an alternative authority.
 
 ## 1. Verified state
 
@@ -32,7 +32,7 @@ and history; they are not alternative authority.
 | `tests/validation` | End-to-end and subsystem regression programs |
 | `data/` | Example profiles, scenarios, tables, and schemas |
 | `tools/` | Atmosphere generation and terrain conversion utilities |
-| `docs/` | Authoritative contracts and retained historical records |
+| `docs/` | Authoritative contracts and measured evidence records |
 
 The public include prefix is `<strikeengine/...>`. Public headers do not expose
 GLM or nlohmann/json as required consumer dependencies.
@@ -184,7 +184,56 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W13 | standalone rotating-Earth ECEF propagator | `5a8d0f9` |
 | W14 | opt-in kernel ECEF truth across physics/events/sensors/navigation | `40af724` |
 
-## 9. Known limitations and prioritized backlog
+## 9. Project boundaries and deferred feature inventory
+
+### 9.1 External architecture decisions
+
+StrikeEngine is library-only. The executable shell, Designer UI, visualization,
+and optional ECS/editor mapping belong to StrikeSim or another consuming
+application. StrikeSim is expected to own the Design, Simulate, and CEM
+surfaces and consume the installable, versioned StrikeEngine package.
+
+StrikeCEM remains a separate project with its own authority documents, CLI, and
+`strikecem_lib` shared library. StrikeSim is the embedding boundary for CEM;
+StrikeEngine does not absorb CEM source. Designer identity, revision, geometry
+provenance, and export validation must remain explicit across the
+StrikeDesigner → StrikeCEM → StrikeEngine handoff.
+
+The intended delivery order is: stabilize the public C++ API and package,
+then build the StrikeSim shell/Designer integration, then embed StrikeCEM.
+StrikeCEM offline work may proceed independently. A future protobuf/gRPC or
+REST API may wrap the stable C++ API, but it is not part of the current library
+contract.
+
+The pre-restructure implementation is preserved in the git tag
+`legacy/pre-restructure-v1`; it is rollback history, not an active source tree.
+
+### 9.2 Deferred feature inventory
+
+The following ideas came from the original architecture inventory and remain
+tracked here so they are not mistaken for missing documentation or current
+runtime guarantees:
+
+- **Physics and environment:** validated aerodynamic coefficient tables and
+  `AeroForces` data, a fuel/staging model, advanced atmosphere and weather,
+  DEM/DTED loading and query services, global terrain tile streaming,
+  datum/geoid handling, and polar/dateline policy. Existing atmosphere and
+  terrain-conversion tools are preparation, not completion of these features.
+- **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,
+  radar altimeter, coning/sculling, lever arms, complete earth-rate gyro
+  compensation, and richer measurement timing/calibration.
+- **Guidance, control, and seekers:** trajectory, waypoint, and energy
+  managers; pursuit guidance; LQR/MPC; seeker management and blended handoff;
+  semi-active radar and optical/EO seekers; richer radar detection/tracking;
+  and higher-fidelity RF/IR propagation.
+- **Execution and platforms:** parallel CPU execution, validated Vulkan/CPU
+  parity, GPU ECEF truth, and CUDA if a concrete requirement is established.
+- **Tools and integration:** versioned scenario/config loading, CSV and binary
+  recording contracts, plotting/analysis/scenario-generation tools, shared
+  logging/units/profiling utilities, visualization/debug drawing, and the
+  future API server wrapper.
+
+## 10. Known limitations and prioritized backlog
 
 1. **Study-wrapper reporting:** normalize altitude and coordinates for ECEF
    scenarios in `SingleRun`, `ParamSweep`, `MonteCarlo`, and `BatchRunner`.
@@ -199,13 +248,13 @@ Every runtime increment MUST add or update a deterministic regression, run
    handoff, and validated coefficient tables.
 6. **GPU parity:** validate Vulkan against CPU truth, add GPU ECEF support, and
    implement CUDA if required.
-7. **Applications:** define explicit versioned StrikeSim/StrikeDesigner/
-   StrikeCEM handoffs and provenance; do not hide them in this library.
+7. **Applications:** implement the explicit versioned StrikeSim/
+   StrikeDesigner/StrikeCEM handoffs and provenance; do not hide them in this
+   library.
 
-## 10. Change and release gate
+## 11. Change and release gate
 
 Public behavior changes MUST update `SPEC.md`, this record, related config/data
-documentation, and regression tests. Old status documents should be updated
-without deleting their historical content. A roadmap line or header stub is
-not implementation evidence; accepted inputs, outputs, defaults, failure
-behavior, and executable validation are required.
+documentation, and regression tests. A historical note or backlog line is not
+implementation evidence; accepted inputs, outputs, defaults, failure behavior,
+and executable validation are required.
