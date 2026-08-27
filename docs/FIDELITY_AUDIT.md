@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `1ff6d1e`<br>
-**Validation result:** Release build, **23/23 CTest tests passed**
+**Validation result:** Release build, **25/25 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -36,7 +36,9 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W4 — True integration and impact timing | MVP / partial | `integrator_test`; derivative-callback Euler, RK4, RK45, Symplectic/Velocity-Verlet, bounded adaptation, and interpolated ground crossing are covered. |
 | W5 — Events and environment | MVP / partial | `environment_test`; terrain and wind callbacks plus real impact deactivation are covered. Failure/damage workstream is Implemented/MVP via `failure_test`. Terrain databases are open. |
 | W17 — Failure and damage semantics | Implemented / MVP | `failure_test`; deterministic motor, actuator, sensor, structural, and communication failure flags with real state transitions and per-type events are covered. Boundary: no probabilistic degradation, no partial health effects beyond deactivation, no repair. |
-| W18 — IMU lever-arm compensation | Implemented / MVP | `lever_arm_test`; per-entity body-frame lever-arm specific-force correction (α×l + ω×(ω×l)) is covered. Coning/sculling and earth-rate gyro compensation remain open. |
+| W18 — IMU lever-arm compensation | Implemented / MVP | `lever_arm_test`; per-entity body-frame lever-arm specific-force correction (α×l + ω×(ω×l)) is covered. |
+| W19 — Earth-rate gyro modeling + compensation | Implemented / MVP | `earth_rate_gyro_test`; opt-in `includeEarthRateGyro` in ECEF truth mode adds ω_ie^b to the gyro and compensates it in the INS with no attitude drift. Local flat-earth mode is intentionally excluded. |
+| W20 — Strapdown coning/sculling corrections | Implemented / MVP | `coning_sculling_test`; rotation-vector attitude update (456× tighter than the first-order step on a coning environment) and single-interval sculling compensation `+0.5 (ω×f) dt^2` are validated against a fine-step reference. |
 | W6 — Seeker and sensor fidelity | MVP / partial | `seeker_test`; FOV, gimbal limits, hysteresis, filtered LOS rates, and latency are covered. Propagation and seeker-family depth remain limited. |
 | W7 — Navigation EKF | MVP / partial | `navigation_test`; coupled 15-state covariance, GPS corrections, bounds, and deterministic bias convergence are covered. Full inertial compensation is not complete. |
 | W8 — Scenario and guidance contract | MVP / partial | `guidance_test` and `scenario_test`; PN/APN, moving-target response, seeker handoff, scenario propagation, and isolated batch execution are covered. |
@@ -61,8 +63,8 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Actuators and control | World-to-body acceleration demand, bounded fin commands, first-order servo lag, rate limiting, and pitch/yaw sign conventions. | **MVP / partial:** fixed engineering gains; no gain scheduling, actuator failure, or advanced controller. |
 | Integration | Derivative callbacks with true stage re-evaluation for RK4/RK45; bounded adaptive substeps; interpolated impact crossing; kernel integrator selection exposed via `IntegratorType` at construction (CPU-side). | **MVP / partial:** no multirate solver or complete event-aware adaptive policy. |
 | Earth and frames | WGS84 conversion, normal and spherical gravity, ECEF/ENU/NED transforms, Coriolis, centrifugal, transport terms, standalone ECEF propagation, and opt-in kernel ECEF truth. | **MVP / partial:** no geoid, global terrain streaming, polar/dateline scenario policy, or complete earth-rate treatment across every subsystem. |
-| Sensors | Body-frame IMU specific force and rates with noise/bias; per-entity IMU lever-arm specific-force correction; noisy GPS in the selected frame. | **MVP / partial:** lever-arm compensation is implemented; coning/sculling and the full timing/interpolation contract remain open. |
-| Navigation | Perfect initial alignment, strapdown INS, and coupled 15-state error-state EKF with GPS position/velocity updates. | **MVP / partial:** earth-rate gyro compensation (intentionally deferred; the flat-earth local truth gyro already resolves the non-rotating-frame body rate, and correct earth-rate compensation requires the rotating-frame ECEF navigation path) and advanced inertial error sources remain open. |
+| Sensors | Body-frame IMU specific force and rates with noise/bias; per-entity IMU lever-arm specific-force correction; opt-in ECEF earth-rate gyro modeling (inertial body rate); noisy GPS in the selected frame. | **MVP / partial:** lever-arm and earth-rate modeling are implemented; the full timing/interpolation contract remains open. |
+| Navigation | Perfect initial alignment, strapdown INS (rotation-vector attitude update + single-interval sculling compensation), and coupled 15-state error-state EKF with GPS position/velocity updates. | **MVP / partial:** earth-rate gyro applies to ECEF truth mode only (the flat-earth local truth gyro already resolves the non-rotating-frame body rate; correct local earth-rate compensation requires the rotating-frame ECEF navigation path); multi-rate timestamp interpolation remains open. |
 | Seekers | RF RCS/radar-range and IR irradiance/extinction models; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, and friendly rejection. | **MVP / partial:** propagation is simplified and additional seeker families/phenomena are not implemented. |
 | Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, and seeker-lock APN handoff. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
 | Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, timestamped ground-impact events, and deterministic failure/damage events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or probabilistic failure model. |
@@ -72,7 +74,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **23/23 tests passed** at the
+- The complete Release CTest suite is green: **25/25 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **25.30 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
@@ -81,8 +83,9 @@ and each limitation is listed once in the subsystem assessment or backlog.
   truth; intercept control; integration; seeker; navigation; environment;
   earth/frame/transport/gravity models; standalone ECEF propagation; kernel
   ECEF truth; guidance; scenario loading; kernel slot-reuse and timestep
-  validation; deterministic failure/damage semantics; and IMU lever-arm
-  compensation.
+  validation; deterministic failure/damage semantics; IMU lever-arm
+  compensation; earth-rate gyro modeling/compensation; and strapdown
+  coning/sculling corrections.
 
 The results establish regression coverage for the implemented paths. They do
 not establish production-grade aerodynamics, global geophysics, sensor
@@ -104,13 +107,16 @@ to reliable downstream use:
    structural, and communications failures with state transitions and events
    are implemented (MVP, `failure_test`). Remaining boundary: probabilistic
    degradation, partial health effects beyond deactivation, and repair.
-4. **GNC fidelity:** sensor lever-arm compensation is implemented (MVP) via
-   per-entity `VehicleConfig::imuLeverArm*` with the rigid-body specific-force
-   correction. Remaining: coning/sculling, complete earth-rate gyro
-   compensation (intentionally deferred; the flat-earth local truth gyro
-   already resolves the non-rotating-frame body rate, and correct earth-rate
-   compensation requires the rotating-frame ECEF navigation path), richer
-   RF/IR propagation, and additional seeker types.
+4. **GNC fidelity:** sensor lever-arm compensation, coning/sculling, and
+   earth-rate gyro compensation are implemented (MVP). Lever arms: per-entity
+   `VehicleConfig::imuLeverArm*` rigid-body specific-force correction
+   (`lever_arm_test`). Coning/sculling: rotation-vector attitude update and
+   single-interval sculling compensation (`coning_sculling_test`). Earth-rate
+   gyro: `includeEarthRateGyro` in ECEF truth mode only (`earth_rate_gyro_test`);
+   the flat-earth local truth gyro already resolves the non-rotating-frame body
+   rate, and correct local earth-rate compensation requires the rotating-frame
+   ECEF navigation path. Remaining: richer RF/IR propagation, additional
+   seeker types, and multi-rate timestamp interpolation.
 5. **Guidance and aero depth:** add validated coefficient tables, trajectory
    management, pursuit, LQR/MPC, and blended guidance handoff.
 6. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,
@@ -123,7 +129,7 @@ to reliable downstream use:
 The pre-restart audit from 2026-08-25 recorded a 5/7 workstream result and
 identified failures in control signs, aerodynamic authority, integration,
 events, seeker fidelity, and navigation. Those measurements described the
-older implementation and are superseded by the W1–W16 verification above.
+older implementation and are superseded by the W1–W20 verification above.
 
 The historical measurements and commits remain available in repository
 history. They are not repeated here because retaining their stale tables in

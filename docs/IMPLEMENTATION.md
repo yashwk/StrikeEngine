@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **23/23 CTest tests pass**.
+- Release validation: **25/25 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -244,14 +244,20 @@ runtime guarantees:
   datum/geoid handling, and polar/dateline policy. Existing atmosphere and
   terrain-conversion tools are preparation, not completion of these features.
 - **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,
-  radar altimeter, coning/sculling, complete earth-rate gyro compensation, and
-  richer measurement timing/calibration. Sensor lever arms are implemented
-  (MVP): per-entity `VehicleConfig::imuLeverArmX/Y/Z` drives the IMU
-  specific-force correction `alpha x l + omega x (omega x l)`. Earth-rate gyro
-  compensation is intentionally deferred because, in the current flat-earth
-  local truth, the gyro already resolves the non-rotating-frame body rate;
-  correct earth-rate compensation requires the rotating-frame (ECEF)
-  navigation path.
+  radar altimeter, and richer measurement timing/calibration. Sensor lever
+  arms, coning/sculling, and earth-rate gyro compensation are implemented
+  (MVP). Lever arms: per-entity `VehicleConfig::imuLeverArmX/Y/Z` drives the
+  IMU specific-force correction `alpha x l + omega x (omega x l)`. Coning and
+  sculling: the strapdown uses a rotation-vector attitude update (exact
+  delta-quaternion, validated 450x tighter than the first-order step on a
+  coning environment) plus the single-interval sculling compensation
+  `+0.5 (omega x f) dt^2` (the two-interval Bortz cross-terms were evaluated
+  numerically and do not improve the point-sampled per-step scheme). Earth-rate
+  gyro: `EnvironmentConfig::earth.includeEarthRateGyro` (ECEF truth mode only)
+  models the gyro as measuring the inertial body rate and compensates it in the
+  INS. Earth-rate gyro remains off for local flat-earth truth because the gyro
+  there already resolves the non-rotating-frame body rate; correct local
+  earth-rate compensation requires the rotating-frame (ECEF) navigation path.
 - **Guidance, control, and seekers:** trajectory, waypoint, and energy
   managers; pursuit guidance; LQR/MPC; seeker management and blended handoff;
   semi-active radar and optical/EO seekers; richer radar detection/tracking;
@@ -276,14 +282,16 @@ runtime guarantees:
    failure models and event semantics are implemented (MVP) as deterministic
    per-entity flags with events (`failure_test`). Probabilistic degradation,
    partial health effects beyond deactivation, and repair remain open.
-4. **GNC fidelity:** sensor lever arms are implemented (MVP) via per-entity
-   `VehicleConfig::imuLeverArm*` with the rigid-body specific-force correction.
-   Earth-rate gyro compensation is intentionally deferred because, in the
-   current flat-earth local truth, the gyro already resolves the
-   non-rotating-frame body rate; correct earth-rate compensation requires the
-   rotating-frame (ECEF) navigation path. Remaining: coning/sculling, full
-   earth-rate gyro compensation, richer RF/IR propagation, and more seeker
-   types.
+4. **GNC fidelity:** sensor lever arms, coning/sculling, and earth-rate gyro
+   compensation are implemented (MVP). Lever arms: per-entity
+   `VehicleConfig::imuLeverArm*` rigid-body specific-force correction
+   (`lever_arm_test`). Coning/sculling: rotation-vector attitude update and
+   single-interval sculling compensation (`coning_sculling_test`). Earth-rate
+   gyro: `includeEarthRateGyro` in ECEF truth mode only (`earth_rate_gyro_test`).
+   Earth-rate gyro stays off for local flat-earth truth because the gyro there
+   already resolves the non-rotating-frame body rate; correct local earth-rate
+   compensation requires the rotating-frame (ECEF) navigation path. Remaining:
+   richer RF/IR propagation and more seeker types.
 5. **Guidance/aero:** add trajectory management, pursuit, LQR/MPC, blended
    handoff, and validated coefficient tables.
 6. **GPU parity:** validate Vulkan against CPU truth, add GPU ECEF support, and
