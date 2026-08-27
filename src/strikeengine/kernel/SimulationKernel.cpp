@@ -1,7 +1,6 @@
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/backend/BackendFactory.hpp>
 #include <strikeengine/kernel/backend/CPUBackend.hpp>
-#include <strikeengine/kernel/integrator/RK4Integrator.hpp>
 #include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
@@ -9,7 +8,7 @@
 
 namespace StrikeEngine::Kernel {
 
-    SimulationKernel::SimulationKernel(BackendType backendType) {
+    SimulationKernel::SimulationKernel(BackendType backendType, IntegratorType integratorType) {
         if (backendType == BackendType::Vulkan) {
             auto factory = getPhysicsBackendFactory(static_cast<int>(BackendType::Vulkan));
             if (!factory) {
@@ -25,7 +24,7 @@ namespace StrikeEngine::Kernel {
             auto atmosphere = std::make_shared<Models::ISA1976>();
             auto aero = std::make_shared<Models::BasicAeroModel>();
 
-            auto integrator = std::make_unique<RK4Integrator>();
+            auto integrator = IntegratorFactory::create(integratorType);
 
             backend = std::make_unique<CPUBackend>(
                 std::move(integrator),

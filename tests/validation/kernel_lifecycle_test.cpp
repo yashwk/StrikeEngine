@@ -123,6 +123,55 @@ int main()
         check(steppedOk, "step(0.01) still advances normally");
     }
 
+    // (c) Every supported integrator is reachable through the kernel API and
+    // produces finite, mass-preserving, quaternion-normalized states.
+    {
+        const IntegratorType types[] = {
+            IntegratorType::Euler,
+            IntegratorType::RK4,
+            IntegratorType::Symplectic,
+            IntegratorType::RK45,
+        };
+        const char* names[] = { "Euler", "RK4", "Symplectic", "RK45" };
+        for (std::size_t t = 0; t < 4; ++t)
+        {
+            SimulationKernel kernel(BackendType::CPU, types[t]);
+
+            VehicleInitState init;
+            init.px = 0.0; init.py = 0.0; init.pz = 1000.0;
+            init.vx = 100.0; init.vy = 0.0; init.vz = 50.0;
+            init.qw = 1.0;
+            init.mass = 10.0;
+
+            VehicleConfig config;
+            config.massDry = 5.0;
+            const PhysicsId id = kernel.createVehicle(init, config);
+
+            kernel.runSteps(50, 0.01);
+
+            const auto& physics = kernel.getPhysics();
+            const bool finite =
+                std::isfinite(physics.px[id]) &&
+                std::isfinite(physics.py[id]) &&
+                std::isfinite(physics.pz[id]) &&
+                std::isfinite(physics.mass[id]);
+            const double quatNorm = std::sqrt(
+                physics.qw[id] * physics.qw[id] +
+                physics.qx[id] * physics.qx[id] +
+                physics.qy[id] * physics.qy[id] +
+                physics.qz[id] * physics.qz[id]);
+
+            char message[128];
+            std::snprintf(message, sizeof(message),
+                          "%s integrator: finite state, mass >= massDry, "
+                          "quaternion normalized", names[t]);
+            check(finite &&
+                      physics.mass[id] >= physics.massDry[id] &&
+                      approx(quatNorm, 1.0, 1e-9),
+                  message);
+        }
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

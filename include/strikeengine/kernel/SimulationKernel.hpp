@@ -22,6 +22,7 @@
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
+#include <strikeengine/kernel/integrator/IntegratorFactory.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -50,7 +51,15 @@ namespace StrikeEngine::Kernel {
 
     class SimulationKernel {
     public:
-        explicit SimulationKernel(BackendType backendType = BackendType::CPU);
+        /**
+         * @brief Constructs the simulation kernel.
+         * @param backendType Selects the physics backend (CPU or Vulkan).
+         * @param integratorType Selects the CPU truth integrator (Euler, RK4,
+         *        Symplectic/Velocity-Verlet, or adaptive RK45). It is unused
+         *        for the Vulkan backend.
+         */
+        explicit SimulationKernel(BackendType backendType = BackendType::CPU,
+                                  IntegratorType integratorType = IntegratorType::RK4);
         ~SimulationKernel();
 
         void initialize();
