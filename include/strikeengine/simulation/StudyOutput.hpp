@@ -97,6 +97,23 @@ namespace StrikeEngine::Simulation {
         StudyStatus status = StudyStatus::Completed;
     };
 
+    struct StudyOutputData {
+        StudyRecordType recordType = StudyRecordType::Trajectory;
+        std::vector<StudyOutputField> fields;
+        std::vector<StudyOutputRecord> records;
+    };
+
+    /**
+     * @brief Reads the versioned binary study output format written by
+     *        StudyOutputWriter.
+     *
+     * Throws std::runtime_error on malformed or unsupported input.
+     */
+    class StudyOutputReader {
+    public:
+        static StudyOutputData read(const std::string& inputFile);
+    };
+
     class StudyOutputWriter {
     public:
         static void write(

@@ -252,6 +252,108 @@ void writeBinary(
     }
 }
 
+std::uint8_t readUint8(std::istream& input, const char* what)
+{
+    char byte = '\0';
+    input.read(&byte, 1);
+    if (input.gcount() != 1) {
+        throw std::runtime_error(
+            std::string("unexpected end of study binary input while reading ") + what);
+    }
+    return static_cast<std::uint8_t>(static_cast<unsigned char>(byte));
+}
+
+std::uint16_t readUint16(std::istream& input, const char* what)
+{
+    const auto low = readUint8(input, what);
+    const auto high = readUint8(input, what);
+    return static_cast<std::uint16_t>(low) |
+           static_cast<std::uint16_t>(static_cast<std::uint16_t>(high) << 8);
+}
+
+std::uint32_t readUint32(std::istream& input, const char* what)
+{
+    std::uint32_t value = 0;
+    for (int byte = 0; byte < 4; ++byte) {
+        value |= static_cast<std::uint32_t>(readUint8(input, what)) << (byte * 8);
+    }
+    return value;
+}
+
+std::uint64_t readUint64(std::istream& input, const char* what)
+{
+    std::uint64_t value = 0;
+    for (int byte = 0; byte < 8; ++byte) {
+        value |= static_cast<std::uint64_t>(readUint8(input, what)) << (byte * 8);
+    }
+    return value;
+}
+
+double readDouble(std::istream& input, const char* what)
+{
+    return std::bit_cast<double>(readUint64(input, what));
+}
+
+void readBinaryValue(std::istream& input, Field field, StudyOutputRecord& record)
+{
+    switch (field) {
+    case Field::ScenarioIndex:
+        record.scenarioIndex = static_cast<std::size_t>(readUint64(input, "ScenarioIndex"));
+        break;
+    case Field::Iteration:
+        record.iteration = static_cast<std::size_t>(readUint64(input, "Iteration"));
+        break;
+    case Field::SweepValue: record.sweepValue = readDouble(input, "SweepValue"); break;
+    case Field::EntityId:
+        record.entityId = static_cast<std::size_t>(readUint64(input, "EntityId"));
+        break;
+    case Field::TimeS: record.timeS = readDouble(input, "TimeS"); break;
+    case Field::Frame:
+    {
+        const auto value = readUint8(input, "Frame");
+        if (value > 1) {
+            throw std::runtime_error("study binary input has an invalid frame value");
+        }
+        record.frame = value == 1 ? ReportingFrame::Ecef : ReportingFrame::LocalEnu;
+        break;
+    }
+    case Field::PositionX: record.positionX = readDouble(input, "PositionX"); break;
+    case Field::PositionY: record.positionY = readDouble(input, "PositionY"); break;
+    case Field::PositionZ: record.positionZ = readDouble(input, "PositionZ"); break;
+    case Field::LatitudeRad: record.latitudeRad = readDouble(input, "LatitudeRad"); break;
+    case Field::LongitudeRad: record.longitudeRad = readDouble(input, "LongitudeRad"); break;
+    case Field::AltitudeM: record.altitudeM = readDouble(input, "AltitudeM"); break;
+    case Field::VelocityX: record.velocityX = readDouble(input, "VelocityX"); break;
+    case Field::VelocityY: record.velocityY = readDouble(input, "VelocityY"); break;
+    case Field::VelocityZ: record.velocityZ = readDouble(input, "VelocityZ"); break;
+    case Field::SpeedMps: record.speedMps = readDouble(input, "SpeedMps"); break;
+    case Field::MassKg: record.massKg = readDouble(input, "MassKg"); break;
+    case Field::MaxAltitudeM: record.maxAltitudeM = readDouble(input, "MaxAltitudeM"); break;
+    case Field::MaxSpeedMps: record.maxSpeedMps = readDouble(input, "MaxSpeedMps"); break;
+    case Field::EntityCount:
+        record.entityCount = static_cast<std::size_t>(readUint64(input, "EntityCount"));
+        break;
+    case Field::ActiveEntities:
+        record.activeEntities = static_cast<std::size_t>(readUint64(input, "ActiveEntities"));
+        break;
+    case Field::PrimaryEntityActive:
+        record.primaryEntityActive = readUint8(input, "PrimaryEntityActive") != 0;
+        break;
+    case Field::Active:
+        record.active = readUint8(input, "Active") != 0;
+        break;
+    case Field::Status:
+    {
+        const auto value = readUint8(input, "Status");
+        if (value > static_cast<std::uint8_t>(StudyStatus::Impacted)) {
+            throw std::runtime_error("study binary input has an invalid status value");
+        }
+        record.status = static_cast<StudyStatus>(value);
+        break;
+    }
+    }
+}
+
 StudyStatus statusFromBatch(const BatchRunResult& result)
 {
     return result.primaryEntityActive ? StudyStatus::Completed : StudyStatus::Impacted;
@@ -356,6 +458,58 @@ void StudyOutputWriter::writeBatchResults(
         records.push_back(record);
     }
     write(outputFile, StudyRecordType::BatchSummary, records, config);
+}
+
+StudyOutputData StudyOutputReader::read(const std::string& inputFile)
+{
+    std::ifstream input(inputFile, std::ios::binary);
+    if (!input.is_open()) {
+        throw std::runtime_error("failed to open study binary input: " + inputFile);
+    }
+
+    char magic[8]{};
+    input.read(magic, sizeof(magic));
+    if (input.gcount() != static_cast<std::streamsize>(sizeof(magic))) {
+        throw std::runtime_error("unexpected end of study binary input: missing magic");
+    }
+    if (std::string(magic, sizeof(magic)) != "STRKOUT1") {
+        throw std::runtime_error("study binary input has an invalid magic");
+    }
+
+    const auto version = readUint32(input, "format version");
+    if (version != studyOutputFormatVersion) {
+        throw std::runtime_error(
+            "unsupported study binary format version " + std::to_string(version));
+    }
+
+    const auto recordTypeValue = readUint32(input, "record type");
+    const auto recordType = static_cast<StudyRecordType>(recordTypeValue);
+    if (recordType != StudyRecordType::Trajectory &&
+        recordType != StudyRecordType::ParameterSweep &&
+        recordType != StudyRecordType::MonteCarlo &&
+        recordType != StudyRecordType::BatchSummary) {
+        throw std::runtime_error("study binary input has an unknown record type");
+    }
+
+    const auto fieldCount = readUint32(input, "field count");
+    const auto recordCount = readUint64(input, "record count");
+
+    StudyOutputData data;
+    data.recordType = recordType;
+    for (std::uint32_t i = 0; i < fieldCount; ++i) {
+        const auto fieldValue = readUint16(input, "field ID");
+        if (fieldValue > static_cast<std::uint16_t>(StudyOutputField::Status)) {
+            throw std::runtime_error("study binary input has an unknown output field");
+        }
+        data.fields.push_back(static_cast<StudyOutputField>(fieldValue));
+    }
+
+    for (std::uint64_t i = 0; i < recordCount; ++i) {
+        StudyOutputRecord record;
+        for (const auto field : data.fields) readBinaryValue(input, field, record);
+        data.records.push_back(record);
+    }
+    return data;
 }
 
 } // namespace StrikeEngine::Simulation
