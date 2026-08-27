@@ -101,8 +101,7 @@ to reliable downstream use:
    beyond the current wrapper records remain.
 2. **Global terrain:** add DEM/DTED ingestion, tile indexing and streaming,
    interpolation, datum/geoid policy, dateline/polar handling, and frame-aware
-   collision queries. `tools/convert_srtm.cpp` is preparation, not runtime
-   terrain support.
+   collision queries.
 3. **Failure and damage semantics:** deterministic motor, actuator, sensor,
    structural, and communications failures with state transitions and events
    are implemented (MVP, `failure_test`). Remaining boundary: probabilistic

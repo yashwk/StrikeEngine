@@ -31,7 +31,6 @@ it is not an alternative authority.
 | `src/strikeengine` | Runtime and signature database implementations |
 | `tests/validation` | End-to-end and subsystem regression programs |
 | `data/` | Example profiles, scenarios, tables, and schemas |
-| `tools/` | Atmosphere generation and terrain conversion utilities |
 | `docs/` | Authoritative contracts and measured evidence records |
 
 The public include prefix is `<strikeengine/...>`. Public headers do not expose
@@ -241,8 +240,7 @@ runtime guarantees:
 - **Physics and environment:** validated aerodynamic coefficient tables and
   `AeroForces` data, a fuel/staging model, advanced atmosphere and weather,
   DEM/DTED loading and query services, global terrain tile streaming,
-  datum/geoid handling, and polar/dateline policy. Existing atmosphere and
-  terrain-conversion tools are preparation, not completion of these features.
+  datum/geoid handling, and polar/dateline policy.
 - **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,
   radar altimeter, and richer measurement timing/calibration. Sensor lever
   arms, coning/sculling, and earth-rate gyro compensation are implemented
@@ -275,8 +273,8 @@ runtime guarantees:
    (`StudyOutputReader::read`); richer telemetry schemas, streaming record
    sinks, and configurable output selection beyond the current wrapper records
    remain.
-2. **Global terrain:** `tools/convert_srtm.cpp` exists, but runtime terrain is
-   still a callback. Add DEM/DTED tiles, interpolation, streaming, datum/geoid
+2. **Global terrain:** runtime terrain is still a callback with no DEM/DTED
+   ingestion. Add DEM/DTED tiles, interpolation, streaming, datum/geoid
    policy, dateline/polar handling, and frame-aware collision queries.
 3. **Failures:** motor, actuator, sensor, structural, and communications
    failure models and event semantics are implemented (MVP) as deterministic
