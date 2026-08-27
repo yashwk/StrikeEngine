@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `1ff6d1e`<br>
-**Validation result:** Release build, **20/20 CTest tests passed**
+**Validation result:** Release build, **21/21 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -69,7 +69,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **20/20 tests passed** at the
+- The complete Release CTest suite is green: **21/21 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **25.30 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
@@ -77,7 +77,8 @@ and each limitation is listed once in the subsystem assessment or backlog.
 - The test inventory covers study wrappers; vehicle configuration; rigid-body
   truth; intercept control; integration; seeker; navigation; environment;
   earth/frame/transport/gravity models; standalone ECEF propagation; kernel
-  ECEF truth; guidance; and scenario loading.
+  ECEF truth; guidance; scenario loading; and kernel slot-reuse and timestep
+  validation.
 
 The results establish regression coverage for the implemented paths. They do
 not establish production-grade aerodynamics, global geophysics, sensor

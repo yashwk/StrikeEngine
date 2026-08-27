@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **20/20 CTest tests passing** in Release.
+The current validated checkpoint is **21/21 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -82,8 +82,11 @@ future model or integration is complete.
 
 `SimulationKernel` owns the truth, command, navigation, sensor, seeker,
 guidance, and entity-status blocks. Callers MUST treat returned const blocks
-as read-only snapshots. A vehicle ID is a stable SoA slot until the slot is
-reused after removal.
+as read-only snapshots. All public block accessors, including `getSeekers()`,
+expose only const references, enforcing that contract. A vehicle ID is a
+stable SoA slot until the slot is reused after removal. Reusing a freed slot
+restores default guidance (mode `None`), zeroed targets and commands, and
+default sensor noise configuration, so stale state is never inherited.
 
 For every active entity:
 
@@ -177,13 +180,14 @@ The primary public class is `StrikeEngine::Kernel::SimulationKernel`.
 6. Call `step(dt)` or `runSteps(count, dt)`.
 7. Read const state snapshots and process subscribed events externally.
 
-`reset()` clears all SoA blocks, commands, time, free slots, and seeker
-tracking state while preserving the kernel object and backend. `initialize()`
-resets the simulation.
+`reset()` clears all SoA blocks, commands, time, free slots, seeker tracking
+state, and the sensor system's internal random-walk bias and GPS update phase
+while preserving the kernel object and backend. `initialize()` resets the
+simulation.
 
 `step(dt)` advances truth first, then updates sensors, navigation, seekers,
 guidance, autopilot commands, and finally events. A non-positive timestep is
-not a supported simulation step.
+rejected: `step(dt)` throws `std::invalid_argument` when `dt <= 0.0`.
 
 ### 5.2 Vehicle initialization and configuration
 
@@ -283,8 +287,9 @@ are implemented. Friendly targets are rejected.
 
 Stateless PN and APN helpers are available under `models/guidance`. Kernel PN
 uses target position/velocity and kernel APN uses filtered seeker LOS rates on
-lock. The autopilot translates commanded world acceleration into bounded body
-fin demands.
+lock. Seeker-locked APN clamps commanded acceleration to the per-entity
+`maxAccel` magnitude limit, matching PN and Waypoint. The autopilot translates
+commanded world acceleration into bounded body fin demands.
 
 Trajectory management, pursuit, LQR/MPC, blended guidance handoff, and richer
 seeker families are planned, not supported requirements.
@@ -304,7 +309,7 @@ Available wrappers:
 | `ParamSweep` | Repeats a scenario over a scalar callback and writes result records. | Implemented MVP; reports the configured `primaryEntityIndex`. |
 | `MonteCarlo` | Perturbs copied scenarios and writes result records. | Implemented MVP; reports the configured `primaryEntityIndex`; RNG controls remain limited. |
 | `Optimizer` | Runs particle-swarm parameter studies with callbacks. | Implemented MVP. |
-| `BatchRunner` | Runs isolated scenarios and returns structured summary results. | Implemented MVP; frame-aware primary and aggregate metrics can be serialized by `StudyOutputWriter`. |
+| `BatchRunner` | Runs isolated scenarios and returns structured summary results. | Implemented MVP; frame-aware primary metrics and trajectory-maximum aggregate metrics (`maxAltitudeM`, `maxSpeedMps`) can be serialized by `StudyOutputWriter`. |
 
 `StudyOutputWriter` provides the common study-output contract. CSV files use
 format version `1` metadata comments; binary files use the eight-byte

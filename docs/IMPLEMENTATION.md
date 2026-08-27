@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **20/20 CTest tests pass**.
+- Release validation: **21/21 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -136,7 +136,9 @@ physics step. This ordering is part of the integration contract.
 - `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin control.
 - `SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`, `BatchRunner`: study
   wrappers; frame normalization is implemented in `Reporting.hpp` and
-  versioned CSV/binary output in `StudyOutput.hpp/.cpp`.
+  versioned CSV/binary output in `StudyOutput.hpp/.cpp`. `BatchRunner`
+  aggregate metrics `maxAltitudeM`/`maxSpeedMps` track the trajectory maximum,
+  not just the final state.
 
 ## 6. ECEF kernel integration
 
@@ -168,6 +170,7 @@ recording; binary readers and richer production telemetry remain future work.
 | `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation |
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation |
 | `guidance`, `scenario` | guidance and scenario contracts |
+| `kernel_lifecycle` | freed-slot reuse reset and non-positive-timestep rejection |
 | `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording |
 
 Every runtime increment MUST add or update a deterministic regression, run
