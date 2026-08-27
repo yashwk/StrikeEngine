@@ -34,6 +34,12 @@ target_link_libraries(navigation_test PRIVATE strikeengine)
 add_executable(lever_arm_test validation/lever_arm_test.cpp)
 target_link_libraries(lever_arm_test PRIVATE strikeengine)
 
+add_executable(earth_rate_gyro_test validation/earth_rate_gyro_test.cpp)
+target_link_libraries(earth_rate_gyro_test PRIVATE strikeengine)
+
+add_executable(coning_sculling_test validation/coning_sculling_test.cpp)
+target_link_libraries(coning_sculling_test PRIVATE strikeengine)
+
 add_executable(environment_test validation/environment_test.cpp)
 target_link_libraries(environment_test PRIVATE strikeengine)
 
@@ -104,6 +110,12 @@ set_tests_properties(navigation PROPERTIES TIMEOUT 120)
 
 add_test(NAME lever_arm COMMAND lever_arm_test)
 set_tests_properties(lever_arm PROPERTIES TIMEOUT 120)
+
+add_test(NAME earth_rate_gyro COMMAND earth_rate_gyro_test)
+set_tests_properties(earth_rate_gyro PROPERTIES TIMEOUT 120)
+
+add_test(NAME coning_sculling COMMAND coning_sculling_test)
+set_tests_properties(coning_sculling PROPERTIES TIMEOUT 120)
 
 add_test(NAME environment COMMAND environment_test)
 set_tests_properties(environment PROPERTIES TIMEOUT 120)

@@ -23,6 +23,10 @@ namespace StrikeEngine::Kernel {
         bool includeCoriolis = false;
         bool includeCentrifugal = false;
         bool includeTransportRate = false;
+        // In ECEF truth mode, model the gyro as measuring the INERTIAL body
+        // rate (earth rotation included) and compensate it in the IMU/INS.
+        // Ignored in local flat-earth mode. Default false preserves behavior.
+        bool includeEarthRateGyro = false;
         double referenceLatitudeRad = 0.0;
         double referenceLongitudeRad = 0.0;
     };

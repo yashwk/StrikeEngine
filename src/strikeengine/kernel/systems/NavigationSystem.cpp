@@ -1,4 +1,5 @@
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
+#include <strikeengine/kernel/math/Quaternion.hpp>
 #include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <strikeengine/models/physics/earth/EarthFixedPropagator.hpp>
 #include <algorithm>
@@ -11,6 +12,16 @@ constexpr std::size_t kErrorStateSize = 15;
 constexpr double kMinCovariance = 1e-12;
 constexpr double kMaxCovariance = 1e6;
 using Covariance = std::array<double, kErrorStateSize * kErrorStateSize>;
+
+// Single-interval sculling/rotation compensation coefficient. For a constant
+// body rate omega and specific force f over one interval, the exact world
+// velocity increment is C(tn-1)[f dt + k (omega x f) dt^2] with k = 1/2. The
+// two-interval Bortz coning/sculling corrections (coefficient 2/3 over the
+// previous and current increments) were validated numerically against a
+// fine-step reference integrator (see coning_sculling_test): they do not
+// improve the point-sampled per-step scheme used here (the optimal coefficient
+// is frequency-dependent), so only the single-interval term is shipped.
+constexpr double kScullingCoefficient = 0.5;
 
 constexpr std::size_t covarianceIndex(std::size_t row, std::size_t column)
 {
@@ -145,9 +156,36 @@ namespace StrikeEngine::Kernel {
         double wy = sensors.gyroY[id] - nav.estGyroBiasY[id];
         double wz = sensors.gyroZ[id] - nav.estGyroBiasZ[id];
 
+        // Earth-rate compensation (ECEF truth, opt-in): with the gyro modeled
+        // as measuring the inertial body rate, subtract the earth-rotation
+        // vector resolved into the body frame via the ESTIMATED attitude so
+        // the INS propagates the earth-fixed body rate without spurious drift.
+        if (environment.earth.useEcefTruth && environment.earth.includeEarthRateGyro) {
+            double ewx, ewy, ewz;
+            quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                             0.0, 0.0, Models::EarthModel::earthRotationRateRadPerSec,
+                             ewx, ewy, ewz);
+            wx -= ewx;
+            wy -= ewy;
+            wz -= ewz;
+        }
+
         nav.estWx[id] = wx;
         nav.estWy[id] = wy;
         nav.estWz[id] = wz;
+
+        // 1b. Sculling / velocity rotation compensation: the body rotates
+        // while the body-frame specific force is measured, so the exact world
+        // increment over the interval is
+        //     dv^n = C(tn-1) [ f dt + k (omega x f) dt^2 ] , k = 1/2
+        // for a constant rate and force. Apply the single-interval term in
+        // the body frame before the rotation to world.
+        const double sculX = kScullingCoefficient * (wy * fz - wz * fy) * dt;
+        const double sculY = kScullingCoefficient * (wz * fx - wx * fz) * dt;
+        const double sculZ = kScullingCoefficient * (wx * fy - wy * fx) * dt;
+        fx += sculX;
+        fy += sculY;
+        fz += sculZ;
 
         // 2. Rotate specific force to World frame
         double wfx, wfy, wfz;
@@ -206,29 +244,50 @@ namespace StrikeEngine::Kernel {
         nav.estPy[id] += nav.estVy[id] * dt;
         nav.estPz[id] += nav.estVz[id] * dt;
 
-        // 6. Integrate attitude (Quaternion propagation: q = q + 0.5 * q * w * dt)
-        double qw = nav.estQw[id];
-        double qx = nav.estQx[id];
-        double qy = nav.estQy[id];
-        double qz = nav.estQz[id];
+        // 6. Integrate attitude with a rotation-vector update. The current
+        // angular increment (compensated body rate times dt) forms the
+        // rotation vector phi; the corresponding delta quaternion is
+        // right-multiplied onto the body->world attitude, matching the
+        // q_dot = 0.5 q (x) (0, omega) convention used by the truth model.
+        // Note: the textbook two-interval coning cross-term (2/3)(prev x cur)
+        // was evaluated against a fine-step reference and does not improve
+        // the point-sampled per-step scheme (its optimum coefficient is
+        // frequency-dependent), so it is intentionally omitted here.
+        const double phiX = wx * dt;
+        const double phiY = wy * dt;
+        const double phiZ = wz * dt;
 
-        double dqx =  qw * wx + qy * wz - qz * wy;
-        double dqy =  qw * wy + qz * wx - qx * wz;
-        double dqz =  qw * wz + qx * wy - qy * wx;
-        double dqw = -qx * wx - qy * wy - qz * wz;
+        const double phiMag = std::sqrt(phiX * phiX + phiY * phiY + phiZ * phiZ);
+        double dqw, dqx, dqy, dqz;
+        if (phiMag > 1e-12) {
+            const double half = 0.5 * phiMag;
+            const double scale = std::sin(half) / phiMag;
+            dqw = std::cos(half);
+            dqx = phiX * scale;
+            dqy = phiY * scale;
+            dqz = phiZ * scale;
+        } else {
+            dqw = 1.0;
+            dqx = dqy = dqz = 0.0;
+        }
 
-        qw += 0.5 * dqw * dt;
-        qx += 0.5 * dqx * dt;
-        qy += 0.5 * dqy * dt;
-        qz += 0.5 * dqz * dt;
+        const double qw = nav.estQw[id];
+        const double qx = nav.estQx[id];
+        const double qy = nav.estQy[id];
+        const double qz = nav.estQz[id];
+        nav.estQw[id] = qw * dqw - qx * dqx - qy * dqy - qz * dqz;
+        nav.estQx[id] = qw * dqx + qx * dqw + qy * dqz - qz * dqy;
+        nav.estQy[id] = qw * dqy - qx * dqz + qy * dqw + qz * dqx;
+        nav.estQz[id] = qw * dqz + qx * dqy - qy * dqx + qz * dqw;
 
         // Normalize
-        double norm = std::sqrt(qw*qw + qx*qx + qy*qy + qz*qz);
+        double norm = std::sqrt(nav.estQw[id]*nav.estQw[id] + nav.estQx[id]*nav.estQx[id] +
+                                nav.estQy[id]*nav.estQy[id] + nav.estQz[id]*nav.estQz[id]);
         if (norm > 0) {
-            nav.estQw[id] = qw / norm;
-            nav.estQx[id] = qx / norm;
-            nav.estQy[id] = qy / norm;
-            nav.estQz[id] = qz / norm;
+            nav.estQw[id] /= norm;
+            nav.estQx[id] /= norm;
+            nav.estQy[id] /= norm;
+            nav.estQz[id] /= norm;
         }
         
         auto& covariance = nav.covarianceFull[id];

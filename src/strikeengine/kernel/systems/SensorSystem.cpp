@@ -125,6 +125,21 @@ namespace StrikeEngine::Kernel {
             double bwy = physics.wy[i];
             double bwz = physics.wz[i];
 
+            // Earth-rate gyro modeling (ECEF truth, opt-in): a physical gyro
+            // measures the INERTIAL body rate, which includes the earth
+            // rotation vector resolved into the body frame,
+            //     omega_ie^b = C_e^b * (0, 0, Omega_ie)
+            // via the body->ECEF attitude quaternion.
+            if (environment.earth.useEcefTruth && environment.earth.includeEarthRateGyro) {
+                double ewx, ewy, ewz;
+                quatRotateToBody(physics.qw[i], physics.qx[i], physics.qy[i], physics.qz[i],
+                                 0.0, 0.0, Models::EarthModel::earthRotationRateRadPerSec,
+                                 ewx, ewy, ewz);
+                bwx += ewx;
+                bwy += ewy;
+                bwz += ewz;
+            }
+
             // IMU lever-arm correction (MVP): the IMU is mounted at a fixed
             // body-frame offset l from the centre of mass, so it senses the
             // CM specific force plus the rigid-body terms
