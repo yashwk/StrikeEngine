@@ -42,6 +42,7 @@ namespace StrikeEngine::Kernel {
         SeekerType seekerType = SeekerType::None;
         std::string rcsProfileId = "";
         std::string irProfileId = "";
+        double emitterEirpW = 0.0;   // target-side EIRP (W); 0 = no emitter
     };
 
     enum class BackendType {

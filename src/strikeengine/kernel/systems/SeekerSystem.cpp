@@ -69,6 +69,7 @@ namespace StrikeEngine::Kernel {
                 bool geometryValid = false;
                 bool acquisitionValid = false;
                 bool maintenanceValid = false;
+                double signalStrength = 0.0;  // SNR dB (RF/SARH/PassiveRF) or W (IR)
                 double range = 0.0;
                 double rangeRate = 0.0;
                 double azimuth = 0.0;
@@ -138,6 +139,65 @@ namespace StrikeEngine::Kernel {
                          std::pow(candidate.range, 4.0));
                     const double snrDb = 10.0 * std::log10(
                         std::max(receivedPower, std::numeric_limits<double>::min()) / noise);
+                    candidate.signalStrength = snrDb;
+                    candidate.acquisitionValid = snrDb > seeker.snrThresholdDb[i];
+                    candidate.maintenanceValid = snrDb >
+                        seeker.snrThresholdDb[i] - hysteresisDb;
+                } else if (seeker.type[i] == SeekerType::SARH) {
+                    // Semi-active radar homing: bistatic radar equation with
+                    // the off-board illuminator,
+                    //   P_r = Pt Gt Gr lambda^2 sigma_b / ((4pi)^3 Rt^2 Rr^2)
+                    // with Rt = illuminator->target and Rr = seeker->target.
+                    // The monostatic RCS lookup approximates the bistatic
+                    // cross section (valid for small bistatic angles).
+                    const std::string& profileId = status.rcsProfileId[target];
+                    if (profileId.empty()) return candidate;
+
+                    if (!rcsCache.contains(profileId)) {
+                        auto db = std::make_unique<Models::RCSDatabase>();
+                        if (db->loadProfile(profileId)) rcsCache[profileId] = std::move(db);
+                        else return candidate;
+                    }
+
+                    const double rcsM2 = rcsCache.at(profileId)->getRCS(
+                        targetAzimuth, targetElevation);
+                    const glm::dvec3 illuminatorPos(
+                        seeker.illuminatorPx[i], seeker.illuminatorPy[i],
+                        seeker.illuminatorPz[i]);
+                    const double rt = glm::length(targetPos - illuminatorPos);
+                    const double rr = candidate.range;
+                    if (rt <= 1e-9 || rr <= 1e-9) return candidate;  // guard Rt/Rr -> 0
+                    const double pt = std::max(0.0, seeker.illuminatorPowerW[i]);
+                    const double gt = std::pow(10.0, seeker.illuminatorGainDb[i] / 10.0);
+                    const double gr = std::pow(10.0, seeker.antennaGainDb[i] / 10.0);
+                    const double lambda = std::max(0.0, seeker.illuminatorWavelengthM[i]);
+                    const double noise = std::max(
+                        seeker.noiseFloorW[i], std::numeric_limits<double>::min());
+                    const double receivedPower = (pt * gt * gr * lambda * lambda * rcsM2) /
+                        (std::pow(4.0 * std::numbers::pi, 3.0) * rt * rt * rr * rr);
+                    const double snrDb = 10.0 * std::log10(
+                        std::max(receivedPower, std::numeric_limits<double>::min()) / noise);
+                    candidate.signalStrength = snrDb;
+                    candidate.acquisitionValid = snrDb > seeker.snrThresholdDb[i];
+                    candidate.maintenanceValid = snrDb >
+                        seeker.snrThresholdDb[i] - hysteresisDb;
+                } else if (seeker.type[i] == SeekerType::PassiveRF) {
+                    // Passive RF: homes on the target's own emission. Received
+                    // power is EIRP/(4 pi r^2) * A_e with A_e = Gr lambda^2/(4 pi),
+                    // so P_r = EIRP Gr lambda^2 / (16 pi^2 r^2). The target need
+                    // not carry an RCS profile.
+                    const double eirp = status.emitterEirpW[target];
+                    if (eirp <= 0.0) return candidate;  // no emitter on target
+                    const double gr = std::pow(10.0, seeker.antennaGainDb[i] / 10.0);
+                    const double lambda = std::max(0.0, seeker.wavelengthM[i]);
+                    const double noise = std::max(
+                        seeker.noiseFloorW[i], std::numeric_limits<double>::min());
+                    const double receivedPower = (eirp * gr * lambda * lambda) /
+                        (16.0 * std::numbers::pi * std::numbers::pi *
+                         candidate.range * candidate.range);
+                    const double snrDb = 10.0 * std::log10(
+                        std::max(receivedPower, std::numeric_limits<double>::min()) / noise);
+                    candidate.signalStrength = snrDb;
                     candidate.acquisitionValid = snrDb > seeker.snrThresholdDb[i];
                     candidate.maintenanceValid = snrDb >
                         seeker.snrThresholdDb[i] - hysteresisDb;
@@ -155,12 +215,15 @@ namespace StrikeEngine::Kernel {
                         targetAzimuth, targetElevation);
                     const double irradiance = radiantIntensity /
                         (candidate.range * candidate.range);
-                    const double transmissivity = std::exp(-0.1 * (candidate.range / 1000.0));
+                    // Beer-Lambert transmittance (extinction clamped non-negative).
+                    const double extinction = std::max(0.0, seeker.irExtinctionPerM[i]);
+                    const double transmissivity = std::exp(-extinction * candidate.range);
                     const double finalPower = irradiance * transmissivity;
                     const double sensitivity = std::max(
                         seeker.sensitivityW[i], std::numeric_limits<double>::min());
                     const double maintenanceSensitivity = sensitivity /
                         std::pow(10.0, hysteresisDb / 10.0);
+                    candidate.signalStrength = finalPower;
                     candidate.acquisitionValid = finalPower > sensitivity;
                     candidate.maintenanceValid = finalPower > maintenanceSensitivity;
                 }
@@ -228,15 +291,24 @@ namespace StrikeEngine::Kernel {
             seeker.targetAzimuthRate[i] = 0.0;
             seeker.targetElevationRate[i] = 0.0;
 
-            // Iterate through all potential targets
+            // Iterate through all potential targets and acquire the strongest
+            // signal (single-track lock). Friendly targets are rejected.
+            std::size_t bestTarget = 0;
+            Candidate bestCandidate;
+            bool foundCandidate = false;
             for (std::size_t t = 0; t < physics.size; ++t) {
                 if (t == i || !physics.active[t] || !status.isAlive[t]) continue;
                 if (status.allegiance[i] == status.allegiance[t]) continue; // Don't lock onto friendlies
                 const Candidate candidate = evaluateTarget(t);
-                if (candidate.acquisitionValid) {
-                    commitTrack(t, candidate);
-                    break;
+                if (candidate.acquisitionValid &&
+                    (!foundCandidate || candidate.signalStrength > bestCandidate.signalStrength)) {
+                    bestTarget = t;
+                    bestCandidate = candidate;
+                    foundCandidate = true;
                 }
+            }
+            if (foundCandidate) {
+                commitTrack(bestTarget, bestCandidate);
             }
             publishAvailable();
         }

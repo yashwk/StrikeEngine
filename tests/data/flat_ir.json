@@ -1,0 +1,6 @@
+{
+  "name": "Flat Test IR",
+  "azimuth_breakpoints_deg": [-90.0, 90.0],
+  "elevation_breakpoints_deg": [-90.0, 90.0],
+  "radiant_intensity_table_W_per_sr": [[1000.0, 1000.0], [1000.0, 1000.0]]
+}

@@ -8,8 +8,10 @@ namespace StrikeEngine::Kernel {
 
     enum class SeekerType {
         None,
-        RF, // Radar
-        IR  // Infrared
+        RF,       // Monostatic radar
+        IR,       // Infrared
+        PassiveRF, // Homes on the target's own emitter (EIRP)
+        SARH      // Semi-active radar homing (bistatic, off-board illuminator)
     };
 
     struct SeekerBlock {
@@ -26,6 +28,15 @@ namespace StrikeEngine::Kernel {
         // IR specific params
         std::vector<double> sensitivityW;
         std::vector<int> wavelengthBand; // To pass to atmosphere
+        std::vector<double> irExtinctionPerM; // Beer-Lambert extinction (m^-1)
+
+        // SARH illuminator (static configured position for this MVP)
+        std::vector<double> illuminatorPx;
+        std::vector<double> illuminatorPy;
+        std::vector<double> illuminatorPz;
+        std::vector<double> illuminatorPowerW;
+        std::vector<double> illuminatorGainDb;
+        std::vector<double> illuminatorWavelengthM;
 
         // Geometry and tracking configuration. Angular limits are half-angles
         // in the seeker body frame; gimbal limits are independent azimuth and

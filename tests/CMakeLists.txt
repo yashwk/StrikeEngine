@@ -28,6 +28,11 @@ target_link_libraries(seeker_test PRIVATE strikeengine)
 target_compile_definitions(seeker_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+add_executable(seeker_rich_test validation/seeker_rich_test.cpp)
+target_link_libraries(seeker_rich_test PRIVATE strikeengine)
+target_compile_definitions(seeker_rich_test PRIVATE
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 add_executable(navigation_test validation/navigation_test.cpp)
 target_link_libraries(navigation_test PRIVATE strikeengine)
 
@@ -104,6 +109,9 @@ set_tests_properties(integrator PROPERTIES TIMEOUT 120)
 
 add_test(NAME seeker COMMAND seeker_test)
 set_tests_properties(seeker PROPERTIES TIMEOUT 120)
+
+add_test(NAME seeker_rich COMMAND seeker_rich_test)
+set_tests_properties(seeker_rich PROPERTIES TIMEOUT 120)
 
 add_test(NAME navigation COMMAND navigation_test)
 set_tests_properties(navigation PROPERTIES TIMEOUT 120)

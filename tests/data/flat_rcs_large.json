@@ -1,0 +1,6 @@
+{
+  "name": "Flat Test RCS (large chaff cloud)",
+  "azimuth_breakpoints_deg": [-90.0, 90.0],
+  "elevation_breakpoints_deg": [-90.0, 90.0],
+  "rcs_table_dbsm": [[10.0, 10.0], [10.0, 10.0]]
+}

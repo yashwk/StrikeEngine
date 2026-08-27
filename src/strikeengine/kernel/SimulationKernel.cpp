@@ -79,6 +79,13 @@ namespace StrikeEngine::Kernel {
             freeList.pop_back();
         } else {
             id = physicsBlock.size++;
+            // Keep the SoA block size fields in sync with the physics entity
+            // count. SeekerSystem reads seeker.size/status.size directly, so
+            // an unsynced size silently disabled kernel-path seekers.
+            statusBlock.size = physicsBlock.size;
+            sensorBlock.size = physicsBlock.size;
+            navigationBlock.size = physicsBlock.size;
+            seekerBlock.size = physicsBlock.size;
             
             // Resize arrays
             physicsBlock.px.push_back(0); physicsBlock.py.push_back(0); physicsBlock.pz.push_back(0);
@@ -124,6 +131,7 @@ namespace StrikeEngine::Kernel {
             statusBlock.commsFailed.push_back(false);
             statusBlock.rcsProfileId.push_back("");
             statusBlock.irProfileId.push_back("");
+            statusBlock.emitterEirpW.push_back(0.0);
 
             sensorBlock.accelNoiseStdDev.push_back(0.1);
             sensorBlock.accelBiasStdDev.push_back(0.01);
@@ -143,6 +151,13 @@ namespace StrikeEngine::Kernel {
             seekerBlock.snrThresholdDb.push_back(13.0);
             seekerBlock.sensitivityW.push_back(1e-9);
             seekerBlock.wavelengthBand.push_back(0);
+            seekerBlock.irExtinctionPerM.push_back(1e-4);
+            seekerBlock.illuminatorPx.push_back(0.0);
+            seekerBlock.illuminatorPy.push_back(0.0);
+            seekerBlock.illuminatorPz.push_back(0.0);
+            seekerBlock.illuminatorPowerW.push_back(5.0e5);
+            seekerBlock.illuminatorGainDb.push_back(38.0);
+            seekerBlock.illuminatorWavelengthM.push_back(0.03);
             seekerBlock.fieldOfViewHalfAngleRad.push_back(1.0471975512); // 60 deg
             seekerBlock.gimbalAzimuthLimitRad.push_back(1.0471975512);
             seekerBlock.gimbalElevationLimitRad.push_back(1.0471975512);
@@ -226,14 +241,33 @@ namespace StrikeEngine::Kernel {
         statusBlock.commsFailed[id] = false;
         statusBlock.rcsProfileId[id] = init.rcsProfileId;
         statusBlock.irProfileId[id] = init.irProfileId;
+        statusBlock.emitterEirpW[id] = init.emitterEirpW;
 
-        seekerBlock.type[id] = init.seekerType;
-        seekerBlock.fieldOfViewHalfAngleRad[id] = 1.0471975512;
-        seekerBlock.gimbalAzimuthLimitRad[id] = 1.0471975512;
-        seekerBlock.gimbalElevationLimitRad[id] = 1.0471975512;
-        seekerBlock.lockHysteresisDb[id] = 3.0;
-        seekerBlock.lockDropoutTimeSec[id] = 0.10;
-        seekerBlock.measurementLatencySec[id] = 0.0;
+        // Per-entity seeker configuration (W: public SeekerConfig surface).
+        // Legacy init.seekerType still drives the type when the config leaves
+        // it at the default None, so existing scenarios are unchanged.
+        seekerBlock.type[id] = (config.seeker.type == SeekerType::None)
+            ? init.seekerType : config.seeker.type;
+        seekerBlock.transmitterPowerW[id] = config.seeker.transmitterPowerW;
+        seekerBlock.antennaGainDb[id] = config.seeker.antennaGainDb;
+        seekerBlock.wavelengthM[id] = config.seeker.wavelengthM;
+        seekerBlock.noiseFloorW[id] = config.seeker.noiseFloorW;
+        seekerBlock.snrThresholdDb[id] = config.seeker.snrThresholdDb;
+        seekerBlock.sensitivityW[id] = config.seeker.sensitivityW;
+        seekerBlock.wavelengthBand[id] = config.seeker.wavelengthBand;
+        seekerBlock.irExtinctionPerM[id] = config.seeker.irExtinctionPerM;
+        seekerBlock.illuminatorPx[id] = config.seeker.illuminatorPx;
+        seekerBlock.illuminatorPy[id] = config.seeker.illuminatorPy;
+        seekerBlock.illuminatorPz[id] = config.seeker.illuminatorPz;
+        seekerBlock.illuminatorPowerW[id] = config.seeker.illuminatorPowerW;
+        seekerBlock.illuminatorGainDb[id] = config.seeker.illuminatorGainDb;
+        seekerBlock.illuminatorWavelengthM[id] = config.seeker.illuminatorWavelengthM;
+        seekerBlock.fieldOfViewHalfAngleRad[id] = config.seeker.fieldOfViewHalfAngleRad;
+        seekerBlock.gimbalAzimuthLimitRad[id] = config.seeker.gimbalAzimuthLimitRad;
+        seekerBlock.gimbalElevationLimitRad[id] = config.seeker.gimbalElevationLimitRad;
+        seekerBlock.lockHysteresisDb[id] = config.seeker.lockHysteresisDb;
+        seekerBlock.lockDropoutTimeSec[id] = config.seeker.lockDropoutTimeSec;
+        seekerBlock.measurementLatencySec[id] = config.seeker.measurementLatencySec;
         seekerBlock.isLocked[id] = false;
         seekerBlock.lockedTargetId[id] = 0;
         seekerBlock.targetRange[id] = 0.0;

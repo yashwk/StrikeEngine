@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <strikeengine/models/physics/propulsion/ThrustCurve.hpp>
+#include <strikeengine/kernel/config/SeekerConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -34,6 +35,9 @@ namespace StrikeEngine::Kernel {
         double imuLeverArmX = 0.0;  // m, body-frame offset from centre of mass to IMU
         double imuLeverArmY = 0.0;
         double imuLeverArmZ = 0.0;
+
+        // --- Seeker (public per-entity config; defaults match legacy values) ---
+        SeekerConfig seeker;
 
         // --- Propulsion (empty curve => no motor, vehicle coasts) ---
         std::vector<Models::ThrustDataPoint> thrustCurve;  // time_s vs thrust_N

@@ -9,7 +9,9 @@ namespace StrikeEngine::Kernel {
         Missile,
         Aircraft,
         SurfaceTarget,
-        RadarSite
+        RadarSite,
+        Chaff,  // RF decoy: carries an rcsProfileId
+        Flare   // IR decoy: carries an irProfileId
     };
 
     enum class Allegiance : uint8_t {
@@ -37,6 +39,9 @@ namespace StrikeEngine::Kernel {
         // Target Signature Metadata
         std::vector<std::string> rcsProfileId;
         std::vector<std::string> irProfileId;
+        // Target-side effective radiated power (W); used by PassiveRF seekers.
+        // 0 = no emitter.
+        std::vector<double> emitterEirpW;
 
         std::size_t size = 0;
     };
