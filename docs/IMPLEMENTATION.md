@@ -106,7 +106,8 @@ CPU-side only.
 ### Core and configuration
 
 - `SimulationKernel.hpp/.cpp`: lifecycle, entity management, command queue,
-  orchestration, environment, and public block access.
+  orchestration, environment, public block access, and deterministic
+  failure/damage injection (`failEntity`, `applyDamage`).
 - `EnvironmentConfig.hpp`: terrain/wind callbacks and earth options including
   `useEcefTruth`, gravity selection, Coriolis, centrifugal, and transport.
 - `ScenarioConfig.hpp`: scenario metadata, environment, entity/vehicle setup,
@@ -121,22 +122,31 @@ CPU-side only.
 - `PropulsionModel.hpp` / `ThrustCurve.hpp`: thrust interpolation, Isp, mass flow,
   and dry-mass limiting.
 - `CPUBackend.cpp`: stage-re-evaluated force model, body Euler dynamics,
-  quaternion propagation, and servo dynamics.
+  quaternion propagation, and servo dynamics. Reads the physical truth mirror
+  of the motor/actuator failure flags (`PhysicsBlock::motorFailed` /
+  `actuatorFailed`).
 - `EarthModel.hpp`: WGS84 conversion, normal gravity, Coriolis, curvature, and
   transport APIs.
 - `EarthFrames.hpp`: ECEF/ENU/NED transforms, local gravity, and centrifugal
   acceleration.
 - `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4 propagator.
-- `EventSystem.cpp`: local terrain views, geodetic altitude, and ellipsoid
-  impact clamping.
+- `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid
+  impact clamping, and the failure/damage event vocabulary (`MotorFailure`,
+  `ActuatorFailure`, `SensorFailure`, `StructuralFailure`,
+  `CommunicationFailure`).
 
 ### GNC and studies
 
-- `SensorSystem.cpp`: noisy frame-aware IMU/GPS.
+- `SensorSystem.cpp`: noisy frame-aware IMU/GPS; sensor-failure flag stops
+  measurement updates.
 - `NavigationSystem.cpp`: alignment, strapdown INS, and coupled 15-state EKF.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, and latency.
-- `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff.
+- `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff;
+  communication-failure flag zeroes commanded acceleration (ballistic).
 - `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin control.
+- `EntityStatusBlock.hpp`: per-entity health, alive state, and the deterministic
+  failure flags (motor, actuator, sensor, communications); structural failure
+  is `isAlive=false` + `health=0`.
 - `SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`, `BatchRunner`: study
   wrappers; frame normalization is implemented in `Reporting.hpp` and
   versioned CSV/binary output in `StudyOutput.hpp/.cpp`, including the binary
@@ -176,6 +186,7 @@ remains future work.
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation |
 | `guidance`, `scenario` | guidance and scenario contracts |
 | `kernel_lifecycle` | freed-slot reuse reset and non-positive-timestep rejection |
+| `failure` | deterministic failure/damage semantics: motor thrust/mass-flow stop, actuator fin freeze, sensor measurement stop, communication guidance zero, structural deactivation, per-type events, and argument validation |
 | `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording |
 
 Every runtime increment MUST add or update a deterministic regression, run
@@ -254,8 +265,10 @@ runtime guarantees:
 2. **Global terrain:** `tools/convert_srtm.cpp` exists, but runtime terrain is
    still a callback. Add DEM/DTED tiles, interpolation, streaming, datum/geoid
    policy, dateline/polar handling, and frame-aware collision queries.
-3. **Failures:** add motor, actuator, sensor, structural, and communications
-   failure models and event semantics.
+3. **Failures:** motor, actuator, sensor, structural, and communications
+   failure models and event semantics are implemented (MVP) as deterministic
+   per-entity flags with events (`failure_test`). Probabilistic degradation,
+   partial health effects beyond deactivation, and repair remain open.
 4. **GNC fidelity:** add coning/sculling, lever arms, full earth-rate gyro
    compensation, richer RF/IR propagation, and more seeker types.
 5. **Guidance/aero:** add trajectory management, pursuit, LQR/MPC, blended

@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `1ff6d1e`<br>
-**Validation result:** Release build, **21/21 CTest tests passed**
+**Validation result:** Release build, **22/22 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -34,7 +34,8 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W2 — 6-DOF rigid-body truth | Implemented | `rigidbody_test`; quaternion normalization, body-frame rates, diagonal inertia, gyroscopic coupling, and commanded climb pass. |
 | W3 — Control authority | MVP / partial | `intercept_test`; minimum miss is 25.30 m and post-burnout control is exercised. Guidance and control remain engineering-model fidelity. |
 | W4 — True integration and impact timing | MVP / partial | `integrator_test`; derivative-callback Euler, RK4, RK45, Symplectic/Velocity-Verlet, bounded adaptation, and interpolated ground crossing are covered. |
-| W5 — Events and environment | MVP / partial | `environment_test`; terrain and wind callbacks plus real impact deactivation are covered. Failure models and terrain databases are open. |
+| W5 — Events and environment | MVP / partial | `environment_test`; terrain and wind callbacks plus real impact deactivation are covered. Failure/damage workstream is Implemented/MVP via `failure_test`. Terrain databases are open. |
+| W17 — Failure and damage semantics | Implemented / MVP | `failure_test`; deterministic motor, actuator, sensor, structural, and communication failure flags with real state transitions and per-type events are covered. Boundary: no probabilistic degradation, no partial health effects beyond deactivation, no repair. |
 | W6 — Seeker and sensor fidelity | MVP / partial | `seeker_test`; FOV, gimbal limits, hysteresis, filtered LOS rates, and latency are covered. Propagation and seeker-family depth remain limited. |
 | W7 — Navigation EKF | MVP / partial | `navigation_test`; coupled 15-state covariance, GPS corrections, bounds, and deterministic bias convergence are covered. Full inertial compensation is not complete. |
 | W8 — Scenario and guidance contract | MVP / partial | `guidance_test` and `scenario_test`; PN/APN, moving-target response, seeker handoff, scenario propagation, and isolated batch execution are covered. |
@@ -63,13 +64,14 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Navigation | Perfect initial alignment, strapdown INS, and coupled 15-state error-state EKF with GPS position/velocity updates. | **MVP / partial:** earth-rate gyro compensation and advanced inertial error sources remain open. |
 | Seekers | RF RCS/radar-range and IR irradiance/extinction models; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, and friendly rejection. | **MVP / partial:** propagation is simplified and additional seeker families/phenomena are not implemented. |
 | Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, and seeker-lock APN handoff. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
-| Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, and timestamped ground-impact events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or failure-event system. |
+| Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, timestamped ground-impact events, and deterministic failure/damage events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or probabilistic failure model. |
+| Failure and damage | Deterministic per-entity flags (`failEntity`/`applyDamage`) driving thrust/mass-flow cutoff, fin freeze, sensor dropout, ballistic comms loss, and structural deactivation with per-type events. | **MVP / partial:** flags are deterministic and not probabilistic; partial health has no effect beyond deactivation; repair is not modeled. |
 | Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, and isolated batch runner with configurable versioned CSV/binary reporting and a binary reader. | **MVP / partial:** richer telemetry and streaming remain, and some optimizer paths remain primary-entity oriented. |
 | Backends and packaging | Deterministic CPU/static library, CMake packaging, and optional Vulkan target. | **MVP / partial:** Vulkan parity is not validated, ECEF GPU support is open, and CUDA is not implemented. |
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **21/21 tests passed** at the
+- The complete Release CTest suite is green: **22/22 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **25.30 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
@@ -77,8 +79,8 @@ and each limitation is listed once in the subsystem assessment or backlog.
 - The test inventory covers study wrappers; vehicle configuration; rigid-body
   truth; intercept control; integration; seeker; navigation; environment;
   earth/frame/transport/gravity models; standalone ECEF propagation; kernel
-  ECEF truth; guidance; scenario loading; and kernel slot-reuse and timestep
-  validation.
+  ECEF truth; guidance; scenario loading; kernel slot-reuse and timestep
+  validation; and deterministic failure/damage semantics.
 
 The results establish regression coverage for the implemented paths. They do
 not establish production-grade aerodynamics, global geophysics, sensor
@@ -96,8 +98,10 @@ to reliable downstream use:
    interpolation, datum/geoid policy, dateline/polar handling, and frame-aware
    collision queries. `tools/convert_srtm.cpp` is preparation, not runtime
    terrain support.
-3. **Failure and damage semantics:** add motor, actuator, sensor, structural,
-   and communications failures with deterministic state transitions and events.
+3. **Failure and damage semantics:** deterministic motor, actuator, sensor,
+   structural, and communications failures with state transitions and events
+   are implemented (MVP, `failure_test`). Remaining boundary: probabilistic
+   degradation, partial health effects beyond deactivation, and repair.
 4. **GNC fidelity:** add coning/sculling, lever arms, complete earth-rate gyro
    compensation, richer RF/IR propagation, and additional seeker types.
 5. **Guidance and aero depth:** add validated coefficient tables, trajectory
