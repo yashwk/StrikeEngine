@@ -156,6 +156,12 @@ namespace StrikeEngine::Kernel
                     massFlow = fuel / kFuelDepletionGuardWindowSec;
             }
 
+            // Motor failure zeroes thrust; mass flow stops with it.
+            if (i < s.motorFailed.size() && s.motorFailed[i]) {
+                thrustBodyX = 0.0;
+                massFlow = 0.0;
+            }
+
             // 5. Total body force -> world acceleration
             const double invMass = 1.0 / s.mass[i];
             const double fbx = aeroWrench.force_x + thrustBodyX;
@@ -271,9 +277,16 @@ namespace StrikeEngine::Kernel
                 const double target = std::clamp((cmd - fin) / tau, -maxServoRate, maxServoRate);
                 return target;
             };
-            d.finPitch[i] = servo(c.pitchCommand[i], s.finPitch[i], servoTimeConstant);
-            d.finYaw[i]   = servo(c.yawCommand[i],   s.finYaw[i],   servoTimeConstant);
-            d.finRoll[i]  = servo(c.rollCommand[i],  s.finRoll[i],  servoTimeConstant);
+            if (i < s.actuatorFailed.size() && s.actuatorFailed[i]) {
+                // Actuator failure: achieved fins freeze (no servo motion).
+                d.finPitch[i] = 0.0;
+                d.finYaw[i] = 0.0;
+                d.finRoll[i] = 0.0;
+            } else {
+                d.finPitch[i] = servo(c.pitchCommand[i], s.finPitch[i], servoTimeConstant);
+                d.finYaw[i]   = servo(c.yawCommand[i],   s.finYaw[i],   servoTimeConstant);
+                d.finRoll[i]  = servo(c.rollCommand[i],  s.finRoll[i],  servoTimeConstant);
+            }
         }
     }
 

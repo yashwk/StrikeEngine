@@ -2,6 +2,7 @@
 
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
 #include <strikeengine/kernel/data/SensorBlock.hpp>
+#include <strikeengine/kernel/data/EntityStatusBlock.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <random>
 #include <cstddef>
@@ -18,12 +19,14 @@ namespace StrikeEngine::Kernel {
          * @brief Updates all sensor measurements (IMU and GPS) based on true physics state.
          * @param physics The ground-truth physics state.
          * @param sensors The sensor block to populate with noisy measurements.
+         * @param status The entity status block (sensor failure flags).
          * @param currentTime Current simulation time (used for GPS timing).
          * @param dt Timestep.
          */
         void update(
             const PhysicsBlock& physics,
             SensorBlock& sensors,
+            const EntityStatusBlock& status,
             double currentTime,
             double dt,
             const EnvironmentConfig& environment = {}

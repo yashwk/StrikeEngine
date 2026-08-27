@@ -50,6 +50,12 @@ struct PhysicsBlock {
 
 	std::vector<bool> active;
 
+	// Physical truth mirror (NOT integrated state): lets the backend read
+	// failure flags without a signature change. Canonical flags live in
+	// EntityStatusBlock; these are kept in sync by the kernel.
+	std::vector<bool> motorFailed;
+	std::vector<bool> actuatorFailed;
+
 	size_t size = 0;
 };
 

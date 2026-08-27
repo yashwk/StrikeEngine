@@ -39,6 +39,15 @@ namespace StrikeEngine::Kernel {
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
 
+            // Communication failure: ignore guidance and seeker handoff;
+            // the entity flies ballistic with zero commanded acceleration.
+            if (i < status.commsFailed.size() && status.commsFailed[i]) {
+                guidance.commandedAccelX[i] = 0.0;
+                guidance.commandedAccelY[i] = 0.0;
+                guidance.commandedAccelZ[i] = 0.0;
+                continue;
+            }
+
             // Terminal Homing override!
             if (seeker.type[i] != SeekerType::None && seeker.isLocked[i]) {
                 updateSeekerAPN(i, nav, seeker, guidance);

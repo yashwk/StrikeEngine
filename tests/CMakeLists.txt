@@ -64,6 +64,9 @@ target_link_libraries(reporting_test PRIVATE strikeengine)
 add_executable(kernel_lifecycle_test validation/kernel_lifecycle_test.cpp)
 target_link_libraries(kernel_lifecycle_test PRIVATE strikeengine)
 
+add_executable(failure_test validation/failure_test.cpp)
+target_link_libraries(failure_test PRIVATE strikeengine)
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -128,5 +131,8 @@ set_tests_properties(reporting PROPERTIES TIMEOUT 120)
 
 add_test(NAME kernel_lifecycle COMMAND kernel_lifecycle_test)
 set_tests_properties(kernel_lifecycle PROPERTIES TIMEOUT 120)
+
+add_test(NAME failure COMMAND failure_test)
+set_tests_properties(failure PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")

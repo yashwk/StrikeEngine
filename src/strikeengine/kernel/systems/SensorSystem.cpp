@@ -43,6 +43,7 @@ namespace StrikeEngine::Kernel {
     void SensorSystem::update(
         const PhysicsBlock& physics,
         SensorBlock& sensors,
+        const EntityStatusBlock& status,
         double currentTime,
         double dt,
         const EnvironmentConfig& environment)
@@ -70,6 +71,13 @@ namespace StrikeEngine::Kernel {
 
         for (std::size_t i = 0; i < size; ++i) {
             if (!physics.active[i]) continue;
+
+            // Sensor failure: measurements stop updating entirely (no new
+            // IMU/GPS noise is generated; GPS simply never reports fresh data).
+            if (i < status.sensorFailed.size() && status.sensorFailed[i]) {
+                sensors.gpsUpdated[i] = false;
+                continue;
+            }
 
             // 1. IMU Specific Force (world-frame acceleration minus gravity).
             std::array<double, 3> gravity{0.0, 0.0, -9.80665};

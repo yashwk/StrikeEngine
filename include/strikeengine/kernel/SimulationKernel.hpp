@@ -70,6 +70,10 @@ namespace StrikeEngine::Kernel {
         PhysicsId createVehicle(const VehicleInitState& init, const VehicleConfig& config);
         void removeVehicle(PhysicsId id);
 
+        // Deterministic failure and damage injection
+        void failEntity(PhysicsId id, FailureMode mode);
+        void applyDamage(PhysicsId id, double damage);
+
         // Simulation control
         void queueCommand(const SimulationCommand& cmd);
         void step(double dt);
@@ -92,6 +96,8 @@ namespace StrikeEngine::Kernel {
         const NavigationBlock& getNavigation() const { return navigationBlock; }
         const SensorBlock& getSensors() const { return sensorBlock; }
         const SeekerBlock& getSeekers() const { return seekerBlock; }
+        const EntityStatusBlock& getStatus() const { return statusBlock; }
+        EventSystem& getEventSystem() { return eventSystem; }
         double getSimulationTime() const { return time.currentTime(); }
         std::size_t getEntityCount() const { return physicsBlock.size - freeList.size(); }
 

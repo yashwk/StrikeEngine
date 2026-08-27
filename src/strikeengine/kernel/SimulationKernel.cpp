@@ -5,6 +5,7 @@
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
 #include <stdexcept>
+#include <algorithm>
 
 namespace StrikeEngine::Kernel {
 
@@ -99,6 +100,8 @@ namespace StrikeEngine::Kernel {
             physicsBlock.ignitionTime.push_back(0.0);
             physicsBlock.finPitch.push_back(0.0); physicsBlock.finYaw.push_back(0.0); physicsBlock.finRoll.push_back(0.0);
             physicsBlock.active.push_back(true);
+            physicsBlock.motorFailed.push_back(false);
+            physicsBlock.actuatorFailed.push_back(false);
 
             controlBlock.thrustCommand.push_back(0);
             controlBlock.pitchCommand.push_back(0);
@@ -115,6 +118,10 @@ namespace StrikeEngine::Kernel {
             statusBlock.allegiance.push_back(Allegiance::Friendly);
             statusBlock.health.push_back(100.0);
             statusBlock.isAlive.push_back(true);
+            statusBlock.motorFailed.push_back(false);
+            statusBlock.actuatorFailed.push_back(false);
+            statusBlock.sensorFailed.push_back(false);
+            statusBlock.commsFailed.push_back(false);
             statusBlock.rcsProfileId.push_back("");
             statusBlock.irProfileId.push_back("");
 
@@ -190,6 +197,8 @@ namespace StrikeEngine::Kernel {
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;
+        physicsBlock.motorFailed[id] = false;
+        physicsBlock.actuatorFailed[id] = false;
 
         // Per-entity propulsion registration (W1): empty curve => coasting vehicle
         if (!config.thrustCurve.empty()) {
@@ -205,6 +214,10 @@ namespace StrikeEngine::Kernel {
         statusBlock.allegiance[id] = init.allegiance;
         statusBlock.health[id] = 100.0;
         statusBlock.isAlive[id] = true;
+        statusBlock.motorFailed[id] = false;
+        statusBlock.actuatorFailed[id] = false;
+        statusBlock.sensorFailed[id] = false;
+        statusBlock.commsFailed[id] = false;
         statusBlock.rcsProfileId[id] = init.rcsProfileId;
         statusBlock.irProfileId[id] = init.irProfileId;
 
@@ -238,6 +251,69 @@ namespace StrikeEngine::Kernel {
         freeList.push_back(id);
     }
 
+    void SimulationKernel::failEntity(PhysicsId id, FailureMode mode) {
+        if (id >= physicsBlock.size) {
+            throw std::out_of_range("SimulationKernel::failEntity: entity id out of range");
+        }
+        if (mode == FailureMode::None) return;
+
+        SimulationEvent evt;
+        evt.entityId = id;
+        evt.timestamp = time.currentTime();
+
+        switch (mode) {
+            case FailureMode::MotorFailure:
+                statusBlock.motorFailed[id] = true;
+                physicsBlock.motorFailed[id] = true;
+                evt.type = EventType::MotorFailure;
+                break;
+            case FailureMode::ActuatorFailure:
+                statusBlock.actuatorFailed[id] = true;
+                physicsBlock.actuatorFailed[id] = true;
+                evt.type = EventType::ActuatorFailure;
+                break;
+            case FailureMode::SensorFailure:
+                statusBlock.sensorFailed[id] = true;
+                evt.type = EventType::SensorFailure;
+                break;
+            case FailureMode::CommunicationFailure:
+                statusBlock.commsFailed[id] = true;
+                evt.type = EventType::CommunicationFailure;
+                break;
+            case FailureMode::StructuralFailure: {
+                // Deactivate exactly like a ground impact: kill the entity,
+                // zero the motion state, and dispatch the event.
+                statusBlock.isAlive[id] = false;
+                statusBlock.health[id] = 0.0;
+                physicsBlock.active[id] = false;
+                physicsBlock.vx[id] = 0.0;
+                physicsBlock.vy[id] = 0.0;
+                physicsBlock.vz[id] = 0.0;
+                physicsBlock.ax[id] = 0.0;
+                physicsBlock.ay[id] = 0.0;
+                physicsBlock.az[id] = 0.0;
+                evt.type = EventType::StructuralFailure;
+                break;
+            }
+            case FailureMode::None:
+                return;
+        }
+        eventSystem.dispatch(evt);
+    }
+
+    void SimulationKernel::applyDamage(PhysicsId id, double damage) {
+        if (id >= physicsBlock.size) {
+            throw std::out_of_range("SimulationKernel::applyDamage: entity id out of range");
+        }
+        if (damage < 0.0) {
+            throw std::invalid_argument("SimulationKernel::applyDamage: damage must be non-negative");
+        }
+        statusBlock.health[id] = std::max(0.0, statusBlock.health[id] - damage);
+        if (statusBlock.health[id] <= 0.0 && statusBlock.isAlive[id]) {
+            failEntity(id, FailureMode::StructuralFailure);
+        }
+    }
+
     void SimulationKernel::queueCommand(const SimulationCommand& cmd) {
         commandProcessor.enqueueCommand(cmd);
     }
@@ -257,7 +333,7 @@ namespace StrikeEngine::Kernel {
         backend->step(physicsBlock, controlBlock, time.currentTime(), dt);
         
         // 2. Generate noisy sensor measurements
-        sensorSystem.update(physicsBlock, sensorBlock, time.currentTime(), dt, environment);
+        sensorSystem.update(physicsBlock, sensorBlock, statusBlock, time.currentTime(), dt, environment);
         
         // 3. Compute Navigation estimates (INS + EKF)
         navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt, environment);

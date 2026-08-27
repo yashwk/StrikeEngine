@@ -13,7 +13,12 @@ namespace StrikeEngine::Kernel {
         TargetImpact,
         GroundImpact,
         Detonation,
-        Custom
+        Custom,
+        MotorFailure,
+        ActuatorFailure,
+        SensorFailure,
+        StructuralFailure,
+        CommunicationFailure
     };
 
     struct SimulationEvent {
