@@ -253,7 +253,10 @@ limit; the integrator clamps the final deflection range.
 The supported integrators are Euler, true RK4, Symplectic/Velocity-Verlet,
 and adaptive RK45. RK4 and RK45 use derivative callbacks and re-evaluate
 forces at intermediate stages. RK45 uses bounded adaptive substeps. Impact
-crossing is interpolated by the event system after a physics step.
+crossing is interpolated by the event system after a physics step. The
+integrator is also selectable at kernel construction via `IntegratorType`
+(default RK4) for the CPU backend, in addition to the standalone availability
+of each integrator.
 
 ## 7. Sensors, navigation, seekers, and guidance
 

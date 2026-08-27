@@ -98,6 +98,9 @@ indices; inactive entities are skipped.
 Truth is advanced before sensing; guidance and autopilot output affects the next
 physics step. This ordering is part of the integration contract.
 
+`SimulationKernel` accepts an `IntegratorType` (default RK4) which is applied
+CPU-side only.
+
 ## 5. Module ownership
 
 ### Core and configuration
