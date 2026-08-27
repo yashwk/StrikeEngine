@@ -95,6 +95,8 @@ namespace StrikeEngine::Kernel {
         guidance.commandedAccelX[id] = a_cmd_world.x;
         guidance.commandedAccelY[id] = a_cmd_world.y;
         guidance.commandedAccelZ[id] = a_cmd_world.z;
+
+        clampCommandMagnitude(id, guidance);
     }
 
     void GuidanceSystem::updateProportionalNavigation(

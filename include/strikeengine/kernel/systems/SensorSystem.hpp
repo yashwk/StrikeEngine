@@ -37,6 +37,12 @@ namespace StrikeEngine::Kernel {
          */
         void setSeed(std::uint32_t seed);
 
+        /**
+         * @brief Clear per-entity sensor state (streaming biases, GPS phase)
+         * so a reset kernel starts clean without reseeding the RNG stream.
+         */
+        void reset();
+
     private:
         std::mt19937 rng;
         double lastGpsUpdateTime = 0.0;

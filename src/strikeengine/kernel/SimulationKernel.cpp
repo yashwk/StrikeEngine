@@ -62,6 +62,7 @@ namespace StrikeEngine::Kernel {
         navigationBlock = NavigationBlock();
         seekerBlock = SeekerBlock();
         seekerSystem.reset();
+        sensorSystem.reset();
         freeList.clear();
         time.reset();
     }
@@ -153,6 +154,26 @@ namespace StrikeEngine::Kernel {
             seekerBlock.hasPreviousLos.push_back(false);
         }
 
+        // Per-entity defaults apply to BOTH fresh and reused slots so a
+        // freed slot cannot leak the removed entity's stale state.
+        controlBlock.thrustCommand[id] = 0;
+        controlBlock.pitchCommand[id] = 0;
+        controlBlock.yawCommand[id] = 0;
+        controlBlock.rollCommand[id] = 0;
+
+        guidanceBlock.mode[id] = GuidanceMode::None;
+        guidanceBlock.targetX[id] = 0; guidanceBlock.targetY[id] = 0; guidanceBlock.targetZ[id] = 0;
+        guidanceBlock.targetVx[id] = 0; guidanceBlock.targetVy[id] = 0; guidanceBlock.targetVz[id] = 0;
+        guidanceBlock.commandedAccelX[id] = 0; guidanceBlock.commandedAccelY[id] = 0; guidanceBlock.commandedAccelZ[id] = 0;
+        guidanceBlock.maxAccel[id] = 0.0;
+
+        sensorBlock.accelNoiseStdDev[id] = 0.1;
+        sensorBlock.accelBiasStdDev[id] = 0.01;
+        sensorBlock.gyroNoiseStdDev[id] = 0.01;
+        sensorBlock.gyroBiasStdDev[id] = 0.001;
+        sensorBlock.gpsPosNoiseStdDev[id] = 5.0;
+        sensorBlock.gpsVelNoiseStdDev[id] = 0.5;
+
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
         physicsBlock.qw[id] = init.qw; physicsBlock.qx[id] = init.qx; physicsBlock.qy[id] = init.qy; physicsBlock.qz[id] = init.qz;
@@ -223,6 +244,10 @@ namespace StrikeEngine::Kernel {
     }
 
     void SimulationKernel::step(double dt) {
+        if (dt <= 0.0) {
+            throw std::invalid_argument(
+                "SimulationKernel::step requires a positive timestep");
+        }
         const std::vector<double> previousPx = physicsBlock.px;
         const std::vector<double> previousPy = physicsBlock.py;
         const std::vector<double> previousPz = physicsBlock.pz;

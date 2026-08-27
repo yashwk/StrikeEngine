@@ -82,7 +82,6 @@ namespace StrikeEngine::Kernel {
         const GuidanceBlock& getGuidance() const { return guidanceBlock; }
         const NavigationBlock& getNavigation() const { return navigationBlock; }
         const SensorBlock& getSensors() const { return sensorBlock; }
-        SeekerBlock& getSeekers() { return seekerBlock; }
         const SeekerBlock& getSeekers() const { return seekerBlock; }
         double getSimulationTime() const { return time.currentTime(); }
         std::size_t getEntityCount() const { return physicsBlock.size - freeList.size(); }

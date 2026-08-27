@@ -19,6 +19,16 @@ namespace StrikeEngine::Kernel {
         rng.seed(seed);
     }
 
+    void SensorSystem::reset() {
+        trueAccelBiasX.clear();
+        trueAccelBiasY.clear();
+        trueAccelBiasZ.clear();
+        trueGyroBiasX.clear();
+        trueGyroBiasY.clear();
+        trueGyroBiasZ.clear();
+        lastGpsUpdateTime = 0.0;
+    }
+
     void SensorSystem::ensureCapacity(std::size_t size) {
         if (trueAccelBiasX.size() < size) {
             trueAccelBiasX.resize(size, 0.0);

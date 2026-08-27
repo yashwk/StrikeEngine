@@ -151,8 +151,9 @@ namespace StrikeEngine::Kernel
                     t - s.ignitionTime[i], atm.pressure);
                 thrustBodyX = prop.thrustBodyX;
                 massFlow   = prop.massFlowRate_kg_s;
-                if (massFlow * 0.01 > fuel)  // never burn more fuel than remains
-                    massFlow = fuel / 0.01;
+                constexpr double kFuelDepletionGuardWindowSec = 0.01; // depletion guard window (s); mass floor is enforced by applyStateUpdate
+                if (massFlow * kFuelDepletionGuardWindowSec > fuel)  // never burn more fuel than remains
+                    massFlow = fuel / kFuelDepletionGuardWindowSec;
             }
 
             // 5. Total body force -> world acceleration

@@ -76,10 +76,17 @@ namespace StrikeEngine::Simulation {
 
             // 2. Simulate until timeout or all dead
             int steps = static_cast<int>(maxTime / dt);
+            const auto& physics = kernel.getPhysics();
             for (int step = 0; step < steps; ++step) {
                 kernel.step(dt);
-                // Optimization: if all dead, break early
-                if (kernel.getEntityCount() == 0) break;
+                // Optimization: if all entities are inactive, break early.
+                // Ground impact sets active=false without freeing the slot, so
+                // an all-inactive test must read the physics active flags.
+                bool anyActive = false;
+                for (std::size_t id = 0; id < physics.size; ++id) {
+                    if (physics.active[id]) { anyActive = true; break; }
+                }
+                if (!anyActive) break;
             }
 
             // 3. Evaluate fitness and update bests

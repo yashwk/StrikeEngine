@@ -18,13 +18,13 @@ namespace StrikeEngine::Simulation {
          * @brief Runs a Monte Carlo statistical analysis.
          * @param baseConfig The nominal scenario configuration.
          * @param iterations Number of simulation runs.
-         * @param perturbate Callback to apply random noise to the config before each run.
+         * @param perturb Callback to apply random noise to the config before each run.
          * @param outputFile CSV file to output the results of all iterations.
          */
         void execute(
             const Kernel::ScenarioConfig& baseConfig,
             int iterations,
-            std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturbate,
+            std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturb,
             const std::string& outputFile,
             const StudyOutputConfig& outputConfig = {}
         );

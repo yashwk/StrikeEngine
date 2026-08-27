@@ -41,18 +41,29 @@ namespace StrikeEngine::Simulation {
             }
             result.primaryEntityId = scenarios[scenarioIndex].primaryEntityIndex;
 
+            const auto& physics = kernel.getPhysics();
+
             while (kernel.getSimulationTime() < maxTime) {
                 bool anyActive = false;
-                for (std::size_t id = 0; id < kernel.getPhysics().size; ++id) {
-                    anyActive = anyActive || kernel.getPhysics().active[id];
+                for (std::size_t id = 0; id < physics.size; ++id) {
+                    anyActive = anyActive || physics.active[id];
                 }
                 if (!anyActive) break;
+
+                // Track peak trajectory metrics from the pre-step state so the
+                // initial condition and every post-step state are covered.
+                for (std::size_t id = 0; id < physics.size; ++id) {
+                    const auto state = reportState(
+                        physics, id, scenarios[scenarioIndex].environment);
+                    result.maxAltitudeM = std::max(result.maxAltitudeM, state.altitudeM);
+                    result.maxSpeedMps = std::max(result.maxSpeedMps, state.speedMps);
+                }
+
                 const double stepDt = std::min(
                     dt, maxTime - kernel.getSimulationTime());
                 kernel.step(stepDt);
             }
 
-            const auto& physics = kernel.getPhysics();
             result.endTime = kernel.getSimulationTime();
             for (std::size_t id = 0; id < physics.size; ++id) {
                 if (physics.active[id]) ++result.activeEntities;

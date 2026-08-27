@@ -14,7 +14,7 @@ namespace StrikeEngine::Simulation {
     void MonteCarlo::execute(
         const Kernel::ScenarioConfig& baseConfig,
             int iterations,
-            std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturbate,
+            std::function<void(Kernel::ScenarioConfig&, std::mt19937&)> perturb,
             const std::string& outputFile,
             const StudyOutputConfig& outputConfig)
     {
@@ -32,7 +32,7 @@ namespace StrikeEngine::Simulation {
         for (int i = 0; i < iterations; ++i) {
             // Apply noise to base config
             Kernel::ScenarioConfig config = baseConfig;
-            perturbate(config, generator);
+            perturb(config, generator);
 
             // Initialize Kernel
             Kernel::SimulationKernel kernel;
