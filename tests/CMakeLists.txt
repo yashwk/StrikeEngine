@@ -31,6 +31,9 @@ target_compile_definitions(seeker_test PRIVATE
 add_executable(navigation_test validation/navigation_test.cpp)
 target_link_libraries(navigation_test PRIVATE strikeengine)
 
+add_executable(lever_arm_test validation/lever_arm_test.cpp)
+target_link_libraries(lever_arm_test PRIVATE strikeengine)
+
 add_executable(environment_test validation/environment_test.cpp)
 target_link_libraries(environment_test PRIVATE strikeengine)
 
@@ -98,6 +101,9 @@ set_tests_properties(seeker PROPERTIES TIMEOUT 120)
 
 add_test(NAME navigation COMMAND navigation_test)
 set_tests_properties(navigation PROPERTIES TIMEOUT 120)
+
+add_test(NAME lever_arm COMMAND lever_arm_test)
+set_tests_properties(lever_arm PROPERTIES TIMEOUT 120)
 
 add_test(NAME environment COMMAND environment_test)
 set_tests_properties(environment PROPERTIES TIMEOUT 120)

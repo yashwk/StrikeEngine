@@ -30,6 +30,11 @@ namespace StrikeEngine::Kernel {
         double clFin   = 0.0;   // fin lift coefficient per rad of deflection
         double clMax   = 2.0;   // max |CL| (stall/control-surface limit)
 
+        // --- Sensor geometry ---
+        double imuLeverArmX = 0.0;  // m, body-frame offset from centre of mass to IMU
+        double imuLeverArmY = 0.0;
+        double imuLeverArmZ = 0.0;
+
         // --- Propulsion (empty curve => no motor, vehicle coasts) ---
         std::vector<Models::ThrustDataPoint> thrustCurve;  // time_s vs thrust_N
         double vacuumIsp = 250.0;                          // s

@@ -59,6 +59,7 @@ namespace StrikeEngine::Kernel {
             sensors.gpsPosX.resize(size); sensors.gpsPosY.resize(size); sensors.gpsPosZ.resize(size);
             sensors.gpsVelX.resize(size); sensors.gpsVelY.resize(size); sensors.gpsVelZ.resize(size);
             sensors.gpsUpdated.resize(size);
+            sensors.imuLeverArmX.resize(size); sensors.imuLeverArmY.resize(size); sensors.imuLeverArmZ.resize(size);
         }
 
         bool updateGps = false;
@@ -123,6 +124,32 @@ namespace StrikeEngine::Kernel {
             double bwx = physics.wx[i];
             double bwy = physics.wy[i];
             double bwz = physics.wz[i];
+
+            // IMU lever-arm correction (MVP): the IMU is mounted at a fixed
+            // body-frame offset l from the centre of mass, so it senses the
+            // CM specific force plus the rigid-body terms
+            //     f_imu = f_cm + alpha x l + omega x (omega x l)
+            // where alpha is the body angular acceleration and omega the body
+            // angular rate. Zero lever arm yields a zero correction.
+            const double lx = sensors.imuLeverArmX[i];
+            const double ly = sensors.imuLeverArmY[i];
+            const double lz = sensors.imuLeverArmZ[i];
+            if (lx != 0.0 || ly != 0.0 || lz != 0.0) {
+                // term_a = alpha x l
+                const double termAx = physics.alphay[i] * lz - physics.alphaz[i] * ly;
+                const double termAy = physics.alphaz[i] * lx - physics.alphax[i] * lz;
+                const double termAz = physics.alphax[i] * ly - physics.alphay[i] * lx;
+                // c = omega x l; term_c = omega x (omega x l)
+                const double cx = bwy * lz - bwz * ly;
+                const double cy = bwz * lx - bwx * lz;
+                const double cz = bwx * ly - bwy * lx;
+                const double termCx = bwy * cz - bwz * cy;
+                const double termCy = bwz * cx - bwx * cz;
+                const double termCz = bwx * cy - bwy * cx;
+                bfx += termAx + termCx;
+                bfy += termAy + termCy;
+                bfz += termAz + termCz;
+            }
 
             // Random walk biases (slow drift) - very simple model
             trueAccelBiasX[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;

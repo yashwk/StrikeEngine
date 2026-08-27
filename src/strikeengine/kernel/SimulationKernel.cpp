@@ -131,6 +131,9 @@ namespace StrikeEngine::Kernel {
             sensorBlock.gyroBiasStdDev.push_back(0.001);
             sensorBlock.gpsPosNoiseStdDev.push_back(5.0);
             sensorBlock.gpsVelNoiseStdDev.push_back(0.5);
+            sensorBlock.imuLeverArmX.push_back(0.0);
+            sensorBlock.imuLeverArmY.push_back(0.0);
+            sensorBlock.imuLeverArmZ.push_back(0.0);
 
             seekerBlock.type.push_back(SeekerType::None);
             seekerBlock.transmitterPowerW.push_back(1000.0);
@@ -179,6 +182,9 @@ namespace StrikeEngine::Kernel {
         sensorBlock.gyroBiasStdDev[id] = 0.001;
         sensorBlock.gpsPosNoiseStdDev[id] = 5.0;
         sensorBlock.gpsVelNoiseStdDev[id] = 0.5;
+        sensorBlock.imuLeverArmX[id] = config.imuLeverArmX;
+        sensorBlock.imuLeverArmY[id] = config.imuLeverArmY;
+        sensorBlock.imuLeverArmZ[id] = config.imuLeverArmZ;
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
