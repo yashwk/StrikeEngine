@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **21/21 CTest tests pass**.
+- Release validation: **23/23 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -187,7 +187,8 @@ remains future work.
 | `guidance`, `scenario` | guidance and scenario contracts |
 | `kernel_lifecycle` | freed-slot reuse reset and non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics: motor thrust/mass-flow stop, actuator fin freeze, sensor measurement stop, communication guidance zero, structural deactivation, per-type events, and argument validation |
-| `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording |
+| `lever_arm` | per-entity IMU lever-arm specific-force correction (α×l + ω×(ω×l)) |
+| `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording/reading |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -243,8 +244,14 @@ runtime guarantees:
   datum/geoid handling, and polar/dateline policy. Existing atmosphere and
   terrain-conversion tools are preparation, not completion of these features.
 - **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,
-  radar altimeter, coning/sculling, lever arms, complete earth-rate gyro
-  compensation, and richer measurement timing/calibration.
+  radar altimeter, coning/sculling, complete earth-rate gyro compensation, and
+  richer measurement timing/calibration. Sensor lever arms are implemented
+  (MVP): per-entity `VehicleConfig::imuLeverArmX/Y/Z` drives the IMU
+  specific-force correction `alpha x l + omega x (omega x l)`. Earth-rate gyro
+  compensation is intentionally deferred because, in the current flat-earth
+  local truth, the gyro already resolves the non-rotating-frame body rate;
+  correct earth-rate compensation requires the rotating-frame (ECEF)
+  navigation path.
 - **Guidance, control, and seekers:** trajectory, waypoint, and energy
   managers; pursuit guidance; LQR/MPC; seeker management and blended handoff;
   semi-active radar and optical/EO seekers; richer radar detection/tracking;
@@ -269,8 +276,14 @@ runtime guarantees:
    failure models and event semantics are implemented (MVP) as deterministic
    per-entity flags with events (`failure_test`). Probabilistic degradation,
    partial health effects beyond deactivation, and repair remain open.
-4. **GNC fidelity:** add coning/sculling, lever arms, full earth-rate gyro
-   compensation, richer RF/IR propagation, and more seeker types.
+4. **GNC fidelity:** sensor lever arms are implemented (MVP) via per-entity
+   `VehicleConfig::imuLeverArm*` with the rigid-body specific-force correction.
+   Earth-rate gyro compensation is intentionally deferred because, in the
+   current flat-earth local truth, the gyro already resolves the
+   non-rotating-frame body rate; correct earth-rate compensation requires the
+   rotating-frame (ECEF) navigation path. Remaining: coning/sculling, full
+   earth-rate gyro compensation, richer RF/IR propagation, and more seeker
+   types.
 5. **Guidance/aero:** add trajectory management, pursuit, LQR/MPC, blended
    handoff, and validated coefficient tables.
 6. **GPU parity:** validate Vulkan against CPU truth, add GPU ECEF support, and

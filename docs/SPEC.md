@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **21/21 CTest tests passing** in Release.
+The current validated checkpoint is **23/23 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -263,9 +263,13 @@ of each integrator.
 ### 7.1 Sensors
 
 The IMU produces body specific force and body angular-rate measurements with
-Gaussian noise and random-walk biases. GPS produces noisy position and velocity
-at the configured internal update cadence. GPS values use the selected kernel
-world frame, including ECEF truth mode.
+Gaussian noise and random-walk biases. The IMU supports an optional per-entity
+body-frame lever arm (`VehicleConfig::imuLeverArmX/Y/Z`, default zero): the
+reported specific force is the centre-of-mass value plus the rigid-body
+correction `alpha x l + omega x (omega x l)` for the offset sensor. The default
+zero lever arm preserves prior behaviour. GPS produces noisy position and
+velocity at the configured internal update cadence. GPS values use the selected
+kernel world frame, including ECEF truth mode.
 
 ### 7.2 Navigation
 
@@ -275,8 +279,8 @@ velocity, attitude error, accelerometer bias, and gyro bias in row-major 15×15
 storage. GPS position and velocity updates correct the coupled state.
 
 The navigation model is an MVP and does not yet promise full coning/sculling,
-Earth-rate gyro compensation for every local mode, sensor lever arms, or
-multi-rate timestamp interpolation.
+Earth-rate gyro compensation for every local mode, or multi-rate timestamp
+interpolation.
 
 ### 7.3 Seekers and signatures
 
