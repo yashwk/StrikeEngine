@@ -139,7 +139,8 @@ CPU-side only.
 - `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin control.
 - `SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`, `BatchRunner`: study
   wrappers; frame normalization is implemented in `Reporting.hpp` and
-  versioned CSV/binary output in `StudyOutput.hpp/.cpp`. `BatchRunner`
+  versioned CSV/binary output in `StudyOutput.hpp/.cpp`, including the binary
+  reader `StudyOutputReader::read`. `BatchRunner`
   aggregate metrics `maxAltitudeM`/`maxSpeedMps` track the trajectory maximum,
   not just the final state.
 
@@ -159,7 +160,8 @@ with `Models::geodeticToEcef`.
 
 The local mode remains the default. Study wrappers use the shared reporting
 layer for ECEF altitude/coordinate summaries and versioned CSV/binary
-recording; binary readers and richer production telemetry remain future work.
+recording; a binary reader is implemented, and richer production telemetry
+remains future work.
 
 ## 7. Validation inventory
 
@@ -238,16 +240,17 @@ runtime guarantees:
   and higher-fidelity RF/IR propagation.
 - **Execution and platforms:** parallel CPU execution, validated Vulkan/CPU
   parity, GPU ECEF truth, and CUDA if a concrete requirement is established.
-- **Tools and integration:** binary output readers, richer telemetry schemas,
+- **Tools and integration:** richer telemetry schemas,
   versioned scenario/config loading, plotting/analysis/scenario-generation
   tools, shared logging/units/profiling utilities, visualization/debug drawing,
   and the future API server wrapper.
 
 ## 10. Known limitations and prioritized backlog
 
-1. **Study output consumers:** add a binary reader, richer telemetry schemas,
-   streaming record sinks, and configurable output selection beyond the current
-   wrapper records.
+1. **Study output consumers:** the binary reader is implemented
+   (`StudyOutputReader::read`); richer telemetry schemas, streaming record
+   sinks, and configurable output selection beyond the current wrapper records
+   remain.
 2. **Global terrain:** `tools/convert_srtm.cpp` exists, but runtime terrain is
    still a callback. Add DEM/DTED tiles, interpolation, streaming, datum/geoid
    policy, dateline/polar handling, and frame-aware collision queries.

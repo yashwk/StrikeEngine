@@ -326,8 +326,10 @@ in radians and `Altitude_m`; local mode uses world Z for altitude, while ECEF
 mode derives altitude from the absolute ECEF position.
 `ScenarioConfig::primaryEntityIndex` selects the entity represented by sweep,
 Monte Carlo, and batch primary-state summaries; its default is zero for
-compatibility. Binary readers and richer telemetry schemas are not yet part of
-the supported contract.
+compatibility. A binary reader (`StudyOutputReader::read`) is part of the
+supported contract: it inverts the binary v1 layout exactly, returning the
+record type, the field list in file order, and the decoded records. Richer
+telemetry schemas are not yet part of the supported contract.
 
 ## 9. Capability matrix and boundaries
 
@@ -341,7 +343,7 @@ installable CMake packaging.
 Planned or partial: coefficient tables and higher-fidelity aero, fuel/staging
 models, failure and damage semantics, advanced atmosphere, full global
 terrain/DEM ingestion, geoid models, richer sensors and seeker families,
-sensor fusion, trajectory/energy management, pursuit, LQR/MPC, binary readers,
+sensor fusion, trajectory/energy management, pursuit, LQR/MPC,
 richer telemetry schemas, parallel CPU execution,
 CUDA, and a production-grade GPU backend. Optional ECS/editor mapping,
 visualization, plotting/analysis/scenario-generation tooling, and an API
