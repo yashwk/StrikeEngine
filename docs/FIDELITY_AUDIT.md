@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `1ff6d1e`<br>
-**Validation result:** Release build, **25/25 CTest tests passed**
+**Validation result:** Release build, **26/26 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -39,7 +39,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W18 — IMU lever-arm compensation | Implemented / MVP | `lever_arm_test`; per-entity body-frame lever-arm specific-force correction (α×l + ω×(ω×l)) is covered. |
 | W19 — Earth-rate gyro modeling + compensation | Implemented / MVP | `earth_rate_gyro_test`; opt-in `includeEarthRateGyro` in ECEF truth mode adds ω_ie^b to the gyro and compensates it in the INS with no attitude drift. Local flat-earth mode is intentionally excluded. |
 | W20 — Strapdown coning/sculling corrections | Implemented / MVP | `coning_sculling_test`; rotation-vector attitude update (456× tighter than the first-order step on a coning environment) and single-interval sculling compensation `+0.5 (ω×f) dt^2` are validated against a fine-step reference. |
-| W6 — Seeker and sensor fidelity | MVP / partial | `seeker_test`; FOV, gimbal limits, hysteresis, filtered LOS rates, and latency are covered. Propagation and seeker-family depth remain limited. |
+| W6 — Seeker and sensor fidelity | Implemented / MVP | `seeker_test` and `seeker_rich_test`; FOV, gimbal limits, hysteresis, filtered LOS rates, latency, RF/IR/SARH/PassiveRF detection, Beer-Lambert IR transmittance, chaff/flare decoys, strongest-signal acquisition, and the public `SeekerConfig` surface are covered. Imaging IR, multi-target tracking, and dynamic illuminator tracking remain open. |
 | W7 — Navigation EKF | MVP / partial | `navigation_test`; coupled 15-state covariance, GPS corrections, bounds, and deterministic bias convergence are covered. Full inertial compensation is not complete. |
 | W8 — Scenario and guidance contract | MVP / partial | `guidance_test` and `scenario_test`; PN/APN, moving-target response, seeker handoff, scenario propagation, and isolated batch execution are covered. |
 | W9 — WGS84 local-earth model | MVP / partial | `earth_test`; geodetic/ECEF conversion, normal gravity, and local Coriolis are covered. This is not a complete geophysical model. |
@@ -65,7 +65,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Earth and frames | WGS84 conversion, normal and spherical gravity, ECEF/ENU/NED transforms, Coriolis, centrifugal, transport terms, standalone ECEF propagation, and opt-in kernel ECEF truth. | **MVP / partial:** no geoid, global terrain streaming, polar/dateline scenario policy, or complete earth-rate treatment across every subsystem. |
 | Sensors | Body-frame IMU specific force and rates with noise/bias; per-entity IMU lever-arm specific-force correction; opt-in ECEF earth-rate gyro modeling (inertial body rate); noisy GPS in the selected frame. | **MVP / partial:** lever-arm and earth-rate modeling are implemented; the full timing/interpolation contract remains open. |
 | Navigation | Perfect initial alignment, strapdown INS (rotation-vector attitude update + single-interval sculling compensation), and coupled 15-state error-state EKF with GPS position/velocity updates. | **MVP / partial:** earth-rate gyro applies to ECEF truth mode only (the flat-earth local truth gyro already resolves the non-rotating-frame body rate; correct local earth-rate compensation requires the rotating-frame ECEF navigation path); multi-rate timestamp interpolation remains open. |
-| Seekers | RF RCS/radar-range and IR irradiance/extinction models; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, and friendly rejection. | **MVP / partial:** propagation is simplified and additional seeker families/phenomena are not implemented. |
+| Seekers | Monostatic RF, SARH (bistatic, static illuminator), PassiveRF (target EIRP), and IR (Beer-Lambert transmittance) seekers; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, friendly rejection, chaff/flare decoys, strongest-signal acquisition, and the public `SeekerConfig` surface. | **MVP / partial:** imaging IR, multi-target tracking, dynamic illuminator tracking, and band-resolved extinction are not implemented. |
 | Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, and seeker-lock APN handoff. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
 | Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, timestamped ground-impact events, and deterministic failure/damage events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or probabilistic failure model. |
 | Failure and damage | Deterministic per-entity flags (`failEntity`/`applyDamage`) driving thrust/mass-flow cutoff, fin freeze, sensor dropout, ballistic comms loss, and structural deactivation with per-type events. | **MVP / partial:** flags are deterministic and not probabilistic; partial health has no effect beyond deactivation; repair is not modeled. |
@@ -74,13 +74,15 @@ and each limitation is listed once in the subsystem assessment or backlog.
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **25/25 tests passed** at the
+- The complete Release CTest suite is green: **26/26 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **25.30 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
   general accuracy guarantee.
 - The test inventory covers study wrappers; vehicle configuration; rigid-body
-  truth; intercept control; integration; seeker; navigation; environment;
+  truth; intercept control; integration; seeker (FOV/hysteresis/LOS-rate,
+  plus rich seekers: SARH, passive RF, IR transmittance, decoys, strongest
+  signal, config round-trip); navigation; environment;
   earth/frame/transport/gravity models; standalone ECEF propagation; kernel
   ECEF truth; guidance; scenario loading; kernel slot-reuse and timestep
   validation; deterministic failure/damage semantics; IMU lever-arm
@@ -114,8 +116,12 @@ to reliable downstream use:
    gyro: `includeEarthRateGyro` in ECEF truth mode only (`earth_rate_gyro_test`);
    the flat-earth local truth gyro already resolves the non-rotating-frame body
    rate, and correct local earth-rate compensation requires the rotating-frame
-   ECEF navigation path. Remaining: richer RF/IR propagation, additional
-   seeker types, and multi-rate timestamp interpolation.
+   ECEF navigation path. Richer seekers are implemented (MVP): SARH (bistatic,
+   static illuminator), passive RF (EIRP), Beer-Lambert IR transmittance,
+   chaff/flare decoys, strongest-signal acquisition, and the public
+   `SeekerConfig` surface (`seeker_rich_test`). Remaining: imaging IR,
+   multi-target tracking, dynamic illuminator tracking, band-resolved
+   extinction, and multi-rate timestamp interpolation.
 5. **Guidance and aero depth:** add validated coefficient tables, trajectory
    management, pursuit, LQR/MPC, and blended guidance handoff.
 6. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,

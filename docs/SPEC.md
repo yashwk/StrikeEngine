@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **25/25 CTest tests passing** in Release.
+The current validated checkpoint is **26/26 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -296,11 +296,26 @@ rate; correct earth-rate compensation requires the rotating-frame ECEF path).
 
 ### 7.3 Seekers and signatures
 
-RF seekers use an RCS profile and radar range equation; IR seekers use an IR
-radiant-intensity profile, inverse-square irradiance, and placeholder
-atmospheric extinction. FOV, independent azimuth/elevation gimbal limits,
-lock hysteresis, dropout timing, filtered LOS rates, and measurement latency
-are implemented. Friendly targets are rejected.
+RF seekers use an RCS profile and the monostatic radar range equation. SARH
+(semi-active radar homing) seekers use the bistatic radar equation with a
+configured off-board illuminator (`SeekerConfig::illuminator*`; the target RCS
+lookup approximates the bistatic cross section). PassiveRF seekers home on a
+target's own emission using its effective radiated power
+(`VehicleInitState::emitterEirpW`); targets with `emitterEirpW = 0` are not
+passively detectable. IR seekers use an IR radiant-intensity profile,
+inverse-square irradiance, and Beer-Lambert atmospheric transmittance
+`exp(-k·r)` with `SeekerConfig::irExtinctionPerM` (default `1e-4` m^-1, i.e.
+0.1/km, which reproduces the legacy placeholder). Acquisition selects the
+strongest valid signal (SNR dB for RF/SARH/PassiveRF, received power W for IR)
+among all hostile targets rather than the first in index order, while
+maintaining a single-track lock. Chaff and flare decoys are entity types that
+carry an RCS (chaff) or IR (flare) profile and can seduce the seeker under the
+strongest-signal rule. Per-entity seeker parameters are exposed through the
+public `SeekerConfig` struct attached to `VehicleConfig::seeker`. FOV,
+independent azimuth/elevation gimbal limits, lock hysteresis, dropout timing,
+filtered LOS rates, and measurement latency are implemented. Friendly targets
+are rejected. The SARH illuminator is a STATIC configured position for this
+MVP; dynamic illuminator-entity tracking is future work.
 
 ### 7.4 Guidance and autopilot
 
@@ -310,8 +325,9 @@ lock. Seeker-locked APN clamps commanded acceleration to the per-entity
 `maxAccel` magnitude limit, matching PN and Waypoint. The autopilot translates
 commanded world acceleration into bounded body fin demands.
 
-Trajectory management, pursuit, LQR/MPC, blended guidance handoff, and richer
-seeker families are planned, not supported requirements.
+Trajectory management, pursuit, LQR/MPC, blended guidance handoff, imaging IR,
+multi-target tracking, and dynamic SARH illuminator tracking are planned, not
+supported requirements.
 
 ## 8. Events and simulation tools
 
@@ -365,19 +381,20 @@ telemetry schemas are not yet part of the supported contract.
 
 ## 9. Capability matrix and boundaries
 
-Implemented or MVP: CPU SoA kernel, per-entity vehicle physics, 6-DOF rigid
+Implement or MVP: CPU SoA kernel, per-entity vehicle physics, 6-DOF rigid
 body, ISA1976 atmosphere, aero/propulsion, RK4/RK45/Euler/Symplectic,
 terrain/wind callbacks, impact events, deterministic failure/damage models
 (motor, actuator, sensor, structural, communication) with events, sensors,
-navigation EKF, RF/IR seeker
-MVP, PN/APN/waypoint guidance, autopilot, WGS84/ECEF/local-earth models,
+navigation EKF, RF/IR/SARH/PassiveRF seekers with chaff/flare decoys,
+PN/APN/waypoint guidance, autopilot, WGS84/ECEF/local-earth models,
 optional ECEF kernel truth, batch/sweep/Monte Carlo/optimizer tooling, and
 installable CMake packaging.
 
 Planned or partial: coefficient tables and higher-fidelity aero, fuel/staging
 models, probabilistic failure degradation, partial health effects and repair,
 advanced atmosphere, full global
-terrain/DEM ingestion, geoid models, richer sensors and seeker families,
+terrain/DEM ingestion, geoid models, imaging IR, multi-target seeker
+tracking, dynamic SARH illuminator tracking, band-resolved extinction,
 sensor fusion, trajectory/energy management, pursuit, LQR/MPC,
 richer telemetry schemas, parallel CPU execution,
 CUDA, and a production-grade GPU backend. Optional ECS/editor mapping,

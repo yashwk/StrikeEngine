@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **25/25 CTest tests pass**.
+- Release validation: **26/26 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -258,8 +258,12 @@ runtime guarantees:
   earth-rate compensation requires the rotating-frame (ECEF) navigation path.
 - **Guidance, control, and seekers:** trajectory, waypoint, and energy
   managers; pursuit guidance; LQR/MPC; seeker management and blended handoff;
-  semi-active radar and optical/EO seekers; richer radar detection/tracking;
-  and higher-fidelity RF/IR propagation.
+  imaging IR; dynamic SARH illuminator tracking; multi-target tracking; and
+  band-resolved IR extinction. Semi-active radar (SARH, bistatic with a static
+  illuminator), passive RF (homes on target EIRP), Beer-Lambert IR
+  transmittance, and chaff/flare decoys are implemented (MVP); the seeker
+  parameters are exposed through the public `SeekerConfig` surface
+  (`VehicleConfig::seeker`).
 - **Execution and platforms:** parallel CPU execution, validated Vulkan/CPU
   parity, GPU ECEF truth, and CUDA if a concrete requirement is established.
 - **Tools and integration:** richer telemetry schemas,
@@ -288,8 +292,12 @@ runtime guarantees:
    gyro: `includeEarthRateGyro` in ECEF truth mode only (`earth_rate_gyro_test`).
    Earth-rate gyro stays off for local flat-earth truth because the gyro there
    already resolves the non-rotating-frame body rate; correct local earth-rate
-   compensation requires the rotating-frame (ECEF) navigation path. Remaining:
-   richer RF/IR propagation and more seeker types.
+   compensation requires the rotating-frame (ECEF) navigation path. Richer
+   seekers are implemented (MVP): SARH (bistatic, static illuminator), passive
+   RF (EIRP), Beer-Lambert IR transmittance, chaff/flare decoys, and
+   strongest-signal acquisition via the public `SeekerConfig` surface
+   (`seeker_rich_test`). Remaining: imaging IR, multi-target tracking, dynamic
+   illuminator tracking, and band-resolved extinction.
 5. **Guidance/aero:** add trajectory management, pursuit, LQR/MPC, blended
    handoff, and validated coefficient tables.
 6. **GPU parity:** validate Vulkan against CPU truth, add GPU ECEF support, and
