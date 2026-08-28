@@ -35,6 +35,24 @@ namespace StrikeEngine::Kernel {
                     return false;
                 }
             }
+            if (data.contains("fins")) {
+                const auto& f = data.at("fins");
+                const std::string shape = f.value("shape", std::string("trapezoidal"));
+                if (shape == "trapezoidal") cfg.fins.shape = Models::FinShape::Trapezoidal;
+                else if (shape == "elliptical") cfg.fins.shape = Models::FinShape::Elliptical;
+                else if (shape == "freeform") cfg.fins.shape = Models::FinShape::FreeForm;
+                else return false;
+                cfg.fins.count = f.at("count").get<int>();
+                cfg.fins.positionM = f.value("position_m", 0.0);
+                cfg.fins.cantAngleDeg = f.value("cant_angle_deg", 0.0);
+                cfg.fins.rootChordM = f.value("root_chord_m", 0.0);
+                cfg.fins.spanM = f.value("span_m", 0.0);
+                cfg.fins.tipChordM = f.value("tip_chord_m", 0.0);
+                cfg.fins.sweepLengthM = f.value("sweep_length_m", -1.0);
+                if (f.contains("shape_points")) {
+                    cfg.fins.shapePoints = f.at("shape_points").get<std::vector<std::array<double, 2>>>();
+                }
+            }
             _aero = cfg;
         } catch (const std::exception&) {
             // Any load failure (syntax, missing required key, wrong type)

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <memory>
 #include <strikeengine/models/physics/aerodynamics/CoefficientTable.hpp>
+#include <strikeengine/models/physics/aerodynamics/FinsModel.hpp>
 
 namespace StrikeEngine::Models {
 
@@ -26,6 +27,12 @@ namespace StrikeEngine::Models {
         // authoritative for cd/cl; nullptr keeps the constant-coefficient path
         // (byte-identical to the legacy behavior).
         std::shared_ptr<const Models::AeroTables> tables;
+
+        // Optional geometric fins (trapezoidal/elliptical/free-form). When
+        // non-null they replace the abstract fin terms (clFin in lift/side
+        // force, CM_delta/Cl_delta moments) with geometry-derived,
+        // Mach-dependent terms; nullptr keeps the byte-identical legacy path.
+        std::shared_ptr<const Models::FinsGeometry> fins;
     };
 
     /**
@@ -105,14 +112,22 @@ namespace StrikeEngine::Models {
             double fy = -dragMag * (v / V);
             double fz = -dragMag * (w / V);
 
-            // Lift (pitch plane): positive alpha/deflection => force -Z (up),
-            // saturated at CL_max (stall / control limit). A linear lift
-            // slope unbounded is the classic way to let a simulation run away
-            // to 70+ deg AoA: at |CL| = CL_max the lifting surfaces are
-            // stalled and produce no more force. The table supplies the
-            // body/surface lift; the flat fin term remains additive.
+            // Lift (pitch plane): positive alpha => force -Z (up), saturated at
+            // CL_max (stall / control limit). With geometric fins the fin lift
+            // slope clAlpha(mach) acts on the fin's local AoA (alpha +
+            // finPitch); without them the flat clFin term is used.
             double cl;
-            if (tables) {
+            if (p.fins) {
+                const double clFin = p.fins->clAlpha(mach);
+                if (tables) {
+                    cl = interpolateCoefficient(mach, alpha,
+                             tables->machBreakpoints, tables->aoaBreakpointsRad,
+                             tables->clTable)
+                         + clFin * (alpha + finPitch);
+                } else {
+                    cl = p.clAlpha * alpha + clFin * (alpha + finPitch);
+                }
+            } else if (tables) {
                 cl = interpolateCoefficient(mach, alpha,
                          tables->machBreakpoints, tables->aoaBreakpointsRad,
                          tables->clTable)
@@ -123,15 +138,19 @@ namespace StrikeEngine::Models {
             cl = std::clamp(cl, -p.clMax, p.clMax);
             fz -= q * S * cl;
 
-            // Side force (yaw plane): positive yaw-fin deflection produces a
-            // nose-right force (+Y), matching its positive nose-right moment.
-            // Sideslip force is intentionally deferred until the vehicle has
-            // a validated lateral stability model; an incorrectly signed
-            // beta term destabilizes the yaw loop.
-            constexpr double cyBody = 0.0;
-            const double cyFin  = std::clamp(p.clFin * finYaw, -p.clMax, p.clMax);
-            fy -= q * S * cyBody;
-            fy += q * S * cyFin;
+            // Side force (yaw plane). With geometric fins the sideslip/beta
+            // term is now modeled (restoring); without them it stays deferred
+            // (cyBody = 0) so the flat path is byte-identical.
+            if (p.fins) {
+                const double clFin = p.fins->clAlpha(mach);
+                const double cy = clFin * (beta + finYaw);
+                fy -= q * S * std::clamp(cy, -p.clMax, p.clMax);
+            } else {
+                constexpr double cyBody = 0.0;
+                const double cyFin  = std::clamp(p.clFin * finYaw, -p.clMax, p.clMax);
+                fy -= q * S * cyBody;
+                fy += q * S * cyFin;
+            }
 
             // --- Moments (body frame) ---
             // Fin control authority and the validated pitch restoring term.
@@ -144,27 +163,51 @@ namespace StrikeEngine::Models {
             const double qS = q * S;
             const double maxControlMoment = 600.0 * std::clamp(
                 6000.0 / std::max(qS, 6000.0), 0.10, 1.0);
-            double tx = std::clamp(qS * l * (Cl_delta * finRoll),
-                                   -maxControlMoment, maxControlMoment);
-            double ty = std::clamp(qS * l * (CM_delta * finPitch),
-                                   -maxControlMoment, maxControlMoment);
-            double tz = std::clamp(qS * l * (CM_delta * finYaw),
-                                   -maxControlMoment, maxControlMoment);
+            constexpr double Cq = 20.0;    // body pitch/yaw damping
 
-            // Static pitch stability is retained. Lateral beta stability is
-            // disabled until its force/moment signs are covered by validation.
-            constexpr double CM_alpha = -0.5;
-            constexpr double CN_beta  = 0.0; // avoid unmodeled yaw/side-force coupling in MVP
-            ty += q * S * l * CM_alpha * alpha;
-            tz += q * S * l * CN_beta  * beta;
+            double tx, ty, tz;
+            if (p.fins) {
+                const double clFin = p.fins->clAlpha(mach);
+                const double xcp = p.fins->cpLeverArmM;
+                // Fin stability + control moments about the fin CP (lever arm
+                // xcp, negative for tail fins => restoring). Roll forcing from
+                // cant and roll damping replace the abstract Cl_delta/Clp fin
+                // terms; body Cq/Clp damping is still applied below.
+                tx = std::clamp(qS * l * p.fins->rollForcingPerRad(mach)
+                                    * (p.fins->cantRad + finRoll)
+                                - qS * l * l * 0.5 * p.fins->rollDampingCoeff(mach) * wx,
+                                -maxControlMoment, maxControlMoment);
+                ty = std::clamp(qS * xcp * clFin * (alpha + finPitch),
+                                -maxControlMoment, maxControlMoment);
+                tz = std::clamp(-qS * xcp * clFin * (beta + finYaw),
+                                -maxControlMoment, maxControlMoment);
 
-            // Rotational damping (dimensionless rate q_bar*l/V)
-            const double lOverV = l / V;
-            constexpr double Cq = 20.0;    // pitch/yaw damping
-            constexpr double Clp = 6.0;    // roll damping
-            ty -= q * S * l * Cq  * lOverV * wy;
-            tz -= q * S * l * Cq  * lOverV * wz;
-            tx -= q * S * l * Clp * lOverV * wx;
+                // Static stability is now supplied by the fins (via xcp); the
+                // bare body term is dropped so it is not double-counted.
+                ty -= q * S * l * Cq  * (l / V) * wy;
+                tz -= q * S * l * Cq  * (l / V) * wz;
+            } else {
+                tx = std::clamp(qS * l * (Cl_delta * finRoll),
+                                -maxControlMoment, maxControlMoment);
+                ty = std::clamp(qS * l * (CM_delta * finPitch),
+                                -maxControlMoment, maxControlMoment);
+                tz = std::clamp(qS * l * (CM_delta * finYaw),
+                                -maxControlMoment, maxControlMoment);
+
+                // Static pitch stability is retained. Lateral beta stability is
+                // disabled until its force/moment signs are covered by validation.
+                constexpr double CM_alpha = -0.5;
+                constexpr double CN_beta  = 0.0; // avoid unmodeled yaw/side-force coupling in MVP
+                ty += q * S * l * CM_alpha * alpha;
+                tz += q * S * l * CN_beta  * beta;
+
+                // Rotational damping (dimensionless rate q_bar*l/V)
+                const double lOverV = l / V;
+                constexpr double Clp = 6.0;    // roll damping
+                ty -= q * S * l * Cq  * lOverV * wy;
+                tz -= q * S * l * Cq  * lOverV * wz;
+                tx -= q * S * l * Clp * lOverV * wx;
+            }
 
             // Bound the complete aerodynamic moment, not only the commanded
             // fin contribution. At large AoA the linear static-stability and

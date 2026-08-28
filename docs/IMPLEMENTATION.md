@@ -14,7 +14,7 @@ validation, and remaining work.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **35/35 CTest tests pass**.
+- Release validation: **36/36 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -127,6 +127,15 @@ carries per-entity `stageIndex`/`stageCount`.
   cl(M,α) grid (`AeroTables`), bilinear `interpolateCoefficient`, clamped; valid
   table authoritative for cd/cl, else flat scalars byte-identical fallback; gated
   so a degenerate grid never zeroes drag/lift; moments/side-force linear.
+- `FinsModel.hpp`: `FinShape` (`Trapezoidal`/`Elliptical`/`FreeForm`), `FinsGeometry`
+  (precomputed geometry + Mach-dependent `clAlpha`/`rollForcingPerRad`/
+  `rollDampingCoeff`), `buildFinsGeometry` (RocketPy port: Diederich + Prandtl–Glauert
+  lift slope, fin-number/interference corrections, per-shape CP, roll factors).
+  `AeroConfig::fins` (count 0 disables, ≥3 enables) wires into `BasicAeroModel::
+  computeWrench`; when non-null the geometry-derived Mach-dependent fin terms
+  REPLACE the abstract `clFin`/`CM_delta`/`Cl_delta`/`CN_beta` (body terms stay),
+  and when null the legacy path is byte-identical. `fins` JSON parsed in
+  `ConfigSerialization.cpp` and `AeroProfileDatabase.cpp` with fail-fast validation.
 - `PropulsionModel.hpp`/`ThrustCurve.hpp`: thrust interpolation, Isp, mass flow,
   dry-mass limiting.
 - `CPUBackend.cpp`: stage-re-evaluated forces, body Euler dynamics, quaternion
@@ -200,7 +209,7 @@ binary reader implemented; richer telemetry future.
 
 ## 7. Validation inventory
 
-35 deterministic CTest programs:
+36 deterministic CTest programs:
 
 | Test | Coverage |
 | --- | --- |
@@ -226,6 +235,7 @@ binary reader implemented; richer telemetry future.
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
+| `fins` | geometric fins: three-shape geometry hand-checks (trapezoidal/elliptical/free-form), Mach lift-slope monotonicity, tail-fin restoring-moment sign, positive-cant roll forcing, JSON round-trip (incl. `shape_points`), validation throws (count<3, free-form <3 points), ballistic rocket_mvp with 4 tail fins (trapezoidal + elliptical; apogee 17.2 km, drift ~0 m) |
 
 Every runtime increment MUST add/update a deterministic regression, run
 `git diff --check`, build Release, run complete CTest.
@@ -252,6 +262,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W26 | rocket verification (`rocket_mvp_test`) + propulsion-law fix (`T = ṁ·Isp·g0`) | current |
 | W27 | data-driven aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (45.4 m miss after W28, 15 km/8 km) | current |
 | W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 45.4 m miss | current |
+| W29 | geometric fins (RocketPy trapezoidal/elliptical/free-form) (`fins_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -274,7 +285,7 @@ Tracked so these are not mistaken for missing docs or current guarantees:
 
 - **Physics/environment:** moment + lateral/β tables, `AeroForces`, advanced
   atmosphere/weather, DEM/DTED loading + streaming, datum/geoid, polar/dateline.
-  (cd/cl tables implemented — §5.)
+  (cd/cl tables implemented — §5; geometric fins implemented — W29.)
 - **Navigation/sensing:** sensor fusion, magnetometer, barometer, radar altimeter,
   richer timing/calibration. (Lever arms, coning/sculling, earth-rate gyro done —
   MVP; SPEC §7.1–7.2.)

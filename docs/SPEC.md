@@ -42,7 +42,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **35/35 CTest tests passing** in Release.
+Current validated checkpoint: **36/36 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
@@ -152,7 +152,7 @@ plus subsystem structs `aero`, `propulsion`, `seeker`, `sensor`,
 fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
 
 - `AeroConfig`: `referenceArea` (JSON `reference_area`)/length, drag/lift
-  coefficients, optional `aero_tables` (§6.2).
+  coefficients, optional `aero_tables` (§6.2), optional `fins` (§6.2).
 - `PropulsionConfig`: ordered `stages` of `StageConfig` (`thrustCurve`,
   `vacuumIsp`/`seaLevelIsp`, `propellantMassKg`, `dryMassKg`).
 - `SensorConfig`: `imuEnabled`/`gpsEnabled`, IMU/GPS noise/bias σ, `gpsUpdateRateHz`,
@@ -254,8 +254,35 @@ clamped to grid bounds. A valid table block is authoritative for cd/cl; otherwis
 the flat scalars (`cd`, `clAlpha`, `clFin`, `clMax`) are a byte-identical
 fallback. A structurally invalid grid (missing/non-ascending breakpoints, wrong
 dimensions, <2 per axis) is rejected at parse and profile load. Moments/side-force
-stay linear; moment (cm) and lateral/β tables plus Mach-scaled fin effectiveness
-are future. cd/cl tables come from StrikeCFD; RCS tables from StrikeCEM.
+stay linear; moment (cm) and lateral/β coefficient tables are future. cd/cl tables
+come from StrikeCFD; RCS tables from StrikeCEM.
+
+Optional geometric fins (`fins` on `AeroConfig`) port RocketPy's fin aerodynamic
+model. `FinShape` selects `Trapezoidal`, `Elliptical`, or `FreeForm`; `count` 0
+disables fins, `>=3` enables them. Geometry inputs: `rootChordM`, `tipChordM`,
+`spanM`, `sweepLengthM` (<0 => root-tip sweep), `positionM` (fin-root leading-edge
+axial offset from CG along body +X; nose positive, tail negative), `cantAngleDeg`,
+and `shapePoints` (free-form). `buildFinsGeometry` precomputes Mach-dependent
+`clAlpha`/`rollForcingPerRad`/`rollDampingCoeff` via RocketPy formulas: Diederich
+planform lift slope with a Prandtl–Glauert Mach correction, fin-number correction
+{5:2.37, 6:2.74, 7:2.99, 8:3.24} else n/2, lift-interference factor 1+1/τ
+(τ=(span+r)/r), per-shape CP (trapezoidal closed-form; elliptical 0.288·root;
+free-form mac_lead+0.25·mac_length), and roll-forcing/damping interference
+factors. `cpLeverArmM` is the SIGNED body-X coordinate of the fin CP relative to CG
+(negative = tail), producing restoring (stabilizing) pitch/yaw moments for
+positive α/β.
+
+When `fins` is present and valid, the geometry-derived Mach-dependent fin terms
+REPLACE the flat abstract fins (`clFin`/`CM_delta`/`Cl_delta`/`CN_beta`); the body
+terms (body `clAlpha` lift, body `CM_alpha` where applicable, `Cq`/`Clp` damping)
+stay. The lateral/β side-force and static-stability terms are then modeled from fin
+geometry. When `fins` is absent (default), the legacy flat-fin path is
+byte-identical. JSON: optional `fins` object under `aero` with `"shape"`
+("trapezoidal"/"elliptical"/"freeform"), `count`, `position_m`, `cant_angle_deg`,
+`root_chord_m`, `span_m`, plus `tip_chord_m`+`sweep_length_m` (trapezoidal) or
+`shape_points` (free-form). Parsed in `ConfigSerialization.cpp` and
+`AeroProfileDatabase.cpp` with fail-fast validation: `count` <3, or a free-form
+with <3 points, throws.
 
 ### 6.3 Rotation and actuators
 
@@ -416,12 +443,13 @@ separation; warhead fusing (impact/proximity/timed); designer manifests
 (`data/profiles`) and scenarios (`data/scenarios`) consumed end-to-end via
 `designer_pipeline_test`; profile-id database layer (aero/motor/seeker/sensor/
 RCS); data-driven cd(M,α)/cl(M,α) tables (`aero_tables`, bilinear + clamped,
-constant fallback). `rocket_mvp_test` cross-checks propulsion/ballistic truth
+constant fallback); geometric fins (trapezoidal/elliptical/free-form, RocketPy
+port, Mach-dependent lift/stability/roll). `rocket_mvp_test` cross-checks propulsion/ballistic truth
 (initial accel vs `T/m − g_lat`, burnout time vs pressure-interpolated Isp band,
 burnout velocity vs `Δv = Isp·g0·ln(m0/mdry)`), confirming `T = ṁ·Isp·g0`.
 
-Planned or partial: higher-fidelity aero (moment and lateral/β tables, Mach-scaled
-fin effectiveness); probabilistic failure degradation; partial health/repair;
+Planned or partial: higher-fidelity aero (moment and lateral/β coefficient
+tables); probabilistic failure degradation; partial health/repair;
 advanced atmosphere; global terrain/DEM; geoid models; imaging IR; multi-target
 tracking; dynamic SARH illuminator tracking; band-resolved extinction; sensor
 fusion; trajectory/energy management; pursuit; LQR/MPC; richer telemetry; parallel

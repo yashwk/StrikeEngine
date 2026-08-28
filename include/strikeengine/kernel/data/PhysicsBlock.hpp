@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <strikeengine/models/physics/aerodynamics/CoefficientTable.hpp>
+#include <strikeengine/models/physics/aerodynamics/FinsModel.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -45,6 +46,7 @@ struct PhysicsBlock {
 	std::vector<double> clFin;             // fin lift 1/rad (deflection)
 	std::vector<double> clMax;             // max |CL| (stall / control limit)
 	std::vector<std::shared_ptr<const Models::AeroTables>> aeroTables;  // data-driven cd/cl tables; nullptr = flat coefficients
+	std::vector<std::shared_ptr<const Models::FinsGeometry>> fins;     // geometric fins; nullptr = abstract fins
 	std::vector<int>    propulsionId;      // index into backend propulsion pool; -1 = none
 	std::vector<double> ignitionTime;      // s (thrust curve evaluated at t - ignitionTime)
 	std::vector<int>    stageIndex;        // active stage; -1 = coasting/finished

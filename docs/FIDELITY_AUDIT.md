@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `82bd30a`<br>
-**Validation result:** Release build, **35/35 CTest tests passed**
+**Validation result:** Release build, **36/36 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -53,6 +53,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; T0 60000 N, flow 27.81 kg/s, init accel 110.275 vs 110.208 m/s², cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee 17.19 km, max-Q ~242 kPa; `T = ṁ·Isp·g0`, no free-thrust tail |
 | W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test`, `rocket_mvp_tables_test`; table run higher/faster (apogee 24.79 vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa); fallback byte-identical; awaiting StrikeCFD |
 | W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 45.4 m miss |
+| W29 — Geometric fins (RocketPy port) | Implemented / MVP | `fins_test`; three shapes (trapezoidal/elliptical/free-form); Diederich planform lift slope + Prandtl–Glauert Mach correction; fin-number + interference corrections; per-shape CP; tail lever-arm sign convention (restoring); positive-cant roll forcing; ballistic flight on rocket_mvp with 4 tail fins — apogee 17.2 km, drift ~0 m; byte-identical fallback when `fins` absent |
 
 ## 3. Subsystem fidelity assessment
 
@@ -61,7 +62,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Translational truth | World-frame force rotation ÷ mass + gravity/earth terms | **MVP:** cd/cl data-driven when present; moments/side-force linear, no CFD-backed model |
 | Rotational truth | Diagonal inertia, gyroscopic coupling, quaternion, bounded fins | **MVP:** no inertia-tensor or flexible-body model |
 | Atmosphere | Layered ISA1976 through 86 km | **Implemented for stated envelope:** no weather model |
-| Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl tables | **MVP:** tables authoritative for cd/cl with fallback; moments/side-force linear; not CFD-validated |
+| Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl tables; geometric fins (trapezoidal/elliptical/free-form) | **MVP:** tables authoritative for cd/cl with fallback; fins implement Mach-scaled fin effectiveness + lateral (β) side-force/stability for angled fins; moment (cm) and lateral/β coefficient tables still not CFD-validated |
 | Propulsion | Thrust curves, Isp, mass flow, dry-mass limit; ordered staging + leftover dump | **MVP:** `propellantMassKg` caps drawdown; no thrust vectoring or tank/engine failure |
 | Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
@@ -79,7 +80,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **35/35 tests passed** at the checkpoint above.
+- Release CTest suite green: **36/36 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **45.4 m minimum miss** at t≈11.5 s with a
@@ -120,10 +121,13 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
    (`designer_pipeline_test`); explicit versioned StrikeSim/StrikeDesigner/
    StrikeCEM integration + provenance contracts remain.
 
-Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling, a full
+Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling (and
+moment (cm)/lateral (β) coefficient tables from StrikeCFD/StrikeCEM), a full
 GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
 (trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and full global terrain. The
-falloff band and leftover-propellant dump are implemented and no longer deferred.
+falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin
+effectiveness, lateral β side-force/stability for angled fins) are implemented
+and no longer deferred.
 Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 `data/rcs`, `data/profiles`, `data/scenarios/intercept_test_01`,
 `data/schemas/seeker_schema.json`) are part of this layer.
@@ -132,7 +136,7 @@ Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 
 The 2026-08-25 pre-restart audit recorded 5/7 workstreams with failures in control
 signs, aero authority, integration, events, seeker fidelity, and navigation; it is
-superseded by W1–W28 above. Historical measurements/commits remain in repository
+superseded by W1–W29 above. Historical measurements/commits remain in repository
 history and are not repeated here.
 
 ## 7. Conclusion

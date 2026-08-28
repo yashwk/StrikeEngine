@@ -1,0 +1,288 @@
+// Geometric fin model verification (RocketPy trapezoidal / elliptical /
+// free-form port). Cross-checks the FinsGeometry builder against hand-computed
+// RocketPy values, the Mach behavior of the lift slope, the stability/roll sign
+// conventions, JSON round-trip, and a ballistic flight on the rocket_mvp
+// vehicle with tail fins.
+#include <strikeengine/models/physics/aerodynamics/FinsModel.hpp>
+#include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
+#include <strikeengine/kernel/SimulationKernel.hpp>
+#include <strikeengine/kernel/config/VehicleConfig.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
+#include <strikeengine/kernel/config/ConfigSerialization.hpp>
+#include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <vector>
+#include <array>
+
+using namespace StrikeEngine::Models;
+using namespace StrikeEngine::Kernel;
+
+namespace {
+
+int failures = 0;
+void check(bool ok, const char* what)
+{
+    std::printf("  [%s] %s\n", ok ? "PASS" : "FAIL", what);
+    if (!ok) ++failures;
+}
+
+constexpr double kPi = 3.14159265358979323846;
+const double kRefAreaRadius01 = kPi * 0.1 * 0.1;  // radius 0.1 m reference area
+
+} // namespace
+
+static void geometryChecks()
+{
+    std::printf("-- geometry (radius 0.1 m reference area) --\n");
+
+    // --- Trapezoidal reference fin ---
+    // n=4, root 0.5, tip 0.35, span 0.25, sweep 0.15.
+    {
+        std::string err;
+        auto g = buildFinsGeometry(FinShape::Trapezoidal, 4,
+            0.5, 0.35, 0.25, 0.15, 0.0, 0.0, {}, kRefAreaRadius01, &err);
+        check(g != nullptr, "trapezoidal fin builds");
+        if (!g) return;
+
+        const double root = 0.5, tip = 0.35, span = 0.25, sweep = 0.15, r = 0.1;
+        const double Yr = root + tip;
+        const double Af = Yr * span / 2.0;
+        const double AR = 2.0 * span * span / Af;
+        const double gammaC = std::atan((sweep + 0.5 * tip - 0.5 * root) / span);
+        const double Yma = (span / 3.0) * (root + 2.0 * tip) / Yr;
+        const double cpz = (sweep / 3.0) * ((root + 2.0 * tip) / Yr)
+                         + (1.0 / 6.0) * (Yr - root * tip / Yr);
+        const double tau = (span + r) / r;
+        const double lift = 1.0 + 1.0 / tau;
+
+        check(std::abs(g->Af - Af) < 1e-12, "trapezoidal Af");
+        check(std::abs(g->AR - AR) < 1e-12, "trapezoidal AR == 2 span^2 / Af");
+        check(std::abs(g->gammaC - gammaC) < 1e-12, "trapezoidal gamma_c");
+        check(std::abs(g->Yma - Yma) < 1e-12, "trapezoidal Yma");
+        check(std::abs(g->cpz - cpz) < 1e-12, "trapezoidal cpz");
+        check(std::abs(g->liftInterferenceFactor - lift) < 1e-12, "trapezoidal 1+1/tau");
+        check(std::abs(g->finNumCorrection - 2.0) < 1e-12, "4 fins -> correction 2.0");
+        check(g->cpLeverArmM == 0.0 - cpz, "cp lever arm = position - cpz");
+    }
+
+    // --- Elliptical ---
+    {
+        auto g = buildFinsGeometry(FinShape::Elliptical, 4,
+            0.5, 0.0, 0.25, 0.0, 0.0, 0.0, {}, kRefAreaRadius01, nullptr);
+        check(g != nullptr, "elliptical fin builds");
+        if (!g) return;
+        const double root = 0.5, span = 0.25;
+        const double Af = kPi * root * span / 4.0;
+        const double Yma = span / (3.0 * kPi) * std::sqrt(9.0 * kPi * kPi - 64.0);
+        check(std::abs(g->Af - Af) < 1e-12, "elliptical Af = pi*root*span/4");
+        check(std::abs(g->cpz - 0.288 * root) < 1e-12, "elliptical cpz = 0.288*root");
+        check(std::abs(g->gammaC) < 1e-15, "elliptical gamma_c = 0");
+        check(std::abs(g->Yma - Yma) < 1e-12, "elliptical Yma");
+    }
+
+    // --- Free-form rectangular ---
+    {
+        std::vector<std::array<double, 2>> pts = { {0.0, 0.0}, {0.0, 0.2},
+                                                   {0.5, 0.2}, {0.5, 0.0} };
+        auto g = buildFinsGeometry(FinShape::FreeForm, 3,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, pts, kRefAreaRadius01, nullptr);
+        check(g != nullptr, "free-form fin builds");
+        if (!g) return;
+        const double root = 0.5, span = 0.2, Af = 0.1;
+        check(std::abs(g->rootChord - root) < 1e-12, "freeform root chord = 0.5");
+        check(std::abs(g->span - span) < 1e-12, "freeform span = 0.2");
+        check(std::abs(g->Af - Af) < 1e-12, "freeform Af = 0.1");
+        check(std::abs(g->AR - 2.0 * span * span / Af) < 1e-12, "freeform AR");
+        check(std::abs(g->cpz - 0.125) < 1e-6, "freeform rectangular cpz ~ 0.125");
+    }
+}
+
+static void machAndSignChecks()
+{
+    std::printf("\n-- Mach behavior + sign conventions --\n");
+
+    auto trapezoid = buildFinsGeometry(FinShape::Trapezoidal, 4,
+        0.5, 0.35, 0.25, 0.15, 0.0, 0.0, {}, kRefAreaRadius01, nullptr);
+    if (!trapezoid) return;
+    auto tail = buildFinsGeometry(FinShape::Trapezoidal, 4,
+        0.5, 0.35, 0.25, 0.15, -1.5, 0.0, {}, kRefAreaRadius01, nullptr);
+    auto canted = buildFinsGeometry(FinShape::Trapezoidal, 4,
+        0.5, 0.35, 0.25, 0.15, 0.0, 1.0, {}, kRefAreaRadius01, nullptr);
+
+    check(trapezoid->clAlpha(0.5) > trapezoid->clAlpha(0.0),
+          "clAlpha rises subsonically with Mach");
+    check(trapezoid->clAlpha(2.0) < trapezoid->clAlpha(0.5),
+          "clAlpha falls supersonically with Mach");
+    check(trapezoid->clAlpha(0.0) > 0.0, "clAlpha positive");
+
+    // Stability: tail fins (negative lever arm) give a restoring pitch moment
+    // for positive alpha (nose-down => negative torque_y).
+    if (tail && canted) {
+        AeroParams p;
+        p.referenceArea = kRefAreaRadius01;
+        p.referenceLength = 0.2;
+        p.cd = 0.0; p.clAlpha = 0.0; p.clFin = 0.0; p.clMax = 2.0;
+        p.fins = tail;
+        BasicAeroModel m;
+        // alpha ~ 0.05 rad: u=100, w=5
+        auto w = m.computeWrench(100.0, 0.0, 5.0, 0.0, 0.0, 0.0,
+                                 0.0, 0.0, 0.0, 1.225, 340.0, p);
+        check(w.torque_y < 0.0, "tail fins restore: +alpha -> nose-down moment");
+
+        check(canted->rollForcingPerRad(0.5) > 0.0, "positive cant -> positive roll forcing");
+        check(canted->rollDampingCoeff(0.5) > 0.0, "roll damping coefficient positive");
+    }
+}
+
+static void serializationChecks()
+{
+    std::printf("\n-- serialization round-trip --\n");
+    {
+        VehicleConfig cfg;
+        cfg.aero.referenceArea = 0.1256637;
+        cfg.aero.fins = FinsConfig{};
+        cfg.aero.fins.shape = FinShape::Trapezoidal;
+        cfg.aero.fins.count = 4;
+        cfg.aero.fins.rootChordM = 0.5;
+        cfg.aero.fins.tipChordM = 0.35;
+        cfg.aero.fins.spanM = 0.25;
+        cfg.aero.fins.sweepLengthM = 0.15;
+        cfg.aero.fins.positionM = -1.5;
+        cfg.aero.fins.cantAngleDeg = 1.0;
+
+        const std::string s = serializeVehicleConfig(cfg);
+        VehicleConfig rt = deserializeVehicleConfig(s);
+        check(rt.aero.fins.enabled(), "trapezoidal fins round-trip enabled");
+        check(rt.aero.fins.shape == FinShape::Trapezoidal, "shape preserved");
+        check(rt.aero.fins.count == 4 && std::abs(rt.aero.fins.rootChordM - 0.5) < 1e-12,
+              "trapezoidal dimensions preserved");
+        check(std::abs(rt.aero.fins.positionM + 1.5) < 1e-12 &&
+              std::abs(rt.aero.fins.cantAngleDeg - 1.0) < 1e-12,
+              "position + cant preserved");
+    }
+
+    {
+        VehicleConfig cfg;
+        cfg.aero.fins.shape = FinShape::FreeForm;
+        cfg.aero.fins.count = 3;
+        cfg.aero.fins.shapePoints = { {0.0, 0.0}, {0.0, 0.2}, {0.5, 0.2}, {0.5, 0.0} };
+        const std::string s = serializeVehicleConfig(cfg);
+        VehicleConfig rt = deserializeVehicleConfig(s);
+        check(rt.aero.fins.shape == FinShape::FreeForm &&
+              rt.aero.fins.shapePoints.size() == 4,
+              "free-form shape_points round-trip");
+    }
+
+    {
+        VehicleConfig cfg;
+        const std::string s = serializeVehicleConfig(cfg);
+        VehicleConfig rt = deserializeVehicleConfig(s);
+        check(!rt.aero.fins.enabled(), "absent fins stay disabled");
+    }
+}
+
+static void validationChecks()
+{
+    std::printf("\n-- validation --\n");
+    std::string err;
+    check(buildFinsGeometry(FinShape::Trapezoidal, 2, 0.5, 0.35, 0.25, 0.15,
+                            0.0, 0.0, {}, kRefAreaRadius01, &err) == nullptr,
+          "count < 3 rejected");
+    check(buildFinsGeometry(FinShape::FreeForm, 3, 0, 0, 0, 0, 0, 0,
+                            { {0.0, 0.0}, {0.5, 0.1} }, kRefAreaRadius01, &err) == nullptr,
+          "free-form with 2 points rejected");
+}
+
+// Minimal ballistic flight on the rocket_mvp vehicle (5 m x 0.4 m, 500 kg,
+// 60 kN motor) with a tail fin set; asserts the vertical launch stays
+// vertical through apogee.
+static double runFinFlight(const FinsConfig& fins, double& apogee, double& driftSq)
+{
+    SimulationKernel kernel;
+    kernel.setRandomSeed(0xF1A5u);
+    EnvironmentConfig env;
+    env.earth.useWgs84Gravity = true;
+    env.earth.referenceLatitudeRad = 28.5 * kPi / 180.0;
+    kernel.setEnvironment(env);
+
+    VehicleConfig cfg;
+    cfg.massDry = 350.0;
+    cfg.Ixx = 10.0; cfg.Iyy = 1046.7; cfg.Izz = 1046.7;
+    cfg.aero.referenceArea = kPi * 0.2 * 0.2;
+    cfg.aero.referenceLength = 5.0;
+    cfg.aero.cd = 0.25;
+    cfg.aero.clAlpha = 2.0;
+    cfg.aero.clFin = 1.5;
+    cfg.aero.clMax = 1.8;
+    cfg.aero.fins = fins;
+    StageConfig stage;
+    stage.thrustCurve = { {0.0, 60000.0}, {6.0, 60000.0}, {6.1, 0.0}, {100.0, 0.0} };
+    stage.vacuumIsp = 250.0;
+    stage.seaLevelIsp = 220.0;
+    stage.propellantMassKg = 150.0;
+    stage.dryMassKg = 0.0;
+    cfg.propulsion.stages.push_back(stage);
+
+    VehicleInitState r{};
+    r.qw = std::cos(-kPi / 4.0);
+    r.qy = std::sin(-kPi / 4.0);
+    r.mass = 500.0;
+    const auto id = kernel.createVehicle(r, cfg);
+
+    auto& phys = kernel.getPhysics();
+    constexpr double dt = 0.01;
+    apogee = 0.0;
+    driftSq = 0.0;
+    for (int step = 1; step <= 20000; ++step) {
+        kernel.step(dt);
+        const double h = phys.pz[id];
+        const double d2 = phys.px[id] * phys.px[id] + phys.py[id] * phys.py[id];
+        driftSq = std::max(driftSq, d2);
+        apogee = std::max(apogee, h);
+        if (step * dt > 7.0 && phys.vz[id] <= 0.0) break;
+    }
+    return 0.0;
+}
+
+static void flightChecks()
+{
+    std::printf("\n-- ballistic flight w/ tail fins --\n");
+    FinsConfig trap;
+    trap.shape = FinShape::Trapezoidal;
+    trap.count = 4;
+    trap.rootChordM = 0.5; trap.tipChordM = 0.35; trap.spanM = 0.25;
+    trap.sweepLengthM = 0.15; trap.positionM = -1.5;
+
+    double apogee = 0.0, driftSq = 0.0;
+    runFinFlight(trap, apogee, driftSq);
+    std::printf("  trapezoidal tails: apogee %.1f km, drift %.3f m\n",
+                apogee / 1000.0, std::sqrt(driftSq));
+    check(apogee >= 15000.0 && apogee <= 45000.0, "trapezoidal apogee in band [15,45] km");
+    check(driftSq < 4.0, "trapezoidal vertical launch stays vertical (<2 m)");
+
+    FinsConfig ellip;
+    ellip.shape = FinShape::Elliptical;
+    ellip.count = 4;
+    ellip.rootChordM = 0.5; ellip.spanM = 0.25; ellip.positionM = -1.5;
+    double apogeeE = 0.0, driftSqE = 0.0;
+    runFinFlight(ellip, apogeeE, driftSqE);
+    std::printf("  elliptical tails : apogee %.1f km, drift %.3f m\n",
+                apogeeE / 1000.0, std::sqrt(driftSqE));
+    check(apogeeE >= 15000.0 && apogeeE <= 45000.0, "elliptical apogee in band [15,45] km");
+    check(driftSqE < 4.0, "elliptical vertical launch stays vertical (<2 m)");
+}
+
+int main()
+{
+    std::printf("=== fins: RocketPy geometric fin model (trapezoidal/elliptical/free-form) ===\n");
+    geometryChecks();
+    machAndSignChecks();
+    serializationChecks();
+    validationChecks();
+    flightChecks();
+    std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
+    return failures == 0 ? 0 : 1;
+}

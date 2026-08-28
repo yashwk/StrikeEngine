@@ -150,6 +150,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.clFin.push_back(0.0);
             physicsBlock.clMax.push_back(2.0);
             physicsBlock.aeroTables.push_back(nullptr);
+            physicsBlock.fins.push_back(nullptr);
             physicsBlock.propulsionId.push_back(-1);
             physicsBlock.ignitionTime.push_back(0.0);
             physicsBlock.stageIndex.push_back(-1);
@@ -352,6 +353,21 @@ namespace StrikeEngine::Kernel {
         physicsBlock.aeroTables[id] = resolved.aero.tables.empty()
             ? nullptr
             : std::make_shared<const Models::AeroTables>(resolved.aero.tables);
+        if (resolved.aero.fins.enabled()) {
+            std::string err;
+            auto g = Models::buildFinsGeometry(
+                resolved.aero.fins.shape, resolved.aero.fins.count,
+                resolved.aero.fins.rootChordM, resolved.aero.fins.tipChordM,
+                resolved.aero.fins.spanM, resolved.aero.fins.sweepLengthM,
+                resolved.aero.fins.positionM, resolved.aero.fins.cantAngleDeg,
+                resolved.aero.fins.shapePoints, resolved.aero.referenceArea, &err);
+            if (!g) {
+                throw std::runtime_error("Invalid fins configuration: " + err);
+            }
+            physicsBlock.fins[id] = g;
+        } else {
+            physicsBlock.fins[id] = nullptr;
+        }
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;

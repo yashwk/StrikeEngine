@@ -193,6 +193,27 @@ void to_json(json& j, const AeroConfig& a) {
     if (!a.tables.empty()) {
         j["aero_tables"] = a.tables;
     }
+    if (a.fins.enabled()) {
+        json f = json::object();
+        switch (a.fins.shape) {
+            case Models::FinShape::Trapezoidal: f["shape"] = "trapezoidal"; break;
+            case Models::FinShape::Elliptical:  f["shape"] = "elliptical";  break;
+            case Models::FinShape::FreeForm:    f["shape"] = "freeform";    break;
+        }
+        f["count"] = a.fins.count;
+        f["position_m"] = a.fins.positionM;
+        f["cant_angle_deg"] = a.fins.cantAngleDeg;
+        f["root_chord_m"] = a.fins.rootChordM;
+        f["span_m"] = a.fins.spanM;
+        if (a.fins.shape == Models::FinShape::Trapezoidal) {
+            f["tip_chord_m"] = a.fins.tipChordM;
+            f["sweep_length_m"] = a.fins.sweepLengthM;
+        }
+        if (a.fins.shape == Models::FinShape::FreeForm) {
+            f["shape_points"] = a.fins.shapePoints;
+        }
+        j["fins"] = std::move(f);
+    }
 }
 
 void from_json(const json& j, AeroConfig& a) {
@@ -205,6 +226,24 @@ void from_json(const json& j, AeroConfig& a) {
     // Optional: existing files without aero_tables must still load.
     if (j.contains("aero_tables")) {
         a.tables = j.at("aero_tables").get<Models::AeroTables>();
+    }
+    if (j.contains("fins")) {
+        const json& f = j.at("fins");
+        const std::string shape = f.value("shape", std::string("trapezoidal"));
+        if (shape == "trapezoidal") a.fins.shape = Models::FinShape::Trapezoidal;
+        else if (shape == "elliptical") a.fins.shape = Models::FinShape::Elliptical;
+        else if (shape == "freeform") a.fins.shape = Models::FinShape::FreeForm;
+        else throw std::runtime_error("AeroConfig fins: unknown shape '" + shape + "'");
+        a.fins.count = f.at("count").get<int>();
+        a.fins.positionM = f.value("position_m", 0.0);
+        a.fins.cantAngleDeg = f.value("cant_angle_deg", 0.0);
+        a.fins.rootChordM = f.value("root_chord_m", 0.0);
+        a.fins.spanM = f.value("span_m", 0.0);
+        a.fins.tipChordM = f.value("tip_chord_m", 0.0);
+        a.fins.sweepLengthM = f.value("sweep_length_m", -1.0);
+        if (f.contains("shape_points")) {
+            a.fins.shapePoints = f.at("shape_points").get<std::vector<std::array<double, 2>>>();
+        }
     }
 }
 
