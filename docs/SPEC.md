@@ -41,10 +41,11 @@ The project boundaries are explicit:
 - StrikeCEM remains a separate project. Its CLI is retained for offline batch
   work and its `strikecem_lib` shared library is the intended embedding
   boundary for StrikeSim; StrikeCEM source is not part of StrikeEngine.
-  StrikeCEM produces the aerodynamic coefficient tables (Barrowman first-cut →
-  CFD). CFD validation is **StrikeCFD**, a separate project in a different
-  folder. The eventual goal is to build the **StrikeDesigner** surface inside
-  **StrikeSim** on the stabilized StrikeEngine.
+  StrikeCEM produces the radar-cross-section (RCS) signature tables
+  (physical-optics solver). The aerodynamic coefficient tables come from
+  **StrikeCFD**, a separate project in a different folder (Barrowman first-cut
+  → CFD validation). The eventual goal is to build the **StrikeDesigner**
+  surface inside **StrikeSim** on the stabilized StrikeEngine.
 - StrikeDesigner owns design intent and identity, StrikeCEM owns computation,
   validation, and provenance, and StrikeEngine owns runtime simulation and
   signature/database lookup. Integration must carry identity and revision
@@ -350,9 +351,10 @@ at the profile loader, and is never allowed to reach the interpolator.
 
 Moments and side-force remain the linear engineering model; coefficient tables
 for moments (cm) and lateral/β stability, plus Mach-scaled fin effectiveness,
-are future extensions. Tables are produced by the StrikeCEM program (Barrowman
-first-cut → CFD), with CFD validation under the separate StrikeCFD project, and
-consumed by StrikeEngine.
+are future extensions. cd/cl tables are produced by the StrikeCFD program
+(Barrowman first-cut → CFD validation, a separate project in a different
+folder) and consumed by StrikeEngine; StrikeCEM separately produces the
+radar-cross-section signature tables.
 
 ### 6.3 Rotation and actuators
 

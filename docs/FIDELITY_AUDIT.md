@@ -176,14 +176,15 @@ to reliable downstream use:
     remains open is the explicit versioned StrikeSim, StrikeDesigner, and
     StrikeCEM integration and provenance contracts (identity/revision/geometry
     provenance metadata carried across the handoff). Future programs: aero
-    coefficient tables are produced by a future **StrikeCEM** program (Barrowman
-    first-cut → CFD); CFD is **StrikeCFD**, a separate project in a different
-    folder; and the eventual goal is to build **StrikeDesigner** inside
+    (cd/cl) coefficient tables are produced by a future **StrikeCFD** program
+    (Barrowman first-cut → CFD validation) in a separate project/folder;
+    **StrikeCEM** separately produces the radar-cross-section signature tables;
+    and the eventual goal is to build **StrikeDesigner** inside
     **StrikeSim** on the stabilized engine.
 
 The profile-id database layer resolves aero/motor/seek/sensor lookups, but it
 does not change the status of the other deferred work, which stays deferred:
-power/comms/ECM models, StrikeCEM/CFD coupling, a full GPS-only positioning
+power/comms/ECM models, StrikeCEM/StrikeCFD coupling, a full GPS-only positioning
 mode (current GPS-only aiding is not one), guidance depth (trajectory/pursuit/
 LQR/MPC), Vulkan/CPU parity, and full global terrain. The fragmentation/
 overpressure falloff curve and leftover-propellant dumping in spent stages are

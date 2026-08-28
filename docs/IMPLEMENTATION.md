@@ -353,7 +353,7 @@ StrikeCEM remains a separate project with its own authority documents, CLI, and
 `strikecem_lib` shared library. StrikeSim is the embedding boundary for CEM;
 StrikeEngine does not absorb CEM source. Designer identity, revision, geometry
 provenance, and export validation must remain explicit across the
-StrikeDesigner → StrikeCEM → StrikeEngine handoff.
+StrikeDesigner → StrikeCEM (RCS) / StrikeCFD (aero) → StrikeEngine handoff.
 
 The intended delivery order is: stabilize the public C++ API and package,
 then build the StrikeSim shell/Designer integration, then embed StrikeCEM.
@@ -361,9 +361,10 @@ StrikeCEM offline work may proceed independently. A future protobuf/gRPC or
 REST API may wrap the stable C++ API, but it is not part of the current library
 contract.
 
-Future programs: aero coefficient tables are produced by a future **StrikeCEM**
-program (Barrowman first-cut → CFD); CFD is **StrikeCFD**, a separate project in
-a different folder; and the eventual goal is to build **StrikeDesigner** inside
+Future programs: aero (cd/cl) coefficient tables are produced by a future
+**StrikeCFD** program (Barrowman first-cut → CFD validation) in a separate
+project/folder; **StrikeCEM** separately produces the radar-cross-section
+signature tables; and the eventual goal is to build **StrikeDesigner** inside
 **StrikeSim** on the stabilized StrikeEngine.
 
 The pre-restructure implementation is preserved in the git tag
@@ -443,8 +444,8 @@ runtime guarantees:
 6. **GPU parity:** validate Vulkan against CPU truth, add GPU ECEF support, and
    implement CUDA if required.
 7. **Applications:** implement the explicit versioned StrikeSim/
-   StrikeDesigner/StrikeCEM handoffs and provenance; do not hide them in this
-   library.
+   StrikeDesigner/StrikeCEM/StrikeCFD handoffs and provenance; do not hide them
+   in this library.
 
 ## 11. Change and release gate
 
