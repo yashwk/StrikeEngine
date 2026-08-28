@@ -1,0 +1,8 @@
+{
+  "imu_enabled": true,
+  "gps_enabled": true,
+  "accel_noise_std_dev": 0.00980665,
+  "accel_bias_std_dev": 0.00980665,
+  "gyro_noise_std_dev": 0.000002908882086657216,
+  "gyro_bias_std_dev": 0.000000484813681109536
+}

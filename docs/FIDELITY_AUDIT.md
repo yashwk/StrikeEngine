@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `1ff6d1e`<br>
-**Validation result:** Release build, **29/29 CTest tests passed**
+**Validation result:** Release build, **30/30 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -50,7 +50,8 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W14 — Kernel ECEF truth mode | MVP / partial | `ecef_kernel_test`; ECEF truth, geodetic atmosphere/ground handling, ECEF GPS/INS flow, and ellipsoid-clamped impact are covered. |
 | W15 — Frame-aware study reporting | MVP / partial | `reporting_test`; versioned local/ECEF CSV metadata, geodetic coordinates, normalized altitude, and explicit primary-entity selection are covered. |
 | W16 — Structured study output | MVP / partial | `reporting_test`; configurable fields, status/entity metadata, versioned CSV output, binary recording, and the binary reader are covered. Richer telemetry and streaming remain open. |
-| W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; flattened per-vehicle `VehicleConfig`, snake_case JSON round-trip of all config structs, and scenario/design load-save are covered. The `designRef` override (overrides inline `vehicleConfig` on scenario load) is regression-covered. Profile-id database lookups are a future layer. |
+| W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; flattened per-vehicle `VehicleConfig`, snake_case JSON round-trip of all config structs (including the four profile-id keys and a legacy-compat case), and scenario/design load-save are covered. The `designRef` override (overrides inline `vehicleConfig` on scenario load) is regression-covered. |
+| W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; per-subsystem aero/motor/seek/sensor profile loaders (false on any load failure), `createVehicle` profile-wins resolution into the SoA blocks, empty-id regression, and missing/schema-broken profile → `std::runtime_error` naming the file. Shipped `data/aero`, `data/motors`, `data/seekers`, `data/sensors` example profiles parse. |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; per-entity IMU freeze, GPS scheduling/disable, and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp are covered. |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation (dry-mass drop, inertia rescale, `StageSeparation`) and impact/proximity/timed fusing (`Detonation`, flat lethal-radius kill) are covered. |
 
@@ -67,6 +68,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Integration | Derivative callbacks with true stage re-evaluation for RK4/RK45; bounded adaptive substeps; interpolated impact crossing; kernel integrator selection exposed via `IntegratorType` at construction (CPU-side). | **MVP / partial:** no multirate solver or complete event-aware adaptive policy. |
 | Earth and frames | WGS84 conversion, normal and spherical gravity, ECEF/ENU/NED transforms, Coriolis, centrifugal, transport terms, standalone ECEF propagation, and opt-in kernel ECEF truth. | **MVP / partial:** no geoid, global terrain streaming, polar/dateline scenario policy, or complete earth-rate treatment across every subsystem. |
 | Sensors | Body-frame IMU specific force and rates with noise/bias; per-entity IMU lever-arm specific-force correction; opt-in ECEF earth-rate gyro modeling (inertial body rate); noisy GPS in the selected frame; per-entity IMU/GPS enablement and GPS rate. | **MVP / partial:** a disabled IMU freezes its held sample and stops bias drift (GPS-only aiding, not a full GPS-only positioning mode); the full timing/interpolation contract remains open. |
+| Profile database layer | Aero/motor/seek/sensor single-profile loaders (`loadProfile` returns false on any failure) resolved by `createVehicle`; a non-empty `aeroProfileId`/`motorProfileId`/`seekerProfileId`/`sensorProfileId` replaces the inline sub-config, and a failed load throws `std::runtime_error` naming the file. | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, and RCS/IR/emitter signatures are NOT profile-resolved; the loader layer resolves one profile per file with no caching or database index. |
 | Navigation | Perfect initial alignment, strapdown INS (rotation-vector attitude update + single-interval sculling compensation), and coupled 15-state error-state EKF with GPS position/velocity updates. | **MVP / partial:** earth-rate gyro applies to ECEF truth mode only (the flat-earth local truth gyro already resolves the non-rotating-frame body rate; correct local earth-rate compensation requires the rotating-frame ECEF navigation path); multi-rate timestamp interpolation remains open. |
 | Seekers | Monostatic RF, SARH (bistatic, static illuminator), PassiveRF (target EIRP), and IR (Beer-Lambert transmittance) seekers; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, friendly rejection, chaff/flare decoys, strongest-signal acquisition, and the public `SeekerConfig` surface. | **MVP / partial:** imaging IR, multi-target tracking, dynamic illuminator tracking, and band-resolved extinction are not implemented. |
 | Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, seeker-lock APN handoff, and per-entity navigation/waypoint gains. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
@@ -78,7 +80,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **29/29 tests passed** at the
+- The complete Release CTest suite is green: **30/30 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **25.30 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
@@ -92,9 +94,10 @@ and each limitation is listed once in the subsystem assessment or backlog.
   validation; deterministic failure/damage semantics; IMU lever-arm
   compensation; earth-rate gyro modeling/compensation; strapdown
   coning/sculling corrections; subsystem config serialization and
-  scenario/design interchange; per-entity sensor enablement and
-  guidance/autopilot gain wiring; and multi-stage staging plus warhead
-  fusing.
+  scenario/design interchange (including the four profile-id keys and a
+  legacy-compat case); per-entity sensor enablement and
+  guidance/autopilot gain wiring; multi-stage staging plus warhead
+  fusing; and the profile-id database layer.
 
 The results establish regression coverage for the implemented paths. They do
 not establish production-grade aerodynamics, global geophysics, sensor
@@ -144,6 +147,16 @@ to reliable downstream use:
    and implement CUDA only if a project requirement is established.
 8. **Application handoffs:** define explicit versioned StrikeSim,
    StrikeDesigner, and StrikeCEM integration and provenance contracts.
+
+The profile-id database layer resolves aero/motor/seek/sensor lookups, but it
+does not change the status of the other deferred work, which stays deferred:
+power/comms/ECM models, StrikeCEM/CFD coupling, a full GPS-only positioning
+mode (current GPS-only aiding is not one), the fragmentation/overpressure
+falloff curve, and leftover-propellant-not-dumped in spent stages. The revived
+`data/aero`, `data/motors`, `data/seekers`, `data/sensors` profile artifacts and
+the rewritten flat snake_case `data/schemas/seeker_schema.json` are part of this
+layer; the designer-facing artifacts (`data/profiles`, `data/scenarios`,
+`data/designer`, `data/config`) were preserved unchanged.
 
 ## 6. Historical baseline
 

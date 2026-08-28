@@ -179,15 +179,59 @@ namespace StrikeEngine::Kernel {
 
 // --- Pure-scalar structs ---------------------------------------------------
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(AeroConfig, referenceArea, referenceLength,
-                                   cd, clAlpha, clFin, clMax)
+// --- AeroConfig -------------------------------------------------------------
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(SensorConfig, imuEnabled, gpsEnabled,
-                                   accelNoiseStdDev, accelBiasStdDev,
-                                   gyroNoiseStdDev, gyroBiasStdDev,
-                                   gpsPosNoiseStdDev, gpsVelNoiseStdDev,
-                                   gpsUpdateRateHz, imuLeverArmX, imuLeverArmY,
-                                   imuLeverArmZ)
+void to_json(json& j, const AeroConfig& a) {
+    j = json();
+    j["reference_area"] = a.referenceArea;
+    j["reference_length"] = a.referenceLength;
+    j["cd"] = a.cd;
+    j["cl_alpha"] = a.clAlpha;
+    j["cl_fin"] = a.clFin;
+    j["cl_max"] = a.clMax;
+}
+
+void from_json(const json& j, AeroConfig& a) {
+    a.referenceArea = j.at("reference_area").get<double>();
+    a.referenceLength = j.at("reference_length").get<double>();
+    a.cd = j.at("cd").get<double>();
+    a.clAlpha = j.at("cl_alpha").get<double>();
+    a.clFin = j.at("cl_fin").get<double>();
+    a.clMax = j.at("cl_max").get<double>();
+}
+
+// --- SensorConfig -----------------------------------------------------------
+
+void to_json(json& j, const SensorConfig& s) {
+    j = json();
+    j["imu_enabled"] = s.imuEnabled;
+    j["gps_enabled"] = s.gpsEnabled;
+    j["accel_noise_std_dev"] = s.accelNoiseStdDev;
+    j["accel_bias_std_dev"] = s.accelBiasStdDev;
+    j["gyro_noise_std_dev"] = s.gyroNoiseStdDev;
+    j["gyro_bias_std_dev"] = s.gyroBiasStdDev;
+    j["gps_pos_noise_std_dev"] = s.gpsPosNoiseStdDev;
+    j["gps_vel_noise_std_dev"] = s.gpsVelNoiseStdDev;
+    j["gps_update_rate_hz"] = s.gpsUpdateRateHz;
+    j["imu_lever_arm_x"] = s.imuLeverArmX;
+    j["imu_lever_arm_y"] = s.imuLeverArmY;
+    j["imu_lever_arm_z"] = s.imuLeverArmZ;
+}
+
+void from_json(const json& j, SensorConfig& s) {
+    s.imuEnabled = j.at("imu_enabled").get<bool>();
+    s.gpsEnabled = j.at("gps_enabled").get<bool>();
+    s.accelNoiseStdDev = j.at("accel_noise_std_dev").get<double>();
+    s.accelBiasStdDev = j.at("accel_bias_std_dev").get<double>();
+    s.gyroNoiseStdDev = j.at("gyro_noise_std_dev").get<double>();
+    s.gyroBiasStdDev = j.at("gyro_bias_std_dev").get<double>();
+    s.gpsPosNoiseStdDev = j.at("gps_pos_noise_std_dev").get<double>();
+    s.gpsVelNoiseStdDev = j.at("gps_vel_noise_std_dev").get<double>();
+    s.gpsUpdateRateHz = j.at("gps_update_rate_hz").get<double>();
+    s.imuLeverArmX = j.at("imu_lever_arm_x").get<double>();
+    s.imuLeverArmY = j.at("imu_lever_arm_y").get<double>();
+    s.imuLeverArmZ = j.at("imu_lever_arm_z").get<double>();
+}
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GuidanceAutopilotConfig, navigationConstant,
                                    waypointGain, kAccelP, kRateP, kAlphaP,
@@ -310,6 +354,10 @@ void to_json(json& j, const VehicleConfig& v) {
     j["warhead"] = v.warhead;
     j["rcs_profile_id"] = v.rcsProfileId;
     j["ir_profile_id"] = v.irProfileId;
+    j["aero_profile_id"] = v.aeroProfileId;
+    j["motor_profile_id"] = v.motorProfileId;
+    j["seeker_profile_id"] = v.seekerProfileId;
+    j["sensor_profile_id"] = v.sensorProfileId;
     j["emitter_eirp_w"] = v.emitterEirpW;
 }
 
@@ -328,6 +376,10 @@ void from_json(const json& j, VehicleConfig& v) {
     v.warhead = j.at("warhead").get<WarheadConfig>();
     v.rcsProfileId = j.at("rcs_profile_id").get<std::string>();
     v.irProfileId = j.at("ir_profile_id").get<std::string>();
+    v.aeroProfileId = j.value("aero_profile_id", std::string(""));
+    v.motorProfileId = j.value("motor_profile_id", std::string(""));
+    v.seekerProfileId = j.value("seeker_profile_id", std::string(""));
+    v.sensorProfileId = j.value("sensor_profile_id", std::string(""));
     v.emitterEirpW = j.at("emitter_eirp_w").get<double>();
 }
 

@@ -1,37 +1,33 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "StrikeEngine Seeker Profile Schema",
+  "description": "Flat snake_case SeekerConfig schema loaded by SeekerProfileDatabase (data/seekers/*.json).",
   "type": "object",
   "properties": {
-	"part_id": { "type": "string" },
-	"name": { "type": "string" },
-	"description": { "type": "string" },
-	"properties": {
-	  "type": "object",
-	  "properties": {
-		"type": {
-		  "type": "string",
-		  "enum": ["RF", "IR", "IMAGING_INFRARED", "ACTIVE_LASER"]
-		},
-		"mode": {
-		  "type": "string",
-		  "enum": ["INACTIVE", "ACTIVE", "SEMI_ACTIVE", "PASSIVE"]
-		},
-		"field_of_view_deg": { "type": "number", "minimum": 0 },
-		"gimbal_limit_deg": { "type": "number", "minimum": 0 },
-		"gimbal_rate_limit_deg_per_sec": { "type": "number", "minimum": 0 },
-		"max_range_m": { "type": "number", "minimum": 0 },
-		"power_watts": { "type": "number", "minimum": 0 },
-		"antenna_gain_db": { "type": "number" },
-		"noise_figure_db": { "type": "number" },
-		"detection_threshold_db": { "type": "number" },
-		"radome_error_profile_id": { "type": "string" }
-	  },
-	  "required": [
-		"type", "mode", "field_of_view_deg", "max_range_m", "power_watts",
-		"antenna_gain_db", "noise_figure_db", "detection_threshold_db"
-	  ]
-	}
+    "type": {
+      "type": "string",
+      "enum": ["none", "rf", "ir", "passive_rf", "sarh"]
+    },
+    "transmitter_power_w": { "type": "number", "minimum": 0 },
+    "antenna_gain_db": { "type": "number" },
+    "wavelength_m": { "type": "number", "minimum": 0 },
+    "noise_floor_w": { "type": "number", "minimum": 0 },
+    "snr_threshold_db": { "type": "number" },
+    "sensitivity_w": { "type": "number", "minimum": 0 },
+    "wavelength_band": { "type": "integer" },
+    "ir_extinction_per_m": { "type": "number", "minimum": 0 },
+    "illuminator_px": { "type": "number" },
+    "illuminator_py": { "type": "number" },
+    "illuminator_pz": { "type": "number" },
+    "illuminator_power_w": { "type": "number", "minimum": 0 },
+    "illuminator_gain_db": { "type": "number" },
+    "illuminator_wavelength_m": { "type": "number", "minimum": 0 },
+    "field_of_view_half_angle_rad": { "type": "number", "minimum": 0 },
+    "gimbal_azimuth_limit_rad": { "type": "number", "minimum": 0 },
+    "gimbal_elevation_limit_rad": { "type": "number", "minimum": 0 },
+    "lock_hysteresis_db": { "type": "number", "minimum": 0 },
+    "lock_dropout_time_sec": { "type": "number", "minimum": 0 },
+    "measurement_latency_sec": { "type": "number", "minimum": 0 }
   },
-  "required": ["part_id", "name", "properties"]
+  "required": ["type"]
 }

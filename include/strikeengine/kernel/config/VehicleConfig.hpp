@@ -15,14 +15,15 @@ namespace StrikeEngine::Kernel {
      * @brief Per-vehicle truth-model configuration (flattened simulation view).
      *
      * Composition of the vehicle's subsystem configurations: aero, propulsion
-     * (single-stage for now; multi-stage ignition/separation is a later
-     * increment), seeker, sensors, guidance/autopilot gains, and warhead.
-     * Structural summary fields (initialMass/massDry/inertias) are the
-     * designer output from geometry.
+     * (multi-stage: ignition and separation of spent stages), seeker,
+     * sensors, guidance/autopilot gains, and warhead. Structural summary
+     * fields (initialMass/massDry/inertias) are the designer output from
+     * geometry.
      *
-     * Passed to SimulationKernel::createVehicle(init, config). Lookups of
-     * aero/motor/seek/sensor profiles from a profile-id database are a future
-     * layer on top of this flat struct.
+     * Passed to SimulationKernel::createVehicle(init, config). Non-empty
+     * aeroProfileId / motorProfileId / seekerProfileId / sensorProfileId
+     * reference profile files whose parsed config replaces the corresponding
+     * inline sub-config (see include/strikeengine/kernel/profiles/).
      */
     struct VehicleConfig {
         EntityType type = EntityType::Missile;
@@ -41,6 +42,10 @@ namespace StrikeEngine::Kernel {
 
         std::string rcsProfileId = "";
         std::string irProfileId  = "";
+        std::string aeroProfileId = "";
+        std::string motorProfileId = "";
+        std::string seekerProfileId = "";
+        std::string sensorProfileId = "";
         double emitterEirpW = 0.0;
     };
 

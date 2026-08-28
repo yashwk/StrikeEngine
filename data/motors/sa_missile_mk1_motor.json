@@ -1,0 +1,24 @@
+{
+  "stages": [
+    {
+      "thrust_curve": [
+        {"time_s": 0.0, "thrust_n": 40000.0},
+        {"time_s": 3.5, "thrust_n": 40000.0}
+      ],
+      "vacuum_isp": 250.0,
+      "sea_level_isp": 250.0,
+      "propellant_mass_kg": 70.0,
+      "dry_mass_kg": 0.0
+    },
+    {
+      "thrust_curve": [
+        {"time_s": 0.0, "thrust_n": 8000.0},
+        {"time_s": 15.0, "thrust_n": 8000.0}
+      ],
+      "vacuum_isp": 220.0,
+      "sea_level_isp": 220.0,
+      "propellant_mass_kg": 30.0,
+      "dry_mass_kg": 0.0
+    }
+  ]
+}

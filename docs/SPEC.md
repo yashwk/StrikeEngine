@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **29/29 CTest tests passing** in Release.
+The current validated checkpoint is **30/30 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -200,7 +200,9 @@ inertias) now live on `VehicleConfig`.
 `VehicleConfig` is the flattened per-vehicle subsystem view: the structural
 summary (`type`, `initialMass`, `massDry`, `Ixx/Iyy/Izz`) and the subsystem
 structs `aero`, `propulsion`, `seeker`, `sensor`, `guidanceAutopilot`,
-`warhead`, plus the signature fields `rcsProfileId`, `irProfileId`, and
+`warhead`, the subsystem profile-id fields `aeroProfileId`,
+`motorProfileId`, `seekerProfileId`, and `sensorProfileId` (all default
+`""`), plus the signature fields `rcsProfileId`, `irProfileId`, and
 `emitterEirpW`.
 
 - `AeroConfig`: reference area/length and drag/lift coefficients.
@@ -219,9 +221,16 @@ An empty thrust curve means coasting. A configured motor burns only while fuel
 remains and mass flow is clamped at dry mass. Thrust acts along body +X.
 Multi-stage propulsion is described in §6.5 and warhead fusing in §8.
 
-Profile-id database lookups (aero/motor/seek/sensor) are a future layer on top
-of this flat struct: the profile IDs are carried and serialized but are not
-resolved against an external database.
+Profile-id resolution is implemented. Each of `aeroProfileId`,
+`motorProfileId`, `seekerProfileId`, and `sensorProfileId` may name a JSON
+profile file. On `createVehicle`, a non-empty profile id loads the referenced
+file and its parsed config REPLACES the inline sub-config for that subsystem
+(the profile is authoritative, consistent with the `designRef` precedent). An
+empty id leaves the inline sub-config untouched. A referenced profile that
+cannot be loaded (missing file, malformed JSON, missing required key, or
+wrong-typed field) makes `createVehicle` throw `std::runtime_error` naming the
+file. Guidance/autopilot, warhead, mass/inertia, and the RCS/IR/emitter
+signature fields are NOT profile-resolved.
 
 ### 5.3 Commands and guidance state
 
@@ -269,6 +278,12 @@ nlohmann/json dependency is never exposed in public headers.
 `VehicleInitState` fields are optional in JSON with safe defaults (zero pose,
 identity quaternion, mass 0, allegiance `friendly`). Deserializers throw
 `std::runtime_error` on malformed JSON or unknown enum strings.
+
+Profile files (aero/motor/seek/sensor) share the same flat snake_case key schema
+as the inline `ConfigSerialization` representation, so a profile file and an
+inline sub-config are interchangeable. Schema policy for profile files: only the
+seeker `type` and the motor `stages` keys are required; every other field
+defaults from the struct when omitted.
 
 ## 6. Truth dynamics
 

@@ -90,6 +90,11 @@ target_link_libraries(staging_warhead_test PRIVATE strikeengine)
 add_executable(serialization_test validation/serialization_test.cpp)
 target_link_libraries(serialization_test PRIVATE strikeengine)
 
+add_executable(profile_database_test validation/profile_database_test.cpp)
+target_link_libraries(profile_database_test PRIVATE strikeengine)
+target_compile_definitions(profile_database_test PRIVATE
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -178,5 +183,8 @@ set_tests_properties(staging_warhead PROPERTIES TIMEOUT 120)
 
 add_test(NAME serialization COMMAND serialization_test)
 set_tests_properties(serialization PROPERTIES TIMEOUT 120)
+
+add_test(NAME profile_database COMMAND profile_database_test)
+set_tests_properties(profile_database PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")

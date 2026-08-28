@@ -1,0 +1,15 @@
+{
+  "type": "rf",
+  "transmitter_power_w": 2500.0,
+  "antenna_gain_db": 35.0,
+  "snr_threshold_db": 14.0,
+  "sensitivity_w": 7e-10,
+  "wavelength_band": 3,
+  "ir_extinction_per_m": 2e-4,
+  "illuminator_power_w": 8e5,
+  "illuminator_gain_db": 41.0,
+  "field_of_view_half_angle_rad": 0.4,
+  "gimbal_azimuth_limit_rad": 0.8,
+  "gimbal_elevation_limit_rad": 0.9,
+  "lock_hysteresis_db": 5.0
+}

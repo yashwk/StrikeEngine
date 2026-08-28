@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **29/29 CTest tests pass**.
+- Release validation: **30/30 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -115,7 +115,9 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   orchestration, environment, public block access, deterministic
   failure/damage injection (`failEntity`, `applyDamage`), and the
   `createVehicle(config)` wiring of subsystem config into the per-entity SoA
-  blocks, plus the `processStaging` and `processWarheads` passes.
+  blocks, including the profile-id resolution step (a non-empty profile id
+  replaces the inline sub-config; a failed load throws `std::runtime_error`
+  naming the file), plus the `processStaging` and `processWarheads` passes.
 - `EnvironmentConfig.hpp`: terrain/wind callbacks and earth options including
   `useEcefTruth`, gravity selection, Coriolis, centrifugal, and transport.
 - `ScenarioConfig.hpp`: scenario metadata, environment, entity/vehicle setup,
@@ -123,15 +125,30 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   override.
 - `VehicleConfig.hpp`: the flattened per-vehicle subsystem view (`type`,
   `initialMass`, `massDry`, `Ixx/Iyy/Izz`, `aero`, `propulsion`, `seeker`,
-  `sensor`, `guidanceAutopilot`, `warhead`, signature profile IDs, EIRP).
+  `sensor`, `guidanceAutopilot`, `warhead`, the subsystem profile IDs
+  `aeroProfileId`/`motorProfileId`/`seekerProfileId`/`sensorProfileId`,
+  signature profile IDs, EIRP).
 - `config/AeroConfig.hpp`, `config/PropulsionConfig.hpp` (with `StageConfig`),
   `config/SensorConfig.hpp`, `config/GuidanceAutopilotConfig.hpp`,
   `config/WarheadConfig.hpp`, and `config/SeekerConfig.hpp`: per-subsystem
   configuration structs.
 - `config/ConfigSerialization.hpp/.cpp`: snake_case JSON (de)serialization of
   all config structs, enums as snake_case strings, `ScenarioConfig::save/load`,
-  and `serializeDesign`/`loadDesignPhysics`. Uses nlohmann/json privately behind
-  a public string API; nlohmann is never exposed in public headers.
+  and `serializeDesign`/`loadDesignPhysics`. `AeroConfig` and `SensorConfig`
+  serialize via manual snake_case `to_json`/`from_json` (not
+  `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE`) so inline configs and profile files
+  share one schema. Uses nlohmann/json privately behind a public string API;
+  nlohmann is never exposed in public headers.
+- `profiles/AeroProfileDatabase.hpp/.cpp`, `profiles/MotorProfileDatabase.hpp/
+  .cpp`, `profiles/SeekerProfileDatabase.hpp/.cpp`, and
+  `profiles/SensorProfileDatabase.hpp/.cpp`: single-profile loaders mirroring
+  the RCSDatabase pattern. Each `loadProfile(path)` returns `false` on ANY load
+  failure (unopenable file, malformed JSON, missing required key, wrong-typed
+  field); the getter (`aero()`, `propulsion()`, `seeker()`, `sensor()`)
+  returns the parsed config. `SimulationKernel::createVehicle` resolves a
+  non-empty `aeroProfileId`/`motorProfileId`/`seekerProfileId`/`sensorProfileId`
+  by loading the referenced file; the parsed config REPLACES the inline
+  sub-config, and a failed load throws `std::runtime_error` naming the file.
 
 ### Truth and earth models
 
@@ -216,7 +233,8 @@ remains future work.
 | `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording/reading |
 | `config_wiring` | per-entity sensor enablement (IMU freeze, GPS scheduling/disable) and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp |
 | `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
-| `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, and the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`) |
+| `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`), the round-trip of the four profile-id keys, and a legacy-compat case (a pre-feature `VehicleConfig` without the profile-id keys still deserializes with empty ids) |
+| `profile_database` | per-subsystem profile DB parsing (aero/motor/seek/sensor) with defaults for omitted keys; `loadProfile` returning `false` on any failure (missing file, malformed JSON, wrong-typed field, missing required seeker `type`/motor `stages`); `createVehicle` profile-wins resolution into the SoA blocks; empty-id regression (inline config untouched); missing/schema-broken profile → `std::runtime_error` naming the file; shipped `data/aero|motors|seekers|sensors` examples parse |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -238,6 +256,7 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W21 | flattened per-vehicle subsystem `VehicleConfig`, snake_case JSON/design/scenario serialization | current |
 | W22 | per-entity sensor enablement and guidance/autopilot gain wiring (`config_wiring_test`) | current |
 | W23 | multi-stage propulsion staging and warhead fusing (`staging_warhead_test`) | current |
+| W24 | profile-id database layer (`profile_database_test`): aero/motor/seek/sensor single-profile loaders, `createVehicle` profile-wins resolution, shared snake_case profile schema | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

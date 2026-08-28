@@ -1,0 +1,14 @@
+{
+  "imu_enabled": false,
+  "gps_enabled": true,
+  "accel_noise_std_dev": 0.25,
+  "accel_bias_std_dev": 0.02,
+  "gyro_noise_std_dev": 0.015,
+  "gyro_bias_std_dev": 0.002,
+  "gps_pos_noise_std_dev": 8.0,
+  "gps_vel_noise_std_dev": 0.9,
+  "gps_update_rate_hz": 5.0,
+  "imu_lever_arm_x": 0.1,
+  "imu_lever_arm_y": 0.2,
+  "imu_lever_arm_z": 0.3
+}

@@ -1,0 +1,8 @@
+{
+  "reference_area": 0.123,
+  "reference_length": 1.234,
+  "cd": 0.456,
+  "cl_alpha": 5.5,
+  "cl_fin": 2.2,
+  "cl_max": 1.7
+}

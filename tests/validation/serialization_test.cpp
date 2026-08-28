@@ -96,6 +96,10 @@ VehicleConfig makeRichConfig()
 
     cfg.rcsProfileId = "rcs-big";
     cfg.irProfileId = "ir-hot";
+    cfg.aeroProfileId = "aero-mk1";
+    cfg.motorProfileId = "motor-mk1";
+    cfg.seekerProfileId = "seeker-mk1";
+    cfg.sensorProfileId = "sensor-mk1";
     cfg.emitterEirpW = 2.5e6;
     return cfg;
 }
@@ -162,6 +166,37 @@ int main()
         check(cfg2.rcsProfileId == "rcs-big" && cfg2.irProfileId == "ir-hot" &&
                   cfg2.emitterEirpW == 2.5e6,
               "signature metadata survives");
+        check(cfg2.aeroProfileId == "aero-mk1" &&
+                  cfg2.motorProfileId == "motor-mk1" &&
+                  cfg2.seekerProfileId == "seeker-mk1" &&
+                  cfg2.sensorProfileId == "sensor-mk1",
+              "profile ids survive the round-trip");
+    }
+
+    // ---- 1.5 Legacy VehicleConfig JSON (no profile-id keys) still loads ----
+    {
+        std::string legacy = serializeVehicleConfig(VehicleConfig{});
+        // Strip the four profile-id keys to emulate a pre-feature persisted file.
+        for (const char* key : {"aero_profile_id", "motor_profile_id",
+                                "seeker_profile_id", "sensor_profile_id"}) {
+            const std::string entry = std::string("\"") + key + "\":\"\",";
+            const std::size_t pos = legacy.find(entry);
+            if (pos != std::string::npos) legacy.erase(pos, entry.size());
+        }
+        VehicleConfig parsed;
+        bool loadedOk = true;
+        try {
+            parsed = deserializeVehicleConfig(legacy);
+        } catch (const std::exception& e) {
+            check(false, "legacy VehicleConfig (no profile-id keys) did not throw");
+            std::printf("  unexpected exception: %s\n", e.what());
+            loadedOk = false;
+        }
+        if (loadedOk) {
+            check(parsed.aeroProfileId == "" && parsed.motorProfileId == "" &&
+                      parsed.seekerProfileId == "" && parsed.sensorProfileId == "",
+                  "omitted profile-id keys deserialize as empty strings");
+        }
     }
 
     // ---- 2. Environment earth-block round-trip ----

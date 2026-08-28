@@ -1,6 +1,10 @@
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/backend/BackendFactory.hpp>
 #include <strikeengine/kernel/backend/CPUBackend.hpp>
+#include <strikeengine/kernel/profiles/AeroProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/MotorProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/SeekerProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/SensorProfileDatabase.hpp>
 #include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
@@ -74,6 +78,44 @@ namespace StrikeEngine::Kernel {
     }
 
     PhysicsId SimulationKernel::createVehicle(const VehicleInitState& init, const VehicleConfig& config) {
+        // Profile-id resolution: a non-empty profile id replaces the inline
+        // sub-config for that subsystem (profile is authoritative, same
+        // precedent as designRef overriding inline vehicleConfig). Failing to
+        // load a referenced profile is fatal (fail fast).
+        VehicleConfig resolved = config;
+        if (!config.aeroProfileId.empty()) {
+            AeroProfileDatabase aeroDb;
+            if (!aeroDb.loadProfile(config.aeroProfileId)) {
+                throw std::runtime_error("AeroProfileDatabase could not load profile '" +
+                                         config.aeroProfileId + "'");
+            }
+            resolved.aero = aeroDb.aero();
+        }
+        if (!config.motorProfileId.empty()) {
+            MotorProfileDatabase motorDb;
+            if (!motorDb.loadProfile(config.motorProfileId)) {
+                throw std::runtime_error("MotorProfileDatabase could not load profile '" +
+                                         config.motorProfileId + "'");
+            }
+            resolved.propulsion = motorDb.propulsion();
+        }
+        if (!config.seekerProfileId.empty()) {
+            SeekerProfileDatabase seekerDb;
+            if (!seekerDb.loadProfile(config.seekerProfileId)) {
+                throw std::runtime_error("SeekerProfileDatabase could not load profile '" +
+                                         config.seekerProfileId + "'");
+            }
+            resolved.seeker = seekerDb.seeker();
+        }
+        if (!config.sensorProfileId.empty()) {
+            SensorProfileDatabase sensorDb;
+            if (!sensorDb.loadProfile(config.sensorProfileId)) {
+                throw std::runtime_error("SensorProfileDatabase could not load profile '" +
+                                         config.sensorProfileId + "'");
+            }
+            resolved.sensor = sensorDb.sensor();
+        }
+
         PhysicsId id;
 
         if (!freeList.empty()) {
@@ -224,18 +266,18 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.navigationConstant[id] = config.guidanceAutopilot.navigationConstant;
         guidanceBlock.waypointGain[id] = config.guidanceAutopilot.waypointGain;
 
-        sensorBlock.accelNoiseStdDev[id] = config.sensor.accelNoiseStdDev;
-        sensorBlock.accelBiasStdDev[id] = config.sensor.accelBiasStdDev;
-        sensorBlock.gyroNoiseStdDev[id] = config.sensor.gyroNoiseStdDev;
-        sensorBlock.gyroBiasStdDev[id] = config.sensor.gyroBiasStdDev;
-        sensorBlock.gpsPosNoiseStdDev[id] = config.sensor.gpsPosNoiseStdDev;
-        sensorBlock.gpsVelNoiseStdDev[id] = config.sensor.gpsVelNoiseStdDev;
-        sensorBlock.imuLeverArmX[id] = config.sensor.imuLeverArmX;
-        sensorBlock.imuLeverArmY[id] = config.sensor.imuLeverArmY;
-        sensorBlock.imuLeverArmZ[id] = config.sensor.imuLeverArmZ;
-        sensorBlock.imuEnabled[id] = config.sensor.imuEnabled;
-        sensorBlock.gpsEnabled[id] = config.sensor.gpsEnabled;
-        sensorBlock.gpsUpdateRateHz[id] = config.sensor.gpsUpdateRateHz;
+        sensorBlock.accelNoiseStdDev[id] = resolved.sensor.accelNoiseStdDev;
+        sensorBlock.accelBiasStdDev[id] = resolved.sensor.accelBiasStdDev;
+        sensorBlock.gyroNoiseStdDev[id] = resolved.sensor.gyroNoiseStdDev;
+        sensorBlock.gyroBiasStdDev[id] = resolved.sensor.gyroBiasStdDev;
+        sensorBlock.gpsPosNoiseStdDev[id] = resolved.sensor.gpsPosNoiseStdDev;
+        sensorBlock.gpsVelNoiseStdDev[id] = resolved.sensor.gpsVelNoiseStdDev;
+        sensorBlock.imuLeverArmX[id] = resolved.sensor.imuLeverArmX;
+        sensorBlock.imuLeverArmY[id] = resolved.sensor.imuLeverArmY;
+        sensorBlock.imuLeverArmZ[id] = resolved.sensor.imuLeverArmZ;
+        sensorBlock.imuEnabled[id] = resolved.sensor.imuEnabled;
+        sensorBlock.gpsEnabled[id] = resolved.sensor.gpsEnabled;
+        sensorBlock.gpsUpdateRateHz[id] = resolved.sensor.gpsUpdateRateHz;
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
@@ -249,7 +291,7 @@ namespace StrikeEngine::Kernel {
         // masses (all stages except the last) form the initial massDry floor;
         // processStaging() drops them and advances the active stage.
         StagePlan plan;
-        for (const auto& stage : config.propulsion.stages) {
+        for (const auto& stage : resolved.propulsion.stages) {
             if (stage.thrustCurve.empty()) continue;
             auto prop = std::make_shared<Models::PropulsionModel>(
                 Models::ThrustCurve(stage.thrustCurve),
@@ -298,12 +340,12 @@ namespace StrikeEngine::Kernel {
         // may burn only down to dry mass + reserved fuel.
         physicsBlock.stageMinMass[id] = hasStages ? physicsBlock.massDry[id] + reservedAfter0 : 0.0;
 
-        physicsBlock.referenceArea[id] = config.aero.referenceArea;
-        physicsBlock.referenceLength[id] = config.aero.referenceLength;
-        physicsBlock.cd[id] = config.aero.cd;
-        physicsBlock.clAlpha[id] = config.aero.clAlpha;
-        physicsBlock.clFin[id] = config.aero.clFin;
-        physicsBlock.clMax[id] = config.aero.clMax;
+        physicsBlock.referenceArea[id] = resolved.aero.referenceArea;
+        physicsBlock.referenceLength[id] = resolved.aero.referenceLength;
+        physicsBlock.cd[id] = resolved.aero.cd;
+        physicsBlock.clAlpha[id] = resolved.aero.clAlpha;
+        physicsBlock.clFin[id] = resolved.aero.clFin;
+        physicsBlock.clMax[id] = resolved.aero.clMax;
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;
@@ -332,27 +374,27 @@ namespace StrikeEngine::Kernel {
         warheads[id].detonated = false;
 
         // Per-entity seeker configuration (public SeekerConfig surface).
-        seekerBlock.type[id] = config.seeker.type;
-        seekerBlock.transmitterPowerW[id] = config.seeker.transmitterPowerW;
-        seekerBlock.antennaGainDb[id] = config.seeker.antennaGainDb;
-        seekerBlock.wavelengthM[id] = config.seeker.wavelengthM;
-        seekerBlock.noiseFloorW[id] = config.seeker.noiseFloorW;
-        seekerBlock.snrThresholdDb[id] = config.seeker.snrThresholdDb;
-        seekerBlock.sensitivityW[id] = config.seeker.sensitivityW;
-        seekerBlock.wavelengthBand[id] = config.seeker.wavelengthBand;
-        seekerBlock.irExtinctionPerM[id] = config.seeker.irExtinctionPerM;
-        seekerBlock.illuminatorPx[id] = config.seeker.illuminatorPx;
-        seekerBlock.illuminatorPy[id] = config.seeker.illuminatorPy;
-        seekerBlock.illuminatorPz[id] = config.seeker.illuminatorPz;
-        seekerBlock.illuminatorPowerW[id] = config.seeker.illuminatorPowerW;
-        seekerBlock.illuminatorGainDb[id] = config.seeker.illuminatorGainDb;
-        seekerBlock.illuminatorWavelengthM[id] = config.seeker.illuminatorWavelengthM;
-        seekerBlock.fieldOfViewHalfAngleRad[id] = config.seeker.fieldOfViewHalfAngleRad;
-        seekerBlock.gimbalAzimuthLimitRad[id] = config.seeker.gimbalAzimuthLimitRad;
-        seekerBlock.gimbalElevationLimitRad[id] = config.seeker.gimbalElevationLimitRad;
-        seekerBlock.lockHysteresisDb[id] = config.seeker.lockHysteresisDb;
-        seekerBlock.lockDropoutTimeSec[id] = config.seeker.lockDropoutTimeSec;
-        seekerBlock.measurementLatencySec[id] = config.seeker.measurementLatencySec;
+        seekerBlock.type[id] = resolved.seeker.type;
+        seekerBlock.transmitterPowerW[id] = resolved.seeker.transmitterPowerW;
+        seekerBlock.antennaGainDb[id] = resolved.seeker.antennaGainDb;
+        seekerBlock.wavelengthM[id] = resolved.seeker.wavelengthM;
+        seekerBlock.noiseFloorW[id] = resolved.seeker.noiseFloorW;
+        seekerBlock.snrThresholdDb[id] = resolved.seeker.snrThresholdDb;
+        seekerBlock.sensitivityW[id] = resolved.seeker.sensitivityW;
+        seekerBlock.wavelengthBand[id] = resolved.seeker.wavelengthBand;
+        seekerBlock.irExtinctionPerM[id] = resolved.seeker.irExtinctionPerM;
+        seekerBlock.illuminatorPx[id] = resolved.seeker.illuminatorPx;
+        seekerBlock.illuminatorPy[id] = resolved.seeker.illuminatorPy;
+        seekerBlock.illuminatorPz[id] = resolved.seeker.illuminatorPz;
+        seekerBlock.illuminatorPowerW[id] = resolved.seeker.illuminatorPowerW;
+        seekerBlock.illuminatorGainDb[id] = resolved.seeker.illuminatorGainDb;
+        seekerBlock.illuminatorWavelengthM[id] = resolved.seeker.illuminatorWavelengthM;
+        seekerBlock.fieldOfViewHalfAngleRad[id] = resolved.seeker.fieldOfViewHalfAngleRad;
+        seekerBlock.gimbalAzimuthLimitRad[id] = resolved.seeker.gimbalAzimuthLimitRad;
+        seekerBlock.gimbalElevationLimitRad[id] = resolved.seeker.gimbalElevationLimitRad;
+        seekerBlock.lockHysteresisDb[id] = resolved.seeker.lockHysteresisDb;
+        seekerBlock.lockDropoutTimeSec[id] = resolved.seeker.lockDropoutTimeSec;
+        seekerBlock.measurementLatencySec[id] = resolved.seeker.measurementLatencySec;
         seekerBlock.isLocked[id] = false;
         seekerBlock.lockedTargetId[id] = 0;
         seekerBlock.targetRange[id] = 0.0;
