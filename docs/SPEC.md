@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **30/30 CTest tests passing** in Release.
+The current validated checkpoint is **31/31 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -274,6 +274,35 @@ nlohmann/json dependency is never exposed in public headers.
   the `physics` block back into a `VehicleConfig`. A non-empty
   `ScenarioEntityConfig::designRef` is resolved on scenario load and
   OVERRIDES any inline `vehicleConfig`.
+
+The StrikeDesigner-facing artifacts shipped under `data/profiles` are now
+engine design manifests: a `{"name", "description", "physics": <VehicleConfig
+snake_case>}` document whose `physics` block `loadDesignPhysics` (via a
+scenario `designRef`) parses into a `VehicleConfig`. The manifest maps onto
+the engine as follows: the `physics` block IS the `VehicleConfig`, and the
+subsystem profile-id fields (`aeroProfileId`, `motorProfileId`,
+`seekerProfileId`, `sensorProfileId`, `rcsProfileId`) reference the per-part
+files under `data/aero`, `data/motors`, `data/seekers`, `data/sensors`, and
+`data/rcs`. On `createVehicle` those profile ids are authoritative and replace
+the manifest's inline placeholder sub-configs; the placeholders must still be
+present because `VehicleConfig::from_json` requires every sub-object key. The
+whole chain — manifest `design_ref` → `loadDesignPhysics` → profile-id
+resolution → kernel SoA wiring → RF seeker/RCS signature → guided intercept —
+is exercised end-to-end by `designer_pipeline_test`.
+
+Frame note for designers: the intercept scenario's original coordinates were
+ECEF-style Earth-radius values (`[0, 6371010, 0]` / `[20000, 6381010, 0]`) that
+sit below the WGS84 ellipsoid and are therefore unflyable. The shipped
+`data/scenarios/intercept_test_01.json` runs in the engine's local ENU frame
+(§4.2, Z up) while preserving the exact relative geometry (20 km downrange,
+10 km up). Designer producers MUST emit local ENU coordinates, not ECEF
+Earth-radius offsets.
+
+`intercept_test_01` is a deterministically tuned data set (sensor seed
+`0xDEADBEEF`) used to demonstrate the designer→engine pipeline end-to-end; it
+is not a guidance-performance claim. Its assertions — a real guided intercept
+(min miss 33.57 m < 50 m at t≈19.7 s) and a proximity-warhead kill via the
+event system — are pipeline evidence, not a general accuracy guarantee.
 
 `VehicleInitState` fields are optional in JSON with safe defaults (zero pose,
 identity quaternion, mass 0, allegiance `friendly`). Deserializers throw
@@ -501,7 +530,10 @@ optional ECEF kernel truth, batch/sweep/Monte Carlo/optimizer tooling, and
 installable CMake packaging. The flattened per-vehicle subsystem `VehicleConfig`
 surface, snake_case JSON/design/scenario serialization, per-entity sensor
 enablement, multi-stage propulsion with stage separation, and warhead fusing
-(impact/proximity/timed) are also implemented (MVP).
+(impact/proximity/timed) are also implemented (MVP). Designer-facing design
+manifests (`data/profiles`) and scenarios (`data/scenarios`) are engine-
+consumable and exercised end-to-end via `designer_pipeline_test`; the profile-id
+database layer (aero/motor/seeker/sensor/RCS) resolves the manifest's parts.
 
 Planned or partial: coefficient tables and higher-fidelity aero,
 probabilistic failure degradation, partial

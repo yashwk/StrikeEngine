@@ -1,4 +1,5 @@
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
+#include <strikeengine/kernel/config/SeekerTypeStrings.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -54,26 +55,6 @@ Allegiance allegianceFromString(const std::string& s) {
     if (s == "hostile") return Allegiance::Hostile;
     if (s == "neutral") return Allegiance::Neutral;
     throw std::runtime_error("ConfigSerialization: unknown Allegiance string '" + s + "'");
-}
-
-std::string seekerTypeToString(SeekerType t) {
-    switch (t) {
-        case SeekerType::None: return "none";
-        case SeekerType::RF: return "rf";
-        case SeekerType::IR: return "ir";
-        case SeekerType::PassiveRF: return "passive_rf";
-        case SeekerType::SARH: return "sarh";
-    }
-    throw std::runtime_error("ConfigSerialization: unhandled SeekerType");
-}
-
-SeekerType seekerTypeFromString(const std::string& s) {
-    if (s == "none") return SeekerType::None;
-    if (s == "rf") return SeekerType::RF;
-    if (s == "ir") return SeekerType::IR;
-    if (s == "passive_rf") return SeekerType::PassiveRF;
-    if (s == "sarh") return SeekerType::SARH;
-    throw std::runtime_error("ConfigSerialization: unknown SeekerType string '" + s + "'");
 }
 
 std::string fusingTypeToString(FusingType t) {

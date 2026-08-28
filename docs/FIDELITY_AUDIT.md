@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `0fd4570`<br>
-**Validation result:** Release build, **30/30 CTest tests passed**
+**Validation result:** Release build, **31/31 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -54,6 +54,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; per-subsystem aero/motor/seek/sensor profile loaders (false on any load failure), `createVehicle` profile-wins resolution into the SoA blocks, empty-id regression, and missing/schema-broken profile → `std::runtime_error` naming the file. Shipped `data/aero`, `data/motors`, `data/seekers`, `data/sensors` example profiles parse. |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; per-entity IMU freeze, GPS scheduling/disable, and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp are covered. |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation (dry-mass drop, inertia rescale, `StageSeparation`) and impact/proximity/timed fusing (`Detonation`, flat lethal-radius kill) are covered. |
+| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` RCS table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, and an end-to-end guided intercept (33.57 m miss < 50 m at t≈19.7 s) with a proximity-warhead kill. Boundary: the scenario is a deterministically tuned data set (seed `0xDEADBEEF`) — a pipeline demonstration, not a guidance-performance claim; versioned provenance contracts remain future work. |
 
 ## 3. Subsystem fidelity assessment
 
@@ -80,11 +81,16 @@ and each limitation is listed once in the subsystem assessment or backlog.
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **30/30 tests passed** at the
+- The complete Release CTest suite is green: **31/31 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **25.30 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
   general accuracy guarantee.
+- The designer→engine pipeline regression reports a **33.57 m minimum miss**
+  at t≈19.7 s with a proximity-warhead kill (`designer_pipeline_test`). This
+  demonstrates the end-to-end designer→engine data contract (design manifest →
+  `designRef` → profile-id wiring → kernel → intercept); it is a
+  deterministically tuned data set and not a guidance-performance claim.
 - The test inventory covers study wrappers; vehicle configuration; rigid-body
   truth; intercept control; integration; seeker (FOV/hysteresis/LOS-rate,
   plus rich seekers: SARH, passive RF, IR transmittance, decoys, strongest
@@ -97,7 +103,9 @@ and each limitation is listed once in the subsystem assessment or backlog.
   scenario/design interchange (including the four profile-id keys and a
   legacy-compat case); per-entity sensor enablement and
   guidance/autopilot gain wiring; multi-stage staging plus warhead
-  fusing; and the profile-id database layer.
+  fusing; the profile-id database layer; and the designer→engine pipeline
+  end-to-end (design manifests, flat RCS table, rewritten scenario, guided
+  intercept).
 
 The results establish regression coverage for the implemented paths. They do
 not establish production-grade aerodynamics, global geophysics, sensor
@@ -145,8 +153,13 @@ to reliable downstream use:
    management, pursuit, LQR/MPC, and blended guidance handoff.
 7. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,
    and implement CUDA only if a project requirement is established.
-8. **Application handoffs:** define explicit versioned StrikeSim,
-   StrikeDesigner, and StrikeCEM integration and provenance contracts.
+8. **Application handoffs:** the designer→engine data contract is now exercised
+   end-to-end (`designer_pipeline_test`): design manifests under `data/profiles`
+   are consumed via `design_ref` into `VehicleConfig`, profile ids resolve the
+   subsystem parts, and the scenario runs in the engine's local ENU frame. What
+   remains open is the explicit versioned StrikeSim, StrikeDesigner, and
+   StrikeCEM integration and provenance contracts (identity/revision/geometry
+   provenance metadata carried across the handoff).
 
 The profile-id database layer resolves aero/motor/seek/sensor lookups, but it
 does not change the status of the other deferred work, which stays deferred:
@@ -155,15 +168,17 @@ mode (current GPS-only aiding is not one), the fragmentation/overpressure
 falloff curve, and leftover-propellant-not-dumped in spent stages. The revived
 `data/aero`, `data/motors`, `data/seekers`, `data/sensors` profile artifacts and
 the rewritten flat snake_case `data/schemas/seeker_schema.json` are part of this
-layer; the designer-facing artifacts (`data/profiles`, `data/scenarios`,
-`data/designer`, `data/config`) were preserved unchanged.
+layer; the designer-facing `data/profiles` manifests and `data/scenarios`
+scenario are now engine-consumable (the missile/drone manifests and the
+`intercept_test_01` scenario under the ScenarioConfig schema), with `data/rcs`
+added for the flat target-drone RCS table.
 
 ## 6. Historical baseline
 
 The pre-restart audit from 2026-08-25 recorded a 5/7 workstream result and
 identified failures in control signs, aerodynamic authority, integration,
 events, seeker fidelity, and navigation. Those measurements described the
-older implementation and are superseded by the W1–W23 verification above.
+older implementation and are superseded by the W1–W25 verification above.
 
 The historical measurements and commits remain available in repository
 history. They are not repeated here because retaining their stale tables in

@@ -1,0 +1,6 @@
+{
+  "name": "Target Drone Flat RCS (1.5 m^2)",
+  "azimuth_breakpoints_deg": [-90.0, 90.0],
+  "elevation_breakpoints_deg": [-90.0, 90.0],
+  "rcs_table_dbsm": [[1.7609, 1.7609], [1.7609, 1.7609]]
+}

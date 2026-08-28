@@ -95,6 +95,11 @@ target_link_libraries(profile_database_test PRIVATE strikeengine)
 target_compile_definitions(profile_database_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+add_executable(designer_pipeline_test validation/designer_pipeline_test.cpp)
+target_link_libraries(designer_pipeline_test PRIVATE strikeengine)
+target_compile_definitions(designer_pipeline_test PRIVATE
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
 # Full-simulation validation programs. They run scenarios end-to-end, so they
 # need generous timeouts; they also write CSV outputs to the build dir.
 add_test(NAME singlerun COMMAND run_tests)
@@ -186,5 +191,8 @@ set_tests_properties(serialization PROPERTIES TIMEOUT 120)
 
 add_test(NAME profile_database COMMAND profile_database_test)
 set_tests_properties(profile_database PROPERTIES TIMEOUT 120)
+
+add_test(NAME designer_pipeline COMMAND designer_pipeline_test)
+set_tests_properties(designer_pipeline PROPERTIES TIMEOUT 120)
 
 set_target_properties(run_tests PROPERTIES FOLDER "Tests")

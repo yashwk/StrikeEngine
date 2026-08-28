@@ -1,24 +1,10 @@
 #include <strikeengine/kernel/profiles/SeekerProfileDatabase.hpp>
+#include <strikeengine/kernel/config/SeekerTypeStrings.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <stdexcept>
 
 namespace StrikeEngine::Kernel {
-
-namespace {
-
-// Local copy of the ConfigSerialization seeker-type string map (never
-// declares to_json/from_json for SeekerConfig in this TU; ODR safety).
-SeekerType seekerTypeFromString(const std::string& s) {
-    if (s == "none") return SeekerType::None;
-    if (s == "rf") return SeekerType::RF;
-    if (s == "ir") return SeekerType::IR;
-    if (s == "passive_rf") return SeekerType::PassiveRF;
-    if (s == "sarh") return SeekerType::SARH;
-    throw std::runtime_error("SeekerProfileDatabase: unknown SeekerType string '" + s + "'");
-}
-
-} // namespace
 
     bool SeekerProfileDatabase::loadProfile(const std::string& file_path) {
         std::ifstream f(file_path);

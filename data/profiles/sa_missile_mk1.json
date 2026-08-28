@@ -1,40 +1,86 @@
 {
   "name": "SA-Missile-Mk1-D (Nav-Enabled)",
-  "description": "Final profile with integrated seeker and IMU error model.",
-  "simulation": {
-	"components_to_add": [
-	  "transform", "mass", "inertia", "velocity", "propulsion", "aerodynamics",
-	  "guidance", "control_surfaces", "force_accumulator", "autopilot_command",
-	  "autopilot_state", "seeker", "imu", "navigation_state"
-	]
-  },
-  "mass_properties": {
-	"initial_kg": 150.0, "dry_kg": 50.0,
-	"inertia_tensor": [[10,0,0], [0,10,0], [0,0,0.5]]
-  },
-  "initial_state": {
-	"transform": {"position": [0, 6371010, 0], "orientation": [1,0,0,0]},
-	"velocity": {"linear": [0,0,0], "angular": [0,0,0]}
-  },
-  "aerodynamics": {
-	"profile_id": "sa_missile_mk1_aero", "reference_area_m2": 0.04
-  },
-  "propulsion": {
-	"stages": [
-	  {"name": "Booster", "stage_mass_kg": 70, "thrust_newtons": 40000, "burn_time_seconds": 3.5, "specific_impulse_seconds": 250},
-	  {"name": "Sustainer", "stage_mass_kg": 30, "thrust_newtons": 8000, "burn_time_seconds": 15, "specific_impulse_seconds": 220}
-	]
-  },
-  "guidance": {
-	"law": "ProportionalNavigation", "navigation_constant": 4.0
-  },
-  "seeker": {
-	"type": "RF", "field_of_view_deg": 10.0, "gimbal_limit_deg": 60.0, "max_range_m": 25000.0
-  },
-  "imu": {
-	"gyro_bias_drift_rate_deg_per_hr": 0.1,
-	"gyro_noise_density_deg_per_sqrt_hr": 0.01,
-	"accelerometer_bias_milli_g": 1.0,
-	"accelerometer_noise_density_g_per_sqrt_hz": 0.001
+  "description": "SAM Mk1 as an engine design manifest (designer -> engine pipeline). Body convention: engine +X is the longitudinal/roll axis (nose forward, aerospace NED); the designer's slender-body inertia tensor (two equal larger eigenvalues 10, small roll eigenvalue 0.5) therefore maps to inertia_xx (roll) = 0.5, inertia_yy = inertia_zz = 10. Aero, motor, seeker and sensor are supplied by the referenced subsystem profile ids, which are authoritative and replace the placeholder inline sub-configs at createVehicle.",
+  "physics": {
+    "type": "missile",
+    "initial_mass": 150.0,
+    "mass_dry": 50.0,
+    "inertia_xx": 0.5,
+    "inertia_yy": 10.0,
+    "inertia_zz": 10.0,
+    "aero": {
+      "reference_area": 0.04,
+      "reference_length": 2.0,
+      "cd": 0.45,
+      "cl_alpha": 7.0,
+      "cl_fin": 3.5,
+      "cl_max": 1.8
+    },
+    "propulsion": {
+      "stages": []
+    },
+    "seeker": {
+      "type": "rf",
+      "transmitter_power_w": 1200.0,
+      "antenna_gain_db": 32.0,
+      "wavelength_m": 0.03,
+      "noise_floor_w": 1e-12,
+      "snr_threshold_db": 13.0,
+      "sensitivity_w": 1e-9,
+      "wavelength_band": 0,
+      "ir_extinction_per_m": 1e-4,
+      "illuminator_px": 0.0,
+      "illuminator_py": 0.0,
+      "illuminator_pz": 0.0,
+      "illuminator_power_w": 500000.0,
+      "illuminator_gain_db": 38.0,
+      "illuminator_wavelength_m": 0.03,
+      "field_of_view_half_angle_rad": 1.0471975512,
+      "gimbal_azimuth_limit_rad": 1.0471975512,
+      "gimbal_elevation_limit_rad": 1.0471975512,
+      "lock_hysteresis_db": 3.0,
+      "lock_dropout_time_sec": 0.1,
+      "measurement_latency_sec": 0.0
+    },
+    "sensor": {
+      "imu_enabled": true,
+      "gps_enabled": true,
+      "accel_noise_std_dev": 0.00980665,
+      "accel_bias_std_dev": 0.00980665,
+      "gyro_noise_std_dev": 0.000002908882086657216,
+      "gyro_bias_std_dev": 0.000000484813681109536,
+      "gps_pos_noise_std_dev": 5.0,
+      "gps_vel_noise_std_dev": 0.5,
+      "gps_update_rate_hz": 1.0,
+      "imu_lever_arm_x": 0.0,
+      "imu_lever_arm_y": 0.0,
+      "imu_lever_arm_z": 0.0
+    },
+    "guidance_autopilot": {
+      "navigationConstant": 4.0,
+      "waypointGain": 20.0,
+      "kAccelP": 0.03,
+      "kRateP": 1.0,
+      "kAlphaP": 0.2,
+      "kRollP": 0.1,
+      "kRollD": 0.05,
+      "maxDeflectionRad": 0.43,
+      "servoTimeConstantSec": 0.02,
+      "maxServoRateRadPerSec": 5.24
+    },
+    "warhead": {
+      "mass_kg": 15.0,
+      "fusing": "proximity",
+      "proximity_trigger_m": 40.0,
+      "timed_delay_sec": 0.0,
+      "lethal_radius_m": 40.0
+    },
+    "rcs_profile_id": "",
+    "ir_profile_id": "",
+    "emitter_eirp_w": 0.0,
+    "aero_profile_id": "data/aero/sa_missile_mk1_aero.json",
+    "motor_profile_id": "data/motors/sa_missile_mk1_motor.json",
+    "seeker_profile_id": "data/seekers/aesa_tracker_v1.json",
+    "sensor_profile_id": "data/sensors/sa_missile_mk1_imu.json"
   }
 }

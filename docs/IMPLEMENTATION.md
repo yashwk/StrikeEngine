@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **30/30 CTest tests pass**.
+- Release validation: **31/31 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -196,6 +196,40 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   aggregate metrics `maxAltitudeM`/`maxSpeedMps` track the trajectory maximum,
   not just the final state.
 
+### Designer → engine pipeline
+
+- `data/profiles/sa_missile_mk1.json` and `data/profiles/target_drone.json`
+  are engine design manifests (`{ name, description, physics: <VehicleConfig
+  snake_case> }`), consumed via `designRef`. The missile manifest wires the
+  four subsystem profile ids (`aeroProfileId`/`motorProfileId`/
+  `seekerProfileId`/`sensorProfileId`) to `data/aero/sa_missile_mk1_aero.json`,
+  `data/motors/sa_missile_mk1_motor.json` (two-stage booster + sustainer),
+  `data/seekers/aesa_tracker_v1.json` (RF, FOV 6° / gimbal 65°), and
+  `data/sensors/sa_missile_mk1_imu.json`. The profile ids are authoritative
+  over the inline placeholder blocks, which must remain present because
+  `VehicleConfig::from_json` requires all sub-object keys. The drone manifest
+  has no propulsion/seeker of consequence and wires `rcsProfileId` to the new
+  flat RCS table.
+- `data/rcs/target_drone_rcs.json`: flat 1.5 m² (1.7609 dBsm) RCS table in
+  RCSDatabase format (two breakpoints each axis, uniform `rcs_table_dbsm`).
+- `data/scenarios/intercept_test_01.json`: rewritten in the engine ScenarioConfig
+  schema (`environment`, `primary_entity_index`, two entities with
+  `design_ref` + `init_state` + `initial_guidance_mode` /
+  `initial_target_*` / `initial_max_accel`). The designer's original ECEF-style
+  Earth-radius coordinates sit below the WGS84 ellipsoid (unflyable); the
+  scenario runs in the engine's local ENU frame preserving the exact relative
+  geometry (20 km downrange, 10 km up). The scenario is a deterministically
+  tuned data set (sensor seed `0xDEADBEEF`); the missile uses proximity fusing
+  (40 m trigger / 40 m lethal radius) and the drone a low-drag airframe
+  (S=1.0, cd=0.02, clAlpha=0.5).
+- `config/SeekerTypeStrings.hpp`: shared inline `seekerTypeToString`/
+  `seekerTypeFromString` snake_case maps for `SeekerType`, deduplicated so
+  `ConfigSerialization.cpp` and `SeekerProfileDatabase.cpp` use one ODR-safe
+  definition. No `to_json`/`from_json` for `SeekerType` is declared anywhere;
+  callers map the string explicitly.
+- Cleanup: the stale 0-byte `data/profiles/aesa_tracker_v1.json` was deleted;
+  the seeker part now lives at `data/seekers/aesa_tracker_v1.json`.
+
 ## 6. ECEF kernel integration
 
 Set `EnvironmentConfig::earth.useEcefTruth = true` before creating entities.
@@ -235,6 +269,7 @@ remains future work.
 | `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
 | `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`), the round-trip of the four profile-id keys, and a legacy-compat case (a pre-feature `VehicleConfig` without the profile-id keys still deserializes with empty ids) |
 | `profile_database` | per-subsystem profile DB parsing (aero/motor/seek/sensor) with defaults for omitted keys; `loadProfile` returning `false` on any failure (missing file, malformed JSON, wrong-typed field, missing required seeker `type`/motor `stages`); `createVehicle` profile-wins resolution into the SoA blocks; empty-id regression (inline config untouched); missing/schema-broken profile → `std::runtime_error` naming the file; shipped `data/aero|motors|seekers|sensors` examples parse |
+| `designer_pipeline` | end-to-end designer→engine chain: loads `data/scenarios/intercept_test_01.json`, resolves both `design_ref` manifests into `VehicleConfig` (opposing allegiances, ProNav mode), verifies the four missile subsystem profile ids and the drone `rcsProfileId` reach the SoA blocks (motor stage count 2, seeker FOV 6°/gimbal 65° vs the inline 60° placeholder, drone RCS id in the status block), runs the intercept, and asserts a real guided intercept (min miss 33.57 m < 50 m at t≈19.7 s) plus a proximity-warhead kill via the event system |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -257,6 +292,7 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W22 | per-entity sensor enablement and guidance/autopilot gain wiring (`config_wiring_test`) | current |
 | W23 | multi-stage propulsion staging and warhead fusing (`staging_warhead_test`) | current |
 | W24 | profile-id database layer (`profile_database_test`): aero/motor/seek/sensor single-profile loaders, `createVehicle` profile-wins resolution, shared snake_case profile schema | current |
+| W25 | designer→engine pipeline (`designer_pipeline_test`): engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, end-to-end guided intercept + proximity-warhead kill | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

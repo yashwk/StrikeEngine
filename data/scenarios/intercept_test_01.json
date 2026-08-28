@@ -1,22 +1,76 @@
 {
-  "scenarioName": "High-Fidelity Intercept Test",
-  "description": "A single SAM with navigation error modeling attempts to intercept a non-maneuvering target drone.",
-  "simulation": {
-	"duration_s": 60.0,
-	"time_step_hz": 100.0
+  "name": "Intercept Test 01",
+  "description": "High-fidelity SAM intercept via the designer -> engine pipeline. The missile (data/profiles/sa_missile_mk1.json design manifest, with aero/motor/seeker/sensor profile ids) launches from the surface and engages a coasting target drone (data/profiles/target_drone.json, flat 1.5 m^2 RCS) 20 km downrange and 10 km up, moving toward the shooter at 250 m/s. The designer's original ECEF-style coordinates ([0, 6371010, 0] / [20000, 6381010, 0]) assumed a spherical Earth radius below the WGS84 ellipsoid, so the scenario runs in the engine's local ENU frame (z up) with the exact same relative geometry. The unpowered drone glides ballistically; the guidance leads its descent via initial_target_vz.",
+  "environment": {
+    "earth": {
+      "use_ecef_truth": false,
+      "use_wgs84_gravity": false,
+      "use_spherical_gravity": false,
+      "include_coriolis": false,
+      "include_centrifugal": false,
+      "include_transport_rate": false,
+      "include_earth_rate_gyro": false,
+      "reference_latitude_rad": 0.0,
+      "reference_longitude_rad": 0.0
+    }
   },
+  "primary_entity_index": 0,
   "entities": [
-	{
-	  "name": "Interceptor",
-	  "profile": "data/profiles/sa_missile_mk1.json"
-	},
-	{
-	  "name": "Target",
-	  "profile": "data/profiles/target_drone.json"
-	}
-  ],
-  "engagement": {
-	"shooter": "Interceptor",
-	"target": "Target"
-  }
+    {
+      "design_ref": "data/profiles/sa_missile_mk1.json",
+      "init_state": {
+        "px": 0.0,
+        "py": 0.0,
+        "pz": 100.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "vz": 0.0,
+        "qx": 0.0,
+        "qy": 0.0,
+        "qz": 0.0,
+        "qw": 1.0,
+        "wx": 0.0,
+        "wy": 0.0,
+        "wz": 0.0,
+        "mass": 150.0,
+        "allegiance": "friendly"
+      },
+      "initial_guidance_mode": "proportional_navigation",
+      "initial_target_x": 20000.0,
+      "initial_target_y": 0.0,
+      "initial_target_z": 10100.0,
+      "initial_target_vx": -250.0,
+      "initial_target_vy": 0.0,
+      "initial_target_vz": -60.0,
+      "initial_max_accel": 120.0
+    },
+    {
+      "design_ref": "data/profiles/target_drone.json",
+      "init_state": {
+        "px": 20000.0,
+        "py": 0.0,
+        "pz": 10100.0,
+        "vx": -250.0,
+        "vy": 0.0,
+        "vz": 0.0,
+        "qx": 0.0,
+        "qy": 1.0,
+        "qz": 0.0,
+        "qw": 0.0,
+        "wx": 0.0,
+        "wy": 0.0,
+        "wz": 0.0,
+        "mass": 500.0,
+        "allegiance": "hostile"
+      },
+      "initial_guidance_mode": "none",
+      "initial_target_x": 0.0,
+      "initial_target_y": 0.0,
+      "initial_target_z": 0.0,
+      "initial_target_vx": 0.0,
+      "initial_target_vy": 0.0,
+      "initial_target_vz": 0.0,
+      "initial_max_accel": 0.0
+    }
+  ]
 }
