@@ -1,6 +1,6 @@
 {
   "name": "Intercept Test 01",
-  "description": "High-fidelity SAM intercept via the designer -> engine pipeline. The missile (data/profiles/sa_missile_mk1.json design manifest, with aero/motor/seeker/sensor profile ids) launches from the surface and engages a coasting target drone (data/profiles/target_drone.json, flat 1.5 m^2 RCS) 20 km downrange and 10 km up, moving toward the shooter at 250 m/s. The designer's original ECEF-style coordinates ([0, 6371010, 0] / [20000, 6381010, 0]) assumed a spherical Earth radius below the WGS84 ellipsoid, so the scenario runs in the engine's local ENU frame (z up) with the exact same relative geometry. The unpowered drone glides ballistically; the guidance leads its descent via initial_target_vz.",
+  "description": "High-fidelity SAM intercept via the designer -> engine pipeline. The missile (data/profiles/sa_missile_mk1.json design manifest, with aero/motor/seeker/sensor profile ids) launches from the surface and engages a coasting target drone (data/profiles/target_drone.json, flat 1.5 m^2 RCS) 15 km downrange and 8 km up, moving toward the shooter at 250 m/s. The designer's original ECEF-style coordinates assumed a spherical Earth radius below the WGS84 ellipsoid, so the scenario runs in the engine's local ENU frame (z up) with the same relative geometry. With the data-driven cd(M,a)/cl(M,a) aero tables the missile flies substantially faster and lower-drag, so the engagement closes to 15 km/8 km to keep the seeker's ~3 km acquisition range and the missile's turn performance consistent with a clean intercept. The unpowered drone glides ballistically; the guidance leads its descent via initial_target_vz.",
   "environment": {
     "earth": {
       "use_ecef_truth": false,
@@ -36,9 +36,9 @@
         "allegiance": "friendly"
       },
       "initial_guidance_mode": "proportional_navigation",
-      "initial_target_x": 20000.0,
+      "initial_target_x": 15000.0,
       "initial_target_y": 0.0,
-      "initial_target_z": 10100.0,
+      "initial_target_z": 8000.0,
       "initial_target_vx": -250.0,
       "initial_target_vy": 0.0,
       "initial_target_vz": -60.0,
@@ -47,12 +47,12 @@
     {
       "design_ref": "data/profiles/target_drone.json",
       "init_state": {
-        "px": 20000.0,
+        "px": 15000.0,
         "py": 0.0,
-        "pz": 10100.0,
+        "pz": 8000.0,
         "vx": -250.0,
         "vy": 0.0,
-        "vz": 0.0,
+        "vz": -60.0,
         "qx": 0.0,
         "qy": 1.0,
         "qz": 0.0,

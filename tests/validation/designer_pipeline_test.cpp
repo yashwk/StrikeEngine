@@ -43,6 +43,21 @@ int main()
           "missile and drone have opposing allegiances (seeker engages hostiles)");
     check(scenario.entities[0].initialGuidanceMode == GuidanceMode::ProportionalNavigation,
           "missile guidance mode came from the scenario (ProNav)");
+    // The scenario was re-baselined to 15 km downrange / 8 km up with the
+    // drone descending at vz = -60 m/s (aero tables make the missile faster
+    // and lower-drag, so the old 20 km / 10 km geometry no longer fits the
+    // seeker's ~3 km acquisition range). Lock the new geometry here.
+    check(scenario.entities[1].initState.px == 15000.0 &&
+              scenario.entities[1].initState.py == 0.0 &&
+              scenario.entities[1].initState.pz == 8000.0 &&
+              scenario.entities[1].initState.vx == -250.0 &&
+              scenario.entities[1].initState.vz == -60.0,
+          "drone re-baselined to 15 km downrange / 8 km up, closing at 250 m/s with vz=-60");
+    check(scenario.entities[0].initialTargetX == 15000.0 &&
+              scenario.entities[0].initialTargetZ == 8000.0 &&
+              scenario.entities[0].initialTargetVx == -250.0 &&
+              scenario.entities[0].initialTargetVz == -60.0,
+          "missile guidance aim matches the re-baselined drone geometry");
 
     // ---- 2. design_ref resolved into VehicleConfig with profile ids ----
     const VehicleConfig& missileCfg = scenario.entities[0].vehicleConfig;
@@ -84,6 +99,14 @@ int main()
     check(std::abs(phys.referenceArea[0] - 0.04) < 1e-12 &&
               std::abs(phys.cd[0] - 0.45) < 1e-12,
           "aero profile replaced the inline aero config (ref area 0.04, cd 0.45)");
+    check(phys.aeroTables[0] != nullptr &&
+              phys.aeroTables[0]->machBreakpoints.size() == 6 &&
+              phys.aeroTables[0]->aoaBreakpointsRad.size() == 4 &&
+              phys.aeroTables[0]->clTable.size() == 6 &&
+              phys.aeroTables[0]->clTable[0].size() == 4 &&
+              phys.aeroTables[0]->cdTable.size() == 6 &&
+              phys.aeroTables[0]->cdTable[0].size() == 4,
+          "aero profile cd(M,a)/cl(M,a) tables reached the physics block (6 mach x 4 aoa)");
     check(phys.stageCount[0] == 2 && phys.stageIndex[0] == 0,
           "motor profile registered booster + sustainer stages");
     check(sk.type[0] == SeekerType::RF &&

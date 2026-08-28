@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **32/32 CTest tests passing** in Release.
+The current validated checkpoint is **34/34 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -294,14 +294,17 @@ Frame note for designers: the intercept scenario's original coordinates were
 ECEF-style Earth-radius values (`[0, 6371010, 0]` / `[20000, 6381010, 0]`) that
 sit below the WGS84 ellipsoid and are therefore unflyable. The shipped
 `data/scenarios/intercept_test_01.json` runs in the engine's local ENU frame
-(§4.2, Z up) while preserving the exact relative geometry (20 km downrange,
-10 km up). Designer producers MUST emit local ENU coordinates, not ECEF
+(§4.2, Z up), with the engagement re-baselined to 15 km downrange / 8 km up
+(the table-aero missile flies faster and lower-drag, so the original
+20 km / 10 km geometry no longer fits the seeker's ~3 km acquisition range).
+Designer producers MUST emit local ENU coordinates, not ECEF
 Earth-radius offsets.
 
 `intercept_test_01` is a deterministically tuned data set (sensor seed
 `0xDEADBEEF`) used to demonstrate the designer→engine pipeline end-to-end; it
 is not a guidance-performance claim. Its assertions — a real guided intercept
-(min miss 16.77 m < 50 m at t≈19.7 s) and a proximity-warhead kill via the
+(min miss 16.96 m < 50 m at t≈11.7 s, now flying on the data-driven aero
+coefficient tables) and a proximity-warhead kill via the
 event system — are pipeline evidence, not a general accuracy guarantee.
 
 `VehicleInitState` fields are optional in JSON with safe defaults (zero pose,
@@ -329,8 +332,21 @@ body air-relative velocity, lift from angle of attack and fin pitch, bounded
 lift coefficient, yaw-fin side force, static pitch stability, rate damping,
 and bounded aerodynamic moments. Coefficients and geometry are per entity.
 
-This remains an engineering model, not CFD or a validated coefficient-table
-solver. Body lateral stability and coefficient tables are future extensions.
+Optional data-driven coefficient tables (`aero_tables` on `AeroConfig` and
+`data/aero/*.json` profiles) provide cd(M, α) and cl(M, α) as a rectilinear
+grid (`mach_breakpoints`, `aoa_breakpoints_rad`, `cl_table`, `cd_table`,
+dimensioned `[mach][aoa]`) that is bilinearly interpolated at runtime and
+clamped to the grid bounds. When a valid table block is present it is
+authoritative for cd/cl; otherwise the flat scalar coefficients (`cd`,
+`clAlpha`, `clFin`, `clMax`) are used as a guaranteed byte-identical fallback.
+A structurally invalid grid (missing or non-ascending breakpoints, wrong
+dimensions, fewer than two breakpoints per axis) is rejected at parse time and
+at the profile loader, and is never allowed to reach the interpolator.
+
+Moments and side-force remain the linear engineering model; coefficient tables
+for moments (cm) and lateral/β stability, plus Mach-scaled fin effectiveness,
+are future extensions. Tables are intended to be produced by a future
+strikeCEM pipeline (Barrowman first-cut → CFD) and consumed by StrikeEngine.
 
 ### 6.3 Rotation and actuators
 
@@ -545,8 +561,13 @@ checks the propulsion and ballistic truth against hand-computed expectations:
 initial acceleration against `T/m − g_lat`, burnout time against the pressure-
 interpolated-Isp band, and burnout velocity against the ideal rocket equation
 `Δv = Isp·g0·ln(m0/mdry)`, confirming the `T = ṁ·Isp·g0` motor law.
+Data-driven cd(M, α)/cl(M, α) aerodynamic coefficient tables (`aero_tables`),
+bilinearly interpolated and clamped to grid bounds with a constant-coefficient
+fallback, are also implemented (MVP); when present they are authoritative for
+cd/cl, while moments and side-force remain the linear engineering model.
 
-Planned or partial: coefficient tables and higher-fidelity aero,
+Planned or partial: higher-fidelity aero (moment and lateral/β coefficient
+tables, Mach-scaled fin effectiveness),
 probabilistic failure degradation, partial
 health effects and repair, advanced atmosphere, full global
 terrain/DEM ingestion, geoid models, imaging IR, multi-target seeker

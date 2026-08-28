@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `9ee7ef9`<br>
-**Validation result:** Release build, **32/32 CTest tests passed**
+**Validation result:** Release build, **34/34 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -32,7 +32,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | --- | --- | --- |
 | W1 — Per-entity vehicle configuration | Implemented | `vehicleconfig_test`; mass, dry-mass limiting, geometry, aero, thrust, and Isp are per vehicle. |
 | W2 — 6-DOF rigid-body truth | Implemented | `rigidbody_test`; quaternion normalization, body-frame rates, diagonal inertia, gyroscopic coupling, and commanded climb pass. |
-| W3 — Control authority | MVP / partial | `intercept_test`; minimum miss is 25.30 m and post-burnout control is exercised. Guidance and control remain engineering-model fidelity. |
+| W3 — Control authority | MVP / partial | `intercept_test`; minimum miss is 0.76 m and post-burnout control is exercised. Guidance and control remain engineering-model fidelity. |
 | W4 — True integration and impact timing | MVP / partial | `integrator_test`; derivative-callback Euler, RK4, RK45, Symplectic/Velocity-Verlet, bounded adaptation, and interpolated ground crossing are covered. |
 | W5 — Events and environment | MVP / partial | `environment_test`; terrain and wind callbacks plus real impact deactivation are covered. Failure/damage workstream is Implemented/MVP via `failure_test`. Terrain databases are open. |
 | W17 — Failure and damage semantics | Implemented / MVP | `failure_test`; deterministic motor, actuator, sensor, structural, and communication failure flags with real state transitions and per-type events are covered. Boundary: no probabilistic degradation, no partial health effects beyond deactivation, no repair. |
@@ -54,17 +54,18 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; per-subsystem aero/motor/seek/sensor profile loaders (false on any load failure), `createVehicle` profile-wins resolution into the SoA blocks, empty-id regression, and missing/schema-broken profile → `std::runtime_error` naming the file. Shipped `data/aero`, `data/motors`, `data/seekers`, `data/sensors` example profiles parse. |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; per-entity IMU freeze, GPS scheduling/disable, and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp are covered. |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation (dry-mass drop, inertia rescale, `StageSeparation`) and impact/proximity/timed fusing (`Detonation`, flat lethal-radius kill) are covered. |
-| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` RCS table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, and an end-to-end guided intercept (16.77 m miss < 50 m at t≈19.7 s) with a proximity-warhead kill. Boundary: the scenario is a deterministically tuned data set (seed `0xDEADBEEF`) — a pipeline demonstration, not a guidance-performance claim; versioned provenance contracts remain future work. |
-| W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; first-principles WGS84 single-stage launch cross-checked by hand: T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (measured 110.275 vs hand-computed 110.208 m/s², ~T/m − g_lat), burnout time within the pressure-interpolated-Isp band, mass at cutoff ≈ 350 kg, cutoff velocity (686.8 m/s) vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry) (874.4 m/s, loss ≈ 187.7 m/s explained by gravity ≈ 53.4 + drag + pressure-interpolated Isp), apogee (17.19 km), max-Q (~242 kPa), ISA-1976 sea-level density, WGS84 round trip, Somigliana monotone gravity (<0.1% at altitude), lateral drift ~0, and a 70°-elevation arcing case. The fuel-depletion guard scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail); this fix reduced the designer-pipeline min miss to 16.77 m. |
+| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` RCS table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, and an end-to-end guided intercept (16.96 m miss < 50 m at t≈11.7 s, now flying on the data-driven aero coefficient tables) with a proximity-warhead kill. Boundary: the scenario is a deterministically tuned data set (seed `0xDEADBEEF`) — a pipeline demonstration, not a guidance-performance claim; versioned provenance contracts remain future work. |
+| W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; first-principles WGS84 single-stage launch cross-checked by hand: T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (measured 110.275 vs hand-computed 110.208 m/s², ~T/m − g_lat), burnout time within the pressure-interpolated-Isp band, mass at cutoff ≈ 350 kg, cutoff velocity (686.8 m/s) vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry) (874.4 m/s, loss ≈ 187.7 m/s explained by gravity ≈ 53.4 + drag + pressure-interpolated Isp), apogee (17.19 km), max-Q (~242 kPa), ISA-1976 sea-level density, WGS84 round trip, Somigliana monotone gravity (<0.1% at altitude), lateral drift ~0, and a 70°-elevation arcing case. The fuel-depletion guard scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail); this fix reduced the designer-pipeline min miss to 16.96 m (with the subsequent table-aero re-baseline). |
+| W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test` (bilinear interpolator: exact-at-breakpoints, interior, clamping, grid validation) and `rocket_mvp_tables_test` (the same 5 m×0.4 m/500 kg/60 kN vertical-launch vehicle under constant vs sa_missile_mk1 tables). Measured: the constant-coefficient run is byte-identical to `rocket_mvp` (parity); the table run flies HIGHER and FASTER — apogee 24.79 km vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa (the low subsonic table cd cuts drag and the faster boost velocity dominates max-Q's V²). Boundary: tables are authoritative for cd/cl only; moments and side-force remain the linear engineering model, and the tables are not yet CFD-validated (awaiting a future strikeCEM). |
 
 ## 3. Subsystem fidelity assessment
 
 | Area | Current implementation | Assessment and limit |
 | --- | --- | --- |
-| Translational truth | Body aero/thrust forces are rotated into the selected world frame, divided by current mass, and combined with gravity and configured earth terms. | **MVP / partial:** an engineering model; no validated coefficient-table or CFD-backed model. |
+| Translational truth | Body aero/thrust forces are rotated into the selected world frame, divided by current mass, and combined with gravity and configured earth terms. | **MVP / partial:** an engineering model; cd/cl are now data-driven coefficient tables when present, but moments/side-force remain engineering-model and no CFD-backed model is validated. |
 | Rotational truth | Diagonal body inertia, gyroscopic coupling, body angular rates, quaternion attitude, and bounded fin moments. | **MVP / partial:** no full inertia-tensor or flexible-body model. |
 | Atmosphere | Layered ISA1976 atmosphere through 86 km, with density, pressure, temperature, and sound speed. | **Implemented for the stated envelope:** no weather or high-fidelity atmospheric model. |
-| Aerodynamics | Air-relative drag, angle-of-attack lift, fin pitch lift, yaw-fin side force, stability, rate damping, and bounded moments. | **MVP / partial:** coefficients are simplified and not validated against tables, CFD, or wind-tunnel data. |
+| Aerodynamics | Air-relative drag, angle-of-attack lift, fin pitch lift, yaw-fin side force, stability, rate damping, and bounded moments. Optional data-driven cd(M, α)/cl(M, α) coefficient tables (`aero_tables`) are bilinearly interpolated and clamped to the grid bounds; when present they are authoritative for cd/cl, with a constant-coefficient fallback. | **MVP / partial:** data-driven cd/cl coefficient tables (interpolated, clamped) with a constant-coefficient fallback; moments and side-force remain the linear engineering model; tables are not yet CFD-validated. |
 | Propulsion | Per-entity thrust curves, vacuum/sea-level Isp interpolation, mass flow, dry-mass limiting, axial body +X thrust, and ordered multi-stage staging (dry-mass drop, inertia rescale, stage separation). The motor law `T = ṁ·Isp·g0` is enforced at every instant: the fuel-depletion guard scales thrust with the capped mass flow, so thrust self-terminates at fuel exhaustion (no free-thrust tail). | **MVP / partial:** per-stage `propellantMassKg` caps stage drawdown (later-stage propellant reserved via a stage mass floor); no thrust vectoring or fuel-tank/engine failure model. |
 | Actuators and control | World-to-body acceleration demand, bounded fin commands, first-order servo lag, rate limiting, pitch/yaw sign conventions, and per-entity configurable gains/clamp. | **MVP / partial:** fixed per-entity engineering gains; no gain scheduling, actuator failure, or advanced controller. |
 | Integration | Derivative callbacks with true stage re-evaluation for RK4/RK45; bounded adaptive substeps; interpolated impact crossing; kernel integrator selection exposed via `IntegratorType` at construction (CPU-side). | **MVP / partial:** no multirate solver or complete event-aware adaptive policy. |
@@ -82,13 +83,14 @@ and each limitation is listed once in the subsystem assessment or backlog.
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **32/32 tests passed** at the
+- The complete Release CTest suite is green: **34/34 tests passed** at the
   checkpoint recorded above.
-- The control regression reports a **25.30 m minimum miss** for its validated
+- The control regression reports a **0.76 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
   general accuracy guarantee.
-- The designer→engine pipeline regression reports a **16.77 m minimum miss**
-  at t≈19.7 s with a proximity-warhead kill (`designer_pipeline_test`). This
+- The designer→engine pipeline regression reports a **16.96 m minimum miss**
+  at t≈11.7 s with a proximity-warhead kill (`designer_pipeline_test`), now
+  flying on the data-driven aero coefficient tables. This
   demonstrates the end-to-end designer→engine data contract (design manifest →
   `designRef` → profile-id wiring → kernel → intercept); it is a
   deterministically tuned data set and not a guidance-performance claim.
@@ -106,9 +108,12 @@ and each limitation is listed once in the subsystem assessment or backlog.
   guidance/autopilot gain wiring; multi-stage staging plus warhead
    fusing; the profile-id database layer; the designer→engine pipeline
    end-to-end (design manifests, flat RCS table, rewritten scenario, guided
-   intercept); and the first-principles rocket-launch verification
+   intercept); the first-principles rocket-launch verification
    (`rocket_mvp_test`) cross-checking burnout against the ideal rocket equation
-   and initial acceleration against `T/m − g`.
+   and initial acceleration against `T/m − g`; the aero coefficient-table
+   interpolator (`coefficient_table_test`); and the table-vs-constant
+   rocket-launch comparison (`rocket_mvp_tables_test`) showing the byte-identical
+   constant fallback and the higher table-run apogee/burnout-V/max-Q.
 
 The results establish regression coverage for the implemented paths. They do
 not establish production-grade aerodynamics, global geophysics, sensor
@@ -155,8 +160,12 @@ to reliable downstream use:
     fragmentation/overpressure falloff curve and arbitrary stage-count
     validation. (Per-stage propellant drawdown is implemented; leftover
     propellant in a spent stage is not dumped.)
-6. **Guidance and aero depth:** add validated coefficient tables, trajectory
-   management, pursuit, LQR/MPC, and blended guidance handoff.
+6. **Guidance and aero depth:** validated coefficient tables are done — aero is
+   now data-driven (cd(M, α)/cl(M, α), bilinearly interpolated and clamped to
+   grid bounds, with a constant-coefficient fallback; `coefficient_table_test`,
+   `rocket_mvp_tables_test`), awaiting a future strikeCEM to produce
+   CFD-validated tables. Remaining: trajectory management, pursuit, LQR/MPC, and
+   blended guidance handoff.
 7. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,
    and implement CUDA only if a project requirement is established.
 8. **Application handoffs:** the designer→engine data contract is now exercised
@@ -184,7 +193,7 @@ added for the flat target-drone RCS table.
 The pre-restart audit from 2026-08-25 recorded a 5/7 workstream result and
 identified failures in control signs, aerodynamic authority, integration,
 events, seeker fidelity, and navigation. Those measurements described the
-older implementation and are superseded by the W1–W26 verification above.
+older implementation and are superseded by the W1–W27 verification above.
 
 The historical measurements and commits remain available in repository
 history. They are not repeated here because retaining their stale tables in

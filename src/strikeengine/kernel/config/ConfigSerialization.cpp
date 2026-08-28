@@ -149,6 +149,26 @@ void from_json(const nlohmann::json& j, ThrustDataPoint& p) {
     p.thrust_n = j.at("thrust_n").get<double>();
 }
 
+void to_json(nlohmann::json& j, const AeroTables& t) {
+    j = nlohmann::json{
+        {"mach_breakpoints", t.machBreakpoints},
+        {"aoa_breakpoints_rad", t.aoaBreakpointsRad},
+        {"cl_table", t.clTable},
+        {"cd_table", t.cdTable}
+    };
+}
+
+void from_json(const nlohmann::json& j, AeroTables& t) {
+    t.machBreakpoints = j.at("mach_breakpoints").get<std::vector<double>>();
+    t.aoaBreakpointsRad = j.at("aoa_breakpoints_rad").get<std::vector<double>>();
+    t.clTable = j.at("cl_table").get<std::vector<std::vector<double>>>();
+    t.cdTable = j.at("cd_table").get<std::vector<std::vector<double>>>();
+    std::string err;
+    if (!t.isValid(&err)) {
+        throw std::runtime_error("AeroTables invalid: " + err);
+    }
+}
+
 } // namespace StrikeEngine::Models
 
 namespace StrikeEngine::Kernel {
@@ -170,6 +190,9 @@ void to_json(json& j, const AeroConfig& a) {
     j["cl_alpha"] = a.clAlpha;
     j["cl_fin"] = a.clFin;
     j["cl_max"] = a.clMax;
+    if (!a.tables.empty()) {
+        j["aero_tables"] = a.tables;
+    }
 }
 
 void from_json(const json& j, AeroConfig& a) {
@@ -179,6 +202,10 @@ void from_json(const json& j, AeroConfig& a) {
     a.clAlpha = j.at("cl_alpha").get<double>();
     a.clFin = j.at("cl_fin").get<double>();
     a.clMax = j.at("cl_max").get<double>();
+    // Optional: existing files without aero_tables must still load.
+    if (j.contains("aero_tables")) {
+        a.tables = j.at("aero_tables").get<Models::AeroTables>();
+    }
 }
 
 // --- SensorConfig -----------------------------------------------------------

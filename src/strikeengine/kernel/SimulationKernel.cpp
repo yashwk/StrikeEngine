@@ -147,6 +147,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.clAlpha.push_back(0.0);
             physicsBlock.clFin.push_back(0.0);
             physicsBlock.clMax.push_back(2.0);
+            physicsBlock.aeroTables.push_back(nullptr);
             physicsBlock.propulsionId.push_back(-1);
             physicsBlock.ignitionTime.push_back(0.0);
             physicsBlock.stageIndex.push_back(-1);
@@ -346,6 +347,9 @@ namespace StrikeEngine::Kernel {
         physicsBlock.clAlpha[id] = resolved.aero.clAlpha;
         physicsBlock.clFin[id] = resolved.aero.clFin;
         physicsBlock.clMax[id] = resolved.aero.clMax;
+        physicsBlock.aeroTables[id] = resolved.aero.tables.empty()
+            ? nullptr
+            : std::make_shared<const Models::AeroTables>(resolved.aero.tables);
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;

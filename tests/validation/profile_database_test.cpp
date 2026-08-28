@@ -116,6 +116,13 @@ int main() {
                                    "/data/aero/sa_missile_mk1_aero.json") &&
                   aero.aero().referenceArea == 0.04 && aero.aero().cd == 0.45,
               "shipped data/aero example parses");
+        check(aero.aero().tables.machBreakpoints.size() == 6 &&
+                  aero.aero().tables.aoaBreakpointsRad.size() == 4 &&
+                  aero.aero().tables.clTable.size() == 6 &&
+                  aero.aero().tables.clTable[0].size() == 4 &&
+                  aero.aero().tables.cdTable.size() == 6 &&
+                  aero.aero().tables.cdTable[0].size() == 4,
+              "shipped data/aero example parses its cd(M,a)/cl(M,a) tables (6 mach x 4 aoa)");
 
         MotorProfileDatabase motor;
         check(motor.loadProfile(std::string(STRIKEENGINE_SOURCE_DIR) +

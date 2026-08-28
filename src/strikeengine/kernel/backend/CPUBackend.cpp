@@ -67,6 +67,7 @@ namespace StrikeEngine::Kernel
         derivBuffer.clAlpha.assign(n, 0.0);
         derivBuffer.clFin.assign(n, 0.0);
         derivBuffer.clMax.assign(n, 0.0);
+        derivBuffer.aeroTables.assign(n, nullptr);
         derivBuffer.propulsionId.assign(n, -1);
         derivBuffer.ignitionTime.assign(n, 0.0);
         derivBuffer.finPitch.assign(n, 0.0); derivBuffer.finYaw.assign(n, 0.0); derivBuffer.finRoll.assign(n, 0.0);
@@ -131,6 +132,7 @@ namespace StrikeEngine::Kernel
             params.clAlpha         = s.clAlpha[i];
             params.clFin           = s.clFin[i];
             params.clMax           = s.clMax[i];
+            params.tables          = s.aeroTables[i];
 
             const Models::AeroWrench aeroWrench = aero->computeWrench(
                 u, v, w,

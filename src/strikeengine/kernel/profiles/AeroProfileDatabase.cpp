@@ -21,6 +21,20 @@ namespace StrikeEngine::Kernel {
             cfg.clAlpha         = data.value("cl_alpha", cfg.clAlpha);
             cfg.clFin           = data.value("cl_fin", cfg.clFin);
             cfg.clMax           = data.value("cl_max", cfg.clMax);
+            if (data.contains("aero_tables")) {
+                const auto& t = data["aero_tables"];
+                cfg.tables.machBreakpoints =
+                    t.at("mach_breakpoints").get<std::vector<double>>();
+                cfg.tables.aoaBreakpointsRad =
+                    t.at("aoa_breakpoints_rad").get<std::vector<double>>();
+                cfg.tables.clTable =
+                    t.at("cl_table").get<std::vector<std::vector<double>>>();
+                cfg.tables.cdTable =
+                    t.at("cd_table").get<std::vector<std::vector<double>>>();
+                if (!cfg.tables.isValid()) {
+                    return false;
+                }
+            }
             _aero = cfg;
         } catch (const std::exception&) {
             // Any load failure (syntax, missing required key, wrong type)

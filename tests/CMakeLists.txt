@@ -23,6 +23,12 @@ target_link_libraries(intercept_test PRIVATE strikeengine)
 add_executable(rocket_mvp_test validation/rocket_mvp_test.cpp)
 target_link_libraries(rocket_mvp_test PRIVATE strikeengine)
 
+add_executable(coefficient_table_test validation/coefficient_table_test.cpp)
+target_link_libraries(coefficient_table_test PRIVATE strikeengine)
+
+add_executable(rocket_mvp_tables_test validation/rocket_mvp_tables_test.cpp)
+target_link_libraries(rocket_mvp_tables_test PRIVATE strikeengine)
+
 add_executable(integrator_test validation/integrator_test.cpp)
 target_link_libraries(integrator_test PRIVATE strikeengine)
 
@@ -128,6 +134,12 @@ set_tests_properties(intercept PROPERTIES TIMEOUT 120)
 
 add_test(NAME rocket_mvp COMMAND rocket_mvp_test)
 set_tests_properties(rocket_mvp PROPERTIES TIMEOUT 120)
+
+add_test(NAME coefficient_table COMMAND coefficient_table_test)
+set_tests_properties(coefficient_table PROPERTIES TIMEOUT 120)
+
+add_test(NAME rocket_mvp_tables COMMAND rocket_mvp_tables_test)
+set_tests_properties(rocket_mvp_tables PROPERTIES TIMEOUT 120)
 
 add_test(NAME integrator COMMAND integrator_test)
 set_tests_properties(integrator PROPERTIES TIMEOUT 120)

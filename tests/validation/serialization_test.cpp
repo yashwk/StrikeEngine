@@ -33,6 +33,20 @@ VehicleConfig makeRichConfig()
     cfg.aero.clAlpha = 3.0;
     cfg.aero.clFin = 1.5;
     cfg.aero.clMax = 1.9;
+    cfg.aero.tables.machBreakpoints = {0.0, 0.5, 1.0, 2.0};
+    cfg.aero.tables.aoaBreakpointsRad = {0.0, 0.087, 0.174};
+    cfg.aero.tables.clTable = {
+        {0.0, 0.5, 1.0},
+        {0.0, 0.55, 1.1},
+        {0.0, 0.45, 0.9},
+        {0.0, 0.2, 0.4}
+    };
+    cfg.aero.tables.cdTable = {
+        {0.02, 0.03, 0.05},
+        {0.02, 0.035, 0.055},
+        {0.05, 0.06, 0.08},
+        {0.06, 0.07, 0.10}
+    };
 
     StageConfig stage;
     stage.thrustCurve = { {0.0, 60000.0}, {3.0, 70000.0}, {5.0, 0.0} };
@@ -133,6 +147,11 @@ int main()
         check(cfg2.aero.cd == 0.35 && cfg2.aero.clAlpha == 3.0 &&
                   cfg2.aero.clFin == 1.5 && cfg2.aero.clMax == 1.9,
               "aero coefficients survive");
+        check(cfg2.aero.tables.machBreakpoints == cfg.aero.tables.machBreakpoints &&
+                  cfg2.aero.tables.aoaBreakpointsRad == cfg.aero.tables.aoaBreakpointsRad &&
+                  cfg2.aero.tables.clTable == cfg.aero.tables.clTable &&
+                  cfg2.aero.tables.cdTable == cfg.aero.tables.cdTable,
+              "aero cd(M,a)/cl(M,a) tables survive the round-trip");
         check(cfg2.aero.referenceArea == 1.4 && cfg2.aero.referenceLength == 1.2,
               "aero geometry survives");
         check(cfg2.propulsion.stages.size() == 1 &&

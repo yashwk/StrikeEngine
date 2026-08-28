@@ -1,6 +1,8 @@
 #pragma once
 #include <cmath>
 #include <algorithm>
+#include <memory>
+#include <strikeengine/models/physics/aerodynamics/CoefficientTable.hpp>
 
 namespace StrikeEngine::Models {
 
@@ -19,6 +21,11 @@ namespace StrikeEngine::Models {
         double clAlpha   = 0.0;        // lift slope per rad of AoA
         double clFin     = 0.0;        // fin lift coefficient per rad of deflection
         double clMax     = 2.0;        // max |CL| (stall / control surface limit)
+
+        // Optional data-driven cd(M,a)/cl(M,a) tables. When present they are
+        // authoritative for cd/cl; nullptr keeps the constant-coefficient path
+        // (byte-identical to the legacy behavior).
+        std::shared_ptr<const Models::AeroTables> tables;
     };
 
     /**
@@ -67,14 +74,33 @@ namespace StrikeEngine::Models {
             const double q = 0.5 * density * speedSq;   // dynamic pressure
             const double S = p.referenceArea;
             const double l = p.referenceLength;
+            const double mach = (speedOfSound > 1e-6) ? V / speedOfSound : 0.0;
 
             // Angle of attack and sideslip (body frame)
             const double alpha = std::atan2(w, u);      // +w (Z down) => nose up
             const double beta  = std::atan2(v, u);      // +v => airflow from right
 
+            // Defensive gate: engage the table path only for structurally
+            // valid grids. Programmatically-built configs bypass load-time
+            // validation, so an invalid table must not reach the interpolator
+            // (a degenerate 1xN grid would silently produce zero drag/lift);
+            // it falls back to the constant-coefficient path instead.
+            const AeroTables* tables =
+                (p.tables && !p.tables->empty() && p.tables->isValid())
+                    ? p.tables.get() : nullptr;
+
             // --- Forces (body frame) ---
-            // Drag opposes velocity
-            const double dragMag = q * S * p.cd;
+            // Drag opposes velocity. With tables the cd(M,a) grid is
+            // authoritative; otherwise the flat p.cd coefficient is used.
+            double cd;
+            if (tables) {
+                cd = interpolateCoefficient(mach, alpha,
+                    tables->machBreakpoints, tables->aoaBreakpointsRad,
+                    tables->cdTable);
+            } else {
+                cd = p.cd;
+            }
+            const double dragMag = q * S * cd;
             double fx = -dragMag * (u / V);
             double fy = -dragMag * (v / V);
             double fz = -dragMag * (w / V);
@@ -83,8 +109,17 @@ namespace StrikeEngine::Models {
             // saturated at CL_max (stall / control limit). A linear lift
             // slope unbounded is the classic way to let a simulation run away
             // to 70+ deg AoA: at |CL| = CL_max the lifting surfaces are
-            // stalled and produce no more force.
-            double cl = p.clAlpha * alpha + p.clFin * finPitch;
+            // stalled and produce no more force. The table supplies the
+            // body/surface lift; the flat fin term remains additive.
+            double cl;
+            if (tables) {
+                cl = interpolateCoefficient(mach, alpha,
+                         tables->machBreakpoints, tables->aoaBreakpointsRad,
+                         tables->clTable)
+                     + p.clFin * finPitch;
+            } else {
+                cl = p.clAlpha * alpha + p.clFin * finPitch;
+            }
             cl = std::clamp(cl, -p.clMax, p.clMax);
             fz -= q * S * cl;
 
