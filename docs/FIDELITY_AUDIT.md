@@ -4,215 +4,141 @@
 **Runtime checkpoint:** `82bd30a`<br>
 **Validation result:** Release build, **35/35 CTest tests passed**
 
-> This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
-> is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
-> is the authoritative source-to-feature map. This audit does not override either
-> document.
+[`SPEC.md`](SPEC.md) is the normative contract;
+[`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
+does not override either.
 
 ## 1. Audit method and status vocabulary
 
-The audit treats a capability as implemented only when its behavior is present
-in the runtime and covered by deterministic regression evidence. A feature can
-therefore be present but still marked **MVP / partial** when its model is
-deliberately bounded or its production integration is incomplete.
+A capability is implemented only when present in the runtime and covered by
+deterministic regression evidence; a present-but-bounded feature stays
+**MVP / partial**.
 
 | Status | Meaning |
 | --- | --- |
 | **Implemented** | Runtime behavior exists and is covered by the current Release validation suite. |
-| **MVP / partial** | A bounded implementation is validated, but important fidelity or integration limits remain. |
-| **Planned** | The capability is recorded as future work and is not part of the supported contract. |
-| **Unsupported** | Callers must not rely on the capability or on an implicit fallback. |
-
-The evidence below is intentionally consolidated: each workstream appears once,
-and each limitation is listed once in the subsystem assessment or backlog.
+| **MVP / partial** | A bounded implementation is validated; fidelity or integration limits remain. |
+| **Planned** | Recorded as future work; not part of the supported contract. |
+| **Unsupported** | Callers must not rely on the capability or an implicit fallback. |
 
 ## 2. Current workstream verification
 
-| Workstream | Status | Evidence and current boundary |
+| Workstream | Status | Evidence |
 | --- | --- | --- |
-| W1 — Per-entity vehicle configuration | Implemented | `vehicleconfig_test`; mass, dry-mass limiting, geometry, aero, thrust, and Isp are per vehicle. |
-| W2 — 6-DOF rigid-body truth | Implemented | `rigidbody_test`; quaternion normalization, body-frame rates, diagonal inertia, gyroscopic coupling, and commanded climb pass. |
-| W3 — Control authority | MVP / partial | `intercept_test`; minimum miss is 0.76 m and post-burnout control is exercised. Guidance and control remain engineering-model fidelity. |
-| W4 — True integration and impact timing | MVP / partial | `integrator_test`; derivative-callback Euler, RK4, RK45, Symplectic/Velocity-Verlet, bounded adaptation, and interpolated ground crossing are covered. |
-| W5 — Events and environment | MVP / partial | `environment_test`; terrain and wind callbacks plus real impact deactivation are covered. Failure/damage workstream is Implemented/MVP via `failure_test`. Terrain databases are open. |
-| W17 — Failure and damage semantics | Implemented / MVP | `failure_test`; deterministic motor, actuator, sensor, structural, and communication failure flags with real state transitions and per-type events are covered. Boundary: no probabilistic degradation, no partial health effects beyond deactivation, no repair. |
-| W18 — IMU lever-arm compensation | Implemented / MVP | `lever_arm_test`; per-entity body-frame lever-arm specific-force correction (α×l + ω×(ω×l)) is covered. |
-| W19 — Earth-rate gyro modeling + compensation | Implemented / MVP | `earth_rate_gyro_test`; opt-in `includeEarthRateGyro` in ECEF truth mode adds ω_ie^b to the gyro and compensates it in the INS with no attitude drift. Local flat-earth mode is intentionally excluded. |
-| W20 — Strapdown coning/sculling corrections | Implemented / MVP | `coning_sculling_test`; rotation-vector attitude update (456× tighter than the first-order step on a coning environment) and single-interval sculling compensation `+0.5 (ω×f) dt^2` are validated against a fine-step reference. |
-| W6 — Seeker and sensor fidelity | Implemented / MVP | `seeker_test` and `seeker_rich_test`; FOV, gimbal limits, hysteresis, filtered LOS rates, latency, RF/IR/SARH/PassiveRF detection, Beer-Lambert IR transmittance, chaff/flare decoys, strongest-signal acquisition, and the public `SeekerConfig` surface are covered. Imaging IR, multi-target tracking, and dynamic illuminator tracking remain open. |
-| W7 — Navigation EKF | MVP / partial | `navigation_test`; coupled 15-state covariance, GPS corrections, bounds, and deterministic bias convergence are covered. Full inertial compensation is not complete. |
-| W8 — Scenario and guidance contract | MVP / partial | `guidance_test` and `scenario_test`; PN/APN, moving-target response, seeker handoff, scenario propagation, and isolated batch execution are covered. |
-| W9 — WGS84 local-earth model | MVP / partial | `earth_test`; geodetic/ECEF conversion, normal gravity, and local Coriolis are covered. This is not a complete geophysical model. |
-| W10 — Earth frames and acceleration | MVP / partial | `earth_frames_test`; ECEF/ENU/NED transforms and centrifugal acceleration are covered in the local-earth path. |
-| W11 — Moving-origin transport | MVP / partial | `earth_transport_test`; WGS84 curvature, local geodetic resolution, transport acceleration, and CPU integration are covered. |
-| W12 — Spherical gravity | MVP / partial | `spherical_gravity_test`; radial ECEF point-mass gravity, local projection, and CPU integration are covered. |
-| W13 — Standalone global ECEF propagation | MVP / partial | `earth_fixed_test`; rotating-Earth gravity, Coriolis, centrifugal terms, caller force, and deterministic RK4 are covered. |
-| W14 — Kernel ECEF truth mode | MVP / partial | `ecef_kernel_test`; ECEF truth, geodetic atmosphere/ground handling, ECEF GPS/INS flow, and ellipsoid-clamped impact are covered. |
-| W15 — Frame-aware study reporting | MVP / partial | `reporting_test`; versioned local/ECEF CSV metadata, geodetic coordinates, normalized altitude, and explicit primary-entity selection are covered. |
-| W16 — Structured study output | MVP / partial | `reporting_test`; configurable fields, status/entity metadata, versioned CSV output, binary recording, and the binary reader are covered. Richer telemetry and streaming remain open. |
-| W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; flattened per-vehicle `VehicleConfig`, snake_case JSON round-trip of all config structs (including the four profile-id keys and a legacy-compat case), and scenario/design load-save are covered. The `designRef` override (overrides inline `vehicleConfig` on scenario load) is regression-covered. |
-| W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; per-subsystem aero/motor/seek/sensor profile loaders (false on any load failure), `createVehicle` profile-wins resolution into the SoA blocks, empty-id regression, and missing/schema-broken profile → `std::runtime_error` naming the file. Shipped `data/aero`, `data/motors`, `data/seekers`, `data/sensors` example profiles parse. |
-| W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; per-entity IMU freeze, GPS scheduling/disable, and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp are covered. |
-| W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation (dry-mass drop, inertia rescale, `StageSeparation`) and impact/proximity/timed fusing (`Detonation`, flat lethal-radius kill) are covered. |
-| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` RCS table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, and an end-to-end guided intercept (45.4 m miss < 50 m at t≈11.5 s, now flying on the data-driven aero coefficient tables) with a proximity-warhead kill. Boundary: the scenario is a deterministically tuned data set (seed `0xDEADBEEF`) — a pipeline demonstration, not a guidance-performance claim; versioned provenance contracts remain future work. |
-| W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; first-principles WGS84 single-stage launch cross-checked by hand: T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (measured 110.275 vs hand-computed 110.208 m/s², ~T/m − g_lat), burnout time within the pressure-interpolated-Isp band, mass at cutoff ≈ 350 kg, cutoff velocity (686.8 m/s) vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry) (874.4 m/s, loss ≈ 187.7 m/s explained by gravity ≈ 53.4 + drag + pressure-interpolated Isp), apogee (17.19 km), max-Q (~242 kPa), ISA-1976 sea-level density, WGS84 round trip, Somigliana monotone gravity (<0.1% at altitude), lateral drift ~0, and a 70°-elevation arcing case. The fuel-depletion guard scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail); this fix, with the later table-aero re-baseline and the W28 leftover-dump/falloff batch, yields the current designer-pipeline min miss of 45.4 m at t≈11.5 s. |
-| W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test` (bilinear interpolator: exact-at-breakpoints, interior, clamping, grid validation) and `rocket_mvp_tables_test` (the same 5 m×0.4 m/500 kg/60 kN vertical-launch vehicle under constant vs sa_missile_mk1 tables). Measured: the constant-coefficient run is byte-identical to `rocket_mvp` (parity); the table run flies HIGHER and FASTER — apogee 24.79 km vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa (the low subsonic table cd cuts drag and the faster boost velocity dominates max-Q's V²). Boundary: tables are authoritative for cd/cl only; moments and side-force remain the linear engineering model, and the tables are not yet CFD-validated (awaiting a future strikeCEM). |
-| W28 — Leftover-propellant dump + warhead falloff band | Implemented / MVP | `staging_warhead_test` and `warhead_falloff_test`; at stage separation the spent stage's unburned propellant is jettisoned so vehicle mass lands exactly on the new floor (dry mass + later-stage reserves), inertia rescales by the post-dump mass ratio, and `dumpedMassKg` is reported on `StageSeparation` (measured: a 50 kg cap burns 12.534 kg → 37.466 kg dumped, post-sep mass exactly 100.0 kg, Ixx rescale 5.3343; exhaustion burnouts dump ~0 and stay byte-identical). Optional `falloffRadiusM` on `WarheadConfig` (0.0 default = flat law, byte-identical) gives a linear fragmentation/overpressure falloff band — kill probability 1 inside `lethalRadiusM`, linear decay in the band, 0 beyond — with an RNG draw only when `0 < p < 1` so flat warheads never consume the kernel RNG stream. The designer SAM warhead (lethal 50 m / trigger 50 m / falloff 90 m) kills deterministically at trigger crossing; the booster-leftover dump lightens the sustainer so the intercept now closes at min miss 45.4 m at t≈11.5 s. |
+| W1 — Per-entity vehicle configuration | Implemented | `vehicleconfig_test` |
+| W2 — 6-DOF rigid-body truth | Implemented | `rigidbody_test` |
+| W3 — Control authority | MVP / partial | `intercept_test`; min miss 0.76 m, post-burnout control |
+| W4 — True integration and impact timing | MVP / partial | `integrator_test`; Euler/RK4/RK45/Symplectic, adaptive, interpolated crossing |
+| W5 — Events and environment | MVP / partial | `environment_test`; failure/damage via `failure_test`; terrain DBs open |
+| W17 — Failure and damage semantics | Implemented / MVP | `failure_test`; deterministic flags + events; no probabilistic/partial-health/repair |
+| W18 — IMU lever-arm compensation | Implemented / MVP | `lever_arm_test`; α×l + ω×(ω×l) |
+| W19 — Earth-rate gyro modeling + compensation | Implemented / MVP | `earth_rate_gyro_test`; ECEF truth only, local excluded |
+| W20 — Strapdown coning/sculling corrections | Implemented / MVP | `coning_sculling_test`; rotation-vector update + `+0.5(ω×f)dt²` |
+| W6 — Seeker and sensor fidelity | Implemented / MVP | `seeker_test`, `seeker_rich_test`; RF/IR/SARH/PassiveRF, decoys, strongest-signal |
+| W7 — Navigation EKF | MVP / partial | `navigation_test`; coupled 15-state, GPS corrections |
+| W8 — Scenario and guidance contract | MVP / partial | `guidance_test`, `scenario_test`; PN/APN, batch |
+| W9 — WGS84 local-earth model | MVP / partial | `earth_test`; geodetic/ECEF, normal gravity, Coriolis |
+| W10 — Earth frames and acceleration | MVP / partial | `earth_frames_test`; ECEF/ENU/NED, centrifugal |
+| W11 — Moving-origin transport | MVP / partial | `earth_transport_test` |
+| W12 — Spherical gravity | MVP / partial | `spherical_gravity_test` |
+| W13 — Standalone global ECEF propagation | MVP / partial | `earth_fixed_test`; rotating-Earth RK4 |
+| W14 — Kernel ECEF truth mode | MVP / partial | `ecef_kernel_test` |
+| W15 — Frame-aware study reporting | MVP / partial | `reporting_test` |
+| W16 — Structured study output | MVP / partial | `reporting_test`; CSV/binary + reader |
+| W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; `VehicleConfig`, snake_case round-trip (four profile-id keys, legacy-compat), `designRef` override |
+| W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; fail-fast loaders, profile-wins resolution |
+| W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; IMU freeze, GPS schedule, gain wiring |
+| W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation + fusing |
+| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; 45.4 m miss < 50 m at t≈11.5 s + kill; seed `0xDEADBEEF`, pipeline demo not a performance claim |
+| W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; T0 60000 N, flow 27.81 kg/s, init accel 110.275 vs 110.208 m/s², cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee 17.19 km, max-Q ~242 kPa; `T = ṁ·Isp·g0`, no free-thrust tail |
+| W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test`, `rocket_mvp_tables_test`; table run higher/faster (apogee 24.79 vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa); fallback byte-identical; awaiting StrikeCFD |
+| W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 45.4 m miss |
 
 ## 3. Subsystem fidelity assessment
 
 | Area | Current implementation | Assessment and limit |
 | --- | --- | --- |
-| Translational truth | Body aero/thrust forces are rotated into the selected world frame, divided by current mass, and combined with gravity and configured earth terms. | **MVP / partial:** an engineering model; cd/cl are now data-driven coefficient tables when present, but moments/side-force remain engineering-model and no CFD-backed model is validated. |
-| Rotational truth | Diagonal body inertia, gyroscopic coupling, body angular rates, quaternion attitude, and bounded fin moments. | **MVP / partial:** no full inertia-tensor or flexible-body model. |
-| Atmosphere | Layered ISA1976 atmosphere through 86 km, with density, pressure, temperature, and sound speed. | **Implemented for the stated envelope:** no weather or high-fidelity atmospheric model. |
-| Aerodynamics | Air-relative drag, angle-of-attack lift, fin pitch lift, yaw-fin side force, stability, rate damping, and bounded moments. Optional data-driven cd(M, α)/cl(M, α) coefficient tables (`aero_tables`) are bilinearly interpolated and clamped to the grid bounds; when present they are authoritative for cd/cl, with a constant-coefficient fallback. | **MVP / partial:** data-driven cd/cl coefficient tables (interpolated, clamped) with a constant-coefficient fallback; moments and side-force remain the linear engineering model; tables are not yet CFD-validated. |
-| Propulsion | Per-entity thrust curves, vacuum/sea-level Isp interpolation, mass flow, dry-mass limiting, axial body +X thrust, and ordered multi-stage staging (leftover-propellant dump at separation so mass lands exactly on the new floor, dry-mass drop, post-dump inertia rescale, `dumpedMassKg` on `StageSeparation`). The motor law `T = ṁ·Isp·g0` is enforced at every instant: the fuel-depletion guard scales thrust with the capped mass flow, so thrust self-terminates at fuel exhaustion (no free-thrust tail). | **MVP / partial:** per-stage `propellantMassKg` caps stage drawdown (later-stage propellant reserved via a stage mass floor); no thrust vectoring or fuel-tank/engine failure model. |
-| Actuators and control | World-to-body acceleration demand, bounded fin commands, first-order servo lag, rate limiting, pitch/yaw sign conventions, and per-entity configurable gains/clamp. | **MVP / partial:** fixed per-entity engineering gains; no gain scheduling, actuator failure, or advanced controller. |
-| Integration | Derivative callbacks with true stage re-evaluation for RK4/RK45; bounded adaptive substeps; interpolated impact crossing; kernel integrator selection exposed via `IntegratorType` at construction (CPU-side). | **MVP / partial:** no multirate solver or complete event-aware adaptive policy. |
-| Earth and frames | WGS84 conversion, normal and spherical gravity, ECEF/ENU/NED transforms, Coriolis, centrifugal, transport terms, standalone ECEF propagation, and opt-in kernel ECEF truth. | **MVP / partial:** no geoid, global terrain streaming, polar/dateline scenario policy, or complete earth-rate treatment across every subsystem. |
-| Sensors | Body-frame IMU specific force and rates with noise/bias; per-entity IMU lever-arm specific-force correction; opt-in ECEF earth-rate gyro modeling (inertial body rate); noisy GPS in the selected frame; per-entity IMU/GPS enablement and GPS rate. | **MVP / partial:** a disabled IMU freezes its held sample and stops bias drift (GPS-only aiding, not a full GPS-only positioning mode); the full timing/interpolation contract remains open. |
-| Profile database layer | Aero/motor/seek/sensor single-profile loaders (`loadProfile` returns false on any failure) resolved by `createVehicle`; a non-empty `aeroProfileId`/`motorProfileId`/`seekerProfileId`/`sensorProfileId` replaces the inline sub-config, and a failed load throws `std::runtime_error` naming the file. | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, and RCS/IR/emitter signatures are NOT profile-resolved; the loader layer resolves one profile per file with no caching or database index. |
-| Navigation | Perfect initial alignment, strapdown INS (rotation-vector attitude update + single-interval sculling compensation), and coupled 15-state error-state EKF with GPS position/velocity updates. | **MVP / partial:** earth-rate gyro applies to ECEF truth mode only (the flat-earth local truth gyro already resolves the non-rotating-frame body rate; correct local earth-rate compensation requires the rotating-frame ECEF navigation path); multi-rate timestamp interpolation remains open. |
-| Seekers | Monostatic RF, SARH (bistatic, static illuminator), PassiveRF (target EIRP), and IR (Beer-Lambert transmittance) seekers; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, friendly rejection, chaff/flare decoys, strongest-signal acquisition, and the public `SeekerConfig` surface. | **MVP / partial:** imaging IR, multi-target tracking, dynamic illuminator tracking, and band-resolved extinction are not implemented. |
-| Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, seeker-lock APN handoff, and per-entity navigation/waypoint gains. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
-| Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, timestamped ground-impact events, and deterministic failure/damage events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or probabilistic failure model. |
-| Warhead and fusing | Impact/proximity/timed fusing driven by `WarheadConfig`; detonation dispatches a `Detonation` event and applies a fragmentation/overpressure kill law (flat inside `lethalRadiusM` when `falloffRadiusM <= 0`; otherwise guaranteed kill inside `lethalRadiusM`, linear `(falloff−d)/(falloff−lethal)` decay across `(lethalRadiusM, falloffRadiusM]`, 0 beyond, with an RNG draw only when `0 < p < 1`); stage separation dispatches a `StageSeparation` event carrying `dumpedMassKg`. | **MVP / partial:** the falloff band is linear (no blast-pressure or debris-density model); `lethalRadiusM <= 0` warheads are inert; `falloffRadiusM < lethalRadiusM` is rejected at load and at `createVehicle`. |
-| Failure and damage | Deterministic per-entity flags (`failEntity`/`applyDamage`) driving thrust/mass-flow cutoff, fin freeze, sensor dropout, ballistic comms loss, and structural deactivation with per-type events. | **MVP / partial:** flags are deterministic and not probabilistic; partial health has no effect beyond deactivation; repair is not modeled. |
-| Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, and isolated batch runner with configurable versioned CSV/binary reporting and a binary reader. | **MVP / partial:** richer telemetry and streaming remain, and some optimizer paths remain primary-entity oriented. |
-| Backends and packaging | Deterministic CPU/static library, CMake packaging, and optional Vulkan target. | **MVP / partial:** Vulkan parity is not validated, ECEF GPU support is open, and CUDA is not implemented. |
+| Translational truth | World-frame force rotation ÷ mass + gravity/earth terms | **MVP:** cd/cl data-driven when present; moments/side-force linear, no CFD-backed model |
+| Rotational truth | Diagonal inertia, gyroscopic coupling, quaternion, bounded fins | **MVP:** no inertia-tensor or flexible-body model |
+| Atmosphere | Layered ISA1976 through 86 km | **Implemented for stated envelope:** no weather model |
+| Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl tables | **MVP:** tables authoritative for cd/cl with fallback; moments/side-force linear; not CFD-validated |
+| Propulsion | Thrust curves, Isp, mass flow, dry-mass limit; ordered staging + leftover dump | **MVP:** `propellantMassKg` caps drawdown; no thrust vectoring or tank/engine failure |
+| Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
+| Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
+| Earth and frames | WGS84, normal/spherical gravity, frames, Coriolis/centrifugal/transport, ECEF | **MVP:** no geoid, terrain streaming, polar/dateline, or complete earth-rate treatment |
+| Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |
+| Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
+| Navigation | Alignment, strapdown INS, 15-state EKF | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation |
+| Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
+| Guidance | Stateless PN/APN, waypoint, seeker handoff, per-entity gains | **MVP:** no trajectory manager, pursuit, LQR/MPC, blended handoff |
+| Events and terrain | Terrain/wind callbacks, real impact deactivation, failure/damage events | **MVP:** no DEM/DTED database, streaming, datum/geoid, probabilistic failure |
+| Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
+| Failure and damage | Deterministic flags → thrust cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic only; partial health no effect; no repair |
+| Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, batch; versioned CSV/binary + reader | **MVP:** richer telemetry/streaming remain; some optimizer paths primary-entity oriented |
+| Backends and packaging | Deterministic CPU/static library, CMake packaging, optional Vulkan | **MVP:** Vulkan parity not validated, no GPU ECEF/CUDA |
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **35/35 tests passed** at the
-  checkpoint recorded above.
-- The control regression reports a **0.76 m minimum miss** for its validated
-  intercept scenario. This demonstrates the MVP control path; it is not a
-  general accuracy guarantee.
-- The designer→engine pipeline regression reports a **45.4 m minimum miss**
-  at t≈11.5 s with a proximity-warhead kill (`designer_pipeline_test`), now
-  flying on the data-driven aero coefficient tables. This
-  demonstrates the end-to-end designer→engine data contract (design manifest →
-  `designRef` → profile-id wiring → kernel → intercept); it is a
-  deterministically tuned data set and not a guidance-performance claim.
-- The test inventory covers study wrappers; vehicle configuration; rigid-body
-  truth; intercept control; integration; seeker (FOV/hysteresis/LOS-rate,
-  plus rich seekers: SARH, passive RF, IR transmittance, decoys, strongest
-  signal, config round-trip); navigation; environment;
-  earth/frame/transport/gravity models; standalone ECEF propagation; kernel
-  ECEF truth; guidance; scenario loading; kernel slot-reuse and timestep
-  validation; deterministic failure/damage semantics; IMU lever-arm
-  compensation; earth-rate gyro modeling/compensation; strapdown
-  coning/sculling corrections; subsystem config serialization and
-  scenario/design interchange (including the four profile-id keys and a
-  legacy-compat case); per-entity sensor enablement and
-  guidance/autopilot gain wiring; multi-stage staging plus warhead
-   fusing; the profile-id database layer; the designer→engine pipeline
-   end-to-end (design manifests, flat RCS table, rewritten scenario, guided
-   intercept); the first-principles rocket-launch verification
-   (`rocket_mvp_test`) cross-checking burnout against the ideal rocket equation
-   and initial acceleration against `T/m − g`; the aero coefficient-table
-   interpolator (`coefficient_table_test`); and the table-vs-constant
-   rocket-launch comparison (`rocket_mvp_tables_test`) showing the byte-identical
-   constant fallback and the higher table-run apogee/burnout-V/max-Q.
+- Release CTest suite green: **35/35 tests passed** at the checkpoint above.
+- Control regression: **0.76 m minimum miss** (MVP control path; not a general
+  accuracy guarantee).
+- Designer→engine pipeline: **45.4 m minimum miss** at t≈11.5 s with a
+  proximity-warhead kill (`designer_pipeline_test`), flying on data-driven aero
+  tables; seed `0xDEADBEEF`, a data-contract demonstration, not a
+  guidance-performance claim.
+- `rocket_mvp_test` cross-checks initial acceleration vs `T/m − g` and burnout vs
+  `Δv = Isp·g0·ln(m0/mdry)`; `rocket_mvp_tables_test` shows the byte-identical
+  constant fallback and higher table-run apogee/burnout-V/max-Q.
 
-The results establish regression coverage for the implemented paths. They do
-not establish production-grade aerodynamics, global geophysics, sensor
-calibration, or GPU equivalence.
+These results establish regression coverage for implemented paths, not
+production-grade aerodynamics, global geophysics, sensor calibration, or GPU
+equivalence.
 
 ## 5. Prioritized open work
 
-These are the remaining fidelity and integration gaps, ordered by their value
-to reliable downstream use:
+Prioritized gaps (details in IMPLEMENTATION §9.2):
 
-1. **Study output consumers:** the binary reader is implemented; richer
-   telemetry schemas, streaming record sinks, and configurable output selection
-   beyond the current wrapper records remain.
-2. **Global terrain:** add DEM/DTED ingestion, tile indexing and streaming,
-   interpolation, datum/geoid policy, dateline/polar handling, and frame-aware
-   collision queries.
-3. **Failure and damage semantics:** deterministic motor, actuator, sensor,
-   structural, and communications failures with state transitions and events
-   are implemented (MVP, `failure_test`). Remaining boundary: probabilistic
-   degradation, partial health effects beyond deactivation, and repair.
-4. **GNC fidelity:** sensor lever-arm compensation, coning/sculling, and
-   earth-rate gyro compensation are implemented (MVP). Lever arms: per-entity
-   `VehicleConfig::imuLeverArm*` rigid-body specific-force correction
-   (`lever_arm_test`). Coning/sculling: rotation-vector attitude update and
-   single-interval sculling compensation (`coning_sculling_test`). Earth-rate
-   gyro: `includeEarthRateGyro` in ECEF truth mode only (`earth_rate_gyro_test`);
-   the flat-earth local truth gyro already resolves the non-rotating-frame body
-   rate, and correct local earth-rate compensation requires the rotating-frame
-   ECEF navigation path. Richer seekers are implemented (MVP): SARH (bistatic,
-   static illuminator), passive RF (EIRP), Beer-Lambert IR transmittance,
-   chaff/flare decoys, strongest-signal acquisition, and the public
-   `SeekerConfig` surface (`seeker_rich_test`). Per-entity sensor enablement is
-   implemented (MVP, `config_wiring_test`): a disabled IMU freezes its held
-   sample and stops bias drift while GPS continues to aid the EKF (this is not
-   a full GPS-only positioning mode); a disabled GPS stops updates. Remaining:
-   imaging IR, multi-target tracking, dynamic illuminator tracking, band-resolved
-   extinction, and multi-rate timestamp interpolation.
-5. **Staging and warhead fidelity:** multi-stage staging with the leftover-
-    propellant dump (mass lands exactly on the new floor, post-dump inertia
-    rescale, `dumpedMassKg` on `StageSeparation`) and impact/proximity/timed
-    fusing with the optional fragmentation/overpressure falloff band
-    (`staging_warhead_test`, `warhead_falloff_test`). The propulsion model now
-    enforces `T = ṁ·Isp·g0` at fuel exhaustion (the fuel-depletion guard scales
-    thrust with the capped mass flow, so there is no free-thrust tail), verified
-    by `rocket_mvp_test`. Remaining: arbitrary stage-count validation and a
-    physics-based (non-linear) blast/debris model.
-6. **Guidance and aero depth:** validated coefficient tables are done — aero is
-   now data-driven (cd(M, α)/cl(M, α), bilinearly interpolated and clamped to
-   grid bounds, with a constant-coefficient fallback; `coefficient_table_test`,
-   `rocket_mvp_tables_test`), awaiting a future strikeCEM to produce
-   CFD-validated tables. Remaining: trajectory management, pursuit, LQR/MPC, and
-   blended guidance handoff.
-7. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,
-   and implement CUDA only if a project requirement is established.
-8. **Application handoffs:** the designer→engine data contract is now exercised
-    end-to-end (`designer_pipeline_test`): design manifests under `data/profiles`
-    are consumed via `design_ref` into `VehicleConfig`, profile ids resolve the
-    subsystem parts, and the scenario runs in the engine's local ENU frame. What
-    remains open is the explicit versioned StrikeSim, StrikeDesigner, and
-    StrikeCEM integration and provenance contracts (identity/revision/geometry
-    provenance metadata carried across the handoff). Future programs: aero
-    (cd/cl) coefficient tables are produced by a future **StrikeCFD** program
-    (Barrowman first-cut → CFD validation) in a separate project/folder;
-    **StrikeCEM** separately produces the radar-cross-section signature tables;
-    and the eventual goal is to build **StrikeDesigner** inside
-    **StrikeSim** on the stabilized engine.
+1. **Study output:** binary reader done; richer telemetry, streaming sinks, output
+   selection remain.
+2. **Global terrain:** DEM/DTED ingestion, streaming, datum/geoid, dateline/polar,
+   frame-aware collision queries.
+3. **Failure/damage:** deterministic flags done (MVP, `failure_test`);
+   probabilistic degradation, partial health, repair remain.
+4. **GNC fidelity:** lever arms, coning/sculling, earth-rate gyro done (MVP,
+   `lever_arm_test`, `coning_sculling_test`, `earth_rate_gyro_test`); imaging IR,
+   multi-target, dynamic illuminator, band-resolved extinction, multi-rate
+   timestamp interpolation remain.
+5. **Staging/warhead:** leftover dump + falloff band done (`staging_warhead_test`,
+   `warhead_falloff_test`), `T = ṁ·Isp·g0` enforced at exhaustion
+   (`rocket_mvp_test`); arbitrary stage-count validation and a physics-based
+   blast/debris model remain.
+6. **Guidance/aero:** data-driven cd/cl done (`coefficient_table_test`,
+   `rocket_mvp_tables_test`), awaiting StrikeCFD for CFD-validated tables;
+   trajectory management, pursuit, LQR/MPC, blended handoff remain.
+7. **Backend parity:** validate Vulkan vs CPU, GPU ECEF, CUDA if required.
+8. **Application handoffs:** designer→engine contract exercised end-to-end
+   (`designer_pipeline_test`); explicit versioned StrikeSim/StrikeDesigner/
+   StrikeCEM integration + provenance contracts remain.
 
-The profile-id database layer resolves aero/motor/seek/sensor lookups, but it
-does not change the status of the other deferred work, which stays deferred:
-power/comms/ECM models, StrikeCEM/StrikeCFD coupling, a full GPS-only positioning
-mode (current GPS-only aiding is not one), guidance depth (trajectory/pursuit/
-LQR/MPC), Vulkan/CPU parity, and full global terrain. The fragmentation/
-overpressure falloff curve and leftover-propellant dumping in spent stages are
-now implemented and are no longer deferred. The revived
-`data/aero`, `data/motors`, `data/seekers`, `data/sensors` profile artifacts and
-the rewritten flat snake_case `data/schemas/seeker_schema.json` are part of this
-layer; the designer-facing `data/profiles` manifests and `data/scenarios`
-scenario are now engine-consumable (the missile/drone manifests and the
-`intercept_test_01` scenario under the ScenarioConfig schema), with `data/rcs`
-added for the flat target-drone RCS table.
+Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling, a full
+GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
+(trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and full global terrain. The
+falloff band and leftover-propellant dump are implemented and no longer deferred.
+Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
+`data/rcs`, `data/profiles`, `data/scenarios/intercept_test_01`,
+`data/schemas/seeker_schema.json`) are part of this layer.
 
 ## 6. Historical baseline
 
-The pre-restart audit from 2026-08-25 recorded a 5/7 workstream result and
-identified failures in control signs, aerodynamic authority, integration,
-events, seeker fidelity, and navigation. Those measurements described the
-older implementation and are superseded by the W1–W28 verification above.
-
-The historical measurements and commits remain available in repository
-history. They are not repeated here because retaining their stale tables in
-the current audit made the document contradictory and obscured the current
-status.
+The 2026-08-25 pre-restart audit recorded 5/7 workstreams with failures in control
+signs, aero authority, integration, events, seeker fidelity, and navigation; it is
+superseded by W1–W28 above. Historical measurements/commits remain in repository
+history and are not repeated here.
 
 ## 7. Conclusion
 
-StrikeEngine is a validated deterministic CPU simulation MVP with per-entity
-vehicle physics, GNC, terrain/wind callbacks, local-earth models, and opt-in
-kernel ECEF truth. The current implementation is suitable for continued
-engineering development and regression testing. It should not yet be treated
-as a production-grade global geophysical, sensor, aerodynamic, or GPU-equivalent
-simulation until the backlog above is addressed.
+StrikeEngine is a validated deterministic CPU simulation MVP (per-entity physics,
+GNC, terrain/wind callbacks, local-earth models, opt-in kernel ECEF truth). It is
+suitable for continued engineering development and regression testing, but not yet
+production-grade global geophysics, sensor, aero, or GPU-equivalent simulation
+until the backlog is addressed.

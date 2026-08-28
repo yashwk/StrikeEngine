@@ -5,36 +5,33 @@
 **Verified:** 2026-08-26
 **Runtime checkpoint:** `82bd30a`
 
-This document maps the normative behavior in [`SPEC.md`](SPEC.md) to source
-files, build targets, execution order, validation, packaging, and remaining
-work. [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) supplies measured evidence;
-it is not an alternative authority.
+[`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
+measured evidence. This record maps behavior to files, build, execution order,
+validation, and remaining work.
 
 ## 1. Verified state
 
-- Project version: `0.1.0`; language: C++23; minimum CMake: 3.23.
-- Default build: static `strikeengine` library with CPU backend.
-- Optional companion: `strikeengine_vulkan`, enabled with
-  `STRIKEENGINE_WITH_VULKAN=ON`.
+- Version `0.1.0`; C++23; CMake ≥ 3.23.
+- Default build: static `strikeengine` library, CPU backend.
+- Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
 - Release validation: **35/35 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
-- The requested `.idea` project metadata change is included in this next
-  documentation checkpoint; it is not runtime behavior.
+- `.idea` project metadata change is in this documentation checkpoint (not runtime
+  behavior).
 
 ## 2. Repository map
 
 | Area | Responsibility |
 | --- | --- |
-| `include/strikeengine/kernel` | Public state blocks, kernel, systems, backends, integrators, subsystem config |
+| `include/strikeengine/kernel` | State blocks, kernel, systems, backends, integrators, config |
 | `include/strikeengine/models` | Stateless atmosphere, aero, propulsion, earth, guidance, signatures |
 | `include/strikeengine/simulation` | Single run, sweep, Monte Carlo, optimizer, batch wrappers |
-| `src/strikeengine` | Runtime, config serialization, and signature database implementations |
-| `tests/validation` | End-to-end and subsystem regression programs |
-| `data/` | Example profiles, scenarios, tables, and schemas |
-| `docs/` | Authoritative contracts and measured evidence records |
+| `src/strikeengine` | Runtime, config serialization, signature DB |
+| `tests/validation` | Regression programs |
+| `data/` | Profiles, scenarios, tables, schemas |
+| `docs/` | Contracts and evidence records |
 
-The public include prefix is `<strikeengine/...>`. Public headers do not expose
-GLM or nlohmann/json as required consumer dependencies.
+Public include prefix `<strikeengine/...>`; no GLM/nlohmann in public headers.
 
 ## 3. Build and package workflow
 
@@ -44,251 +41,166 @@ cmake --build build-linux --config Release -j2
 ctest --test-dir build-linux -C Release --output-on-failure
 ```
 
-GLM `1.0.2` and nlohmann/json `v3.12.0` are resolved with FetchContent. An
-offline environment must provide a configured build or those dependencies.
-
-The optional Vulkan build is:
+GLM `1.0.2` and nlohmann/json `v3.12.0` via FetchContent; offline builds must
+provide them.
 
 ```sh
-cmake -S . -B build-vulkan -DCMAKE_BUILD_TYPE=Release \
-  -DSTRIKEENGINE_WITH_VULKAN=ON
+cmake -S . -B build-vulkan -DCMAKE_BUILD_TYPE=Release -DSTRIKEENGINE_WITH_VULKAN=ON
 cmake --build build-vulkan --config Release
 ```
 
-Vulkan requires a Vulkan SDK and `glslc`. Requesting `BackendType::Vulkan`
-without linking `strikeengine_vulkan` throws a clear runtime error. Vulkan is
-not considered CPU-fidelity equivalent until separately validated.
+Vulkan needs a SDK + `glslc`; requesting `BackendType::Vulkan` without linking
+`strikeengine_vulkan` throws. Vulkan is not CPU-fidelity-equivalent until
+validated.
 
-The install exports `StrikeEngine::strikeengine` and, when enabled,
-`StrikeEngine::strikeengine_vulkan`, plus all public headers and a CMake package
-config.
+Install exports `StrikeEngine::strikeengine` (+ `strikeengine_vulkan` when enabled),
+all public headers, and a CMake package config.
 
 ## 4. Runtime architecture
 
-`PhysicsBlock` is the truth SoA. It stores per-entity translation, velocity,
-acceleration cache, quaternion, body rates, inertia, mass, aero coefficients,
-propulsion ID, ignition time, achieved fins, and active state. The companion
-blocks are:
+`PhysicsBlock` is the truth SoA: per-entity translation, velocity, acceleration
+cache, quaternion, body rates, inertia, mass, aero coefficients, propulsion ID,
+ignition time, achieved fins, active state.
 
 | Block | State |
 | --- | --- |
 | `ControlBlock` | commanded thrust and fin channels |
 | `GuidanceBlock` | mode, target state, demand limit, acceleration command |
-| `NavigationBlock` | estimate, biases, alignment, full row-major 15×15 covariance |
+| `NavigationBlock` | estimate, biases, alignment, row-major 15×15 covariance |
 | `SensorBlock` | IMU/GPS measurements and noise settings |
-| `SeekerBlock` | RF/IR configuration, lock, measurements, latency history |
+| `SeekerBlock` | RF/IR config, lock, measurements, latency history |
 | `EntityStatusBlock` | type, allegiance, health, profile IDs, alive state |
 
-Entity slots are reused through the kernel free list. All blocks share entity
-indices; inactive entities are skipped.
+Entity slots reused via kernel free list; blocks share entity indices; inactive
+entities skipped.
 
-`SimulationKernel::step(dt)` has this fixed order:
+`SimulationKernel::step(dt)` fixed order:
 
-1. Save previous positions and advance kernel time.
-2. Apply queued commands.
-3. Advance truth physics through the selected backend/integrator.
-4. Run the staging pass (`processStaging`, multi-stage separation).
-5. Generate IMU/GPS measurements.
-6. Propagate and fuse navigation.
-7. Update seekers, lock state, filtered LOS rates, and delayed outputs.
-8. Compute guidance demands.
-9. Convert demands to actuator commands.
-10. Evaluate terrain/ground events.
-11. Run the warhead pass (`processWarheads`, after impacts are known).
-12. Dispatch the queued event queue.
+1. Save previous positions; advance time. 2. Apply queued commands.
+3. Advance truth physics. 4. Staging pass (`processStaging`).
+5. Generate IMU/GPS. 6. Propagate + fuse navigation. 7. Update seekers/lock/LOS/
+latency. 8. Compute guidance. 9. Convert to actuator commands.
+10. Evaluate terrain/ground events. 11. Warhead pass (`processWarheads`).
+12. Dispatch event queue.
 
-Truth is advanced before sensing; guidance and autopilot output affects the next
-physics step. Staging runs immediately after truth so a burnout can drop mass
-and rescale inertia before sensing. Warheads run after impact evaluation so an
-impact fuse observes the deactivation state. This ordering is part of the
-integration contract.
-
-`SimulationKernel` accepts an `IntegratorType` (default RK4) which is applied
-CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
-`stageIndex`/`stageCount` staging state.
+Truth before sensing; guidance/autopilot affect the next physics step. Staging runs
+right after truth so a burnout drops mass/rescales inertia before sensing; warheads
+run after impact so an impact fuse observes deactivation — part of the integration
+contract. `IntegratorType` (default RK4) applies CPU-side only; `PhysicsBlock`
+carries per-entity `stageIndex`/`stageCount`.
 
 ## 5. Module ownership
 
 ### Core and configuration
 
-- `SimulationKernel.hpp/.cpp`: lifecycle, entity management, command queue,
-  orchestration, environment, public block access, deterministic
-  failure/damage injection (`failEntity`, `applyDamage`), and the
-  `createVehicle(config)` wiring of subsystem config into the per-entity SoA
-  blocks, including the profile-id resolution step (a non-empty profile id
-  replaces the inline sub-config; a failed load throws `std::runtime_error`
-  naming the file), plus the `processStaging` pass (stage separation with the
-  leftover-propellant dump: jettisons the spent stage's unburned propellant so
-  mass lands exactly on the post-dump floor, drops the dry mass, rescales
-  inertia by the post-dump mass ratio, and reports `dumpedMassKg` on the
-  `StageSeparation` event) and the `processWarheads` pass (impact/proximity/
-  timed fusing with an optional fragmentation/overpressure falloff band:
-  guaranteed kill inside `lethalRadiusM`, linear `(falloff−d)/(falloff−lethal)`
-  decay in the band, 0 beyond, with an RNG draw only when `0 < p < 1` so
-  flat-law warheads never consume the kernel RNG stream).
-- `EnvironmentConfig.hpp`: terrain/wind callbacks and earth options including
-  `useEcefTruth`, gravity selection, Coriolis, centrifugal, and transport.
-- `ScenarioConfig.hpp`: scenario metadata, environment, entity/vehicle setup,
-  target state, kernel loading, `save`/`load`, and the per-entity `designRef`
-  override.
-- `VehicleConfig.hpp`: the flattened per-vehicle subsystem view (`type`,
-  `initialMass`, `massDry`, `Ixx/Iyy/Izz`, `aero`, `propulsion`, `seeker`,
-  `sensor`, `guidanceAutopilot`, `warhead`, the subsystem profile IDs
-  `aeroProfileId`/`motorProfileId`/`seekerProfileId`/`sensorProfileId`,
-  signature profile IDs, EIRP).
-- `config/AeroConfig.hpp`, `config/PropulsionConfig.hpp` (with `StageConfig`),
-  `config/SensorConfig.hpp`, `config/GuidanceAutopilotConfig.hpp`,
-  `config/WarheadConfig.hpp`, and `config/SeekerConfig.hpp`: per-subsystem
-  configuration structs. `WarheadConfig` carries the optional `falloffRadiusM`
-  (outer edge of the fragmentation/overpressure falloff band; 0.0 or
-  `<= lethalRadiusM` disables the band and restores the flat lethal-radius law).
-- `config/ConfigSerialization.hpp/.cpp`: snake_case JSON (de)serialization of
-  all config structs, enums as snake_case strings, `ScenarioConfig::save/load`,
-  and `serializeDesign`/`loadDesignPhysics`. `AeroConfig` and `SensorConfig`
-  serialize via manual snake_case `to_json`/`from_json` (not
-  `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE`) so inline configs and profile files
-  share one schema. `AeroConfig` carries the optional `aero_tables` block
-  (emitted only when non-empty, parsed only when present so pre-feature files
-  still load; a parsed `AeroTables` that fails `isValid` throws
-  `std::runtime_error` naming the reason). `WarheadConfig` serializes
-  `falloff_radius_m` (emitted always; parsed with a 0.0 default so pre-feature
-  files load the flat law; a value above zero but below `lethal_radius_m`
-  throws `std::runtime_error`). Uses nlohmann/json privately behind
-  a public string API;
-  nlohmann is never exposed in public headers.
-- `profiles/AeroProfileDatabase.hpp/.cpp`, `profiles/MotorProfileDatabase.hpp/
-  .cpp`, `profiles/SeekerProfileDatabase.hpp/.cpp`, and
-  `profiles/SensorProfileDatabase.hpp/.cpp`: single-profile loaders mirroring
-  the RCSDatabase pattern. Each `loadProfile(path)` returns `false` on ANY load
-  failure (unopenable file, malformed JSON, missing required key, wrong-typed
-  field); the getter (`aero()`, `propulsion()`, `seeker()`, `sensor()`)
-  returns the parsed config. The aero loader additionally parses the optional
-  `aero_tables` cd(M, α)/cl(M, α) grid and returns `false` when the grid fails
-  `AeroTables::isValid`. `SimulationKernel::createVehicle` resolves a
-  non-empty `aeroProfileId`/`motorProfileId`/`seekerProfileId`/`sensorProfileId`
-  by loading the referenced file; the parsed config REPLACES the inline
-  sub-config, and a failed load throws `std::runtime_error` naming the file.
+- `SimulationKernel.hpp/.cpp`: lifecycle, entities, command queue, orchestration,
+  environment, block access, `failEntity`/`applyDamage`, `createVehicle` (profile-
+  id resolution: non-empty id replaces inline sub-config; failed load throws
+  `std::runtime_error` naming the file), `processStaging` (leftover dump, dry-mass
+  drop, post-dump inertia rescale, `dumpedMassKg`), `processWarheads` (impact/
+  proximity/timed fusing, falloff band, RNG draw only when `0 < p < 1`).
+- `EnvironmentConfig.hpp`: terrain/wind callbacks; earth options (`useEcefTruth`,
+  gravity, Coriolis, centrifugal, transport).
+- `ScenarioConfig.hpp`: scenario metadata, environment, entities, target, kernel
+  loading, `save`/`load`, per-entity `designRef` override.
+- `VehicleConfig.hpp`: flattened view (`type` = `EntityType`, `initialMass`,
+  `massDry`, `Ixx/Iyy/Izz`, `aero`, `propulsion`, `seeker`, `sensor`,
+  `guidanceAutopilot`, `warhead`, profile IDs, signature IDs, EIRP).
+- `config/*.hpp`: per-subsystem structs; `WarheadConfig` carries optional
+  `falloffRadiusM` (0.0 or `<= lethalRadiusM` = flat law).
+- `config/ConfigSerialization.cpp`: snake_case JSON, enums as strings, `save`/`load`,
+  `serializeDesign`/`loadDesignPhysics`. `AeroConfig`/`SensorConfig` use manual
+  snake_case `to_json`/`from_json` so inline + profile files share one schema.
+  `AeroConfig` has optional `aero_tables` (parsed `AeroTables` failing `isValid`
+  throws). `WarheadConfig` emits `falloff_radius_m` always, parses 0.0 default,
+  throws on `0 < falloff < lethal`. nlohmann private behind a string API.
+- `profiles/{Aero,Motor,Seeker,Sensor}ProfileDatabase`: single-profile loaders;
+  `loadProfile(path)` → `false` on ANY failure, getter returns parsed config; aero
+  loader parses optional `aero_tables` (false if `!isValid`); `createVehicle`
+  resolves non-empty ids, failed load throws.
 
 ### Truth and earth models
 
 - `ISA1976.hpp`: layered atmosphere through 86 km.
-- `AeroModel.hpp` / `CoefficientTable.hpp`: drag, bounded lift, fin side force,
-  stability, damping, and bounded moments. `AeroParams::tables` optionally
-  carries a data-driven cd(M, α)/cl(M, α) coefficient grid (`AeroTables` in
-  `CoefficientTable.hpp`) that is bilinearly interpolated
-  (`interpolateCoefficient`, same clamping pattern as `RCSDatabase::getRCS`
-  without its first-breakpoint off-by-one) and clamped to the grid bounds.
-  When a structurally valid table is present it is authoritative for cd/cl;
-  otherwise the flat scalar coefficients (`cd`, `clAlpha`, `clFin`, `clMax`)
-  are used as a byte-identical fallback. The table path is gated defensively in
-  the model so a degenerate/invalid grid can never reach the interpolator and
-  silently zero drag/lift. Moment and side-force terms stay on the linear
-  engineering model.
-- `PropulsionModel.hpp` / `ThrustCurve.hpp`: thrust interpolation, Isp, mass flow,
-  and dry-mass limiting.
-- `CPUBackend.cpp`: stage-re-evaluated force model, body Euler dynamics,
-  quaternion propagation, and servo dynamics. Reads the physical truth mirror
-  of the motor/actuator failure flags (`PhysicsBlock::motorFailed` /
-  `actuatorFailed`). Each non-empty-thrust-curve propulsion stage is registered
-  in the pool by `SimulationKernel::createVehicle`. The fuel-depletion guard
-  caps mass flow to the propellant remaining in the depletion window and scales
-  thrust with the capped flow, so `T = ṁ·Isp·g0` holds at every instant and
-  thrust self-terminates at fuel exhaustion (no free-thrust tail of full thrust
-  on the final grams of fuel).
-- `EarthModel.hpp`: WGS84 conversion, normal gravity, Coriolis, curvature, and
-  transport APIs.
-- `EarthFrames.hpp`: ECEF/ENU/NED transforms, local gravity, and centrifugal
-  acceleration.
-- `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4 propagator.
-- `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid
-  impact clamping, and the failure/damage event vocabulary (`MotorFailure`,
-  `ActuatorFailure`, `SensorFailure`, `StructuralFailure`,
-  `CommunicationFailure`). `SimulationEvent` carries a `dumpedMassKg` payload
-  on `StageSeparation` (unburned propellant jettisoned with the spent stage;
-  0.0 on exhaustion burnouts).
+- `AeroModel.hpp`/`CoefficientTable.hpp`: drag, bounded lift, fin side force,
+  stability, damping, bounded moments. `AeroParams::tables` = optional cd(M,α)/
+  cl(M,α) grid (`AeroTables`), bilinear `interpolateCoefficient`, clamped; valid
+  table authoritative for cd/cl, else flat scalars byte-identical fallback; gated
+  so a degenerate grid never zeroes drag/lift; moments/side-force linear.
+- `PropulsionModel.hpp`/`ThrustCurve.hpp`: thrust interpolation, Isp, mass flow,
+  dry-mass limiting.
+- `CPUBackend.cpp`: stage-re-evaluated forces, body Euler dynamics, quaternion
+  propagation, servo dynamics; reads `motorFailed`/`actuatorFailed`. Fuel-depletion
+  guard caps mass flow and scales thrust, so `T = ṁ·Isp·g0` holds at every instant
+  (no free-thrust tail).
+- `EarthModel.hpp`: WGS84, normal gravity, Coriolis, curvature, transport.
+- `EarthFrames.hpp`: ECEF/ENU/NED transforms, local gravity, centrifugal.
+- `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4.
+- `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid impact
+  clamp, failure event vocabulary (`MotorFailure`/`ActuatorFailure`/
+  `SensorFailure`/`StructuralFailure`/`CommunicationFailure`); `dumpedMassKg` on
+  `StageSeparation` (0.0 on exhaustion burnouts).
 
 ### GNC and studies
 
-- `SensorSystem.cpp`: noisy frame-aware IMU/GPS; per-entity GPS scheduling
-  (`gpsEnabled`, `gpsUpdateRateHz`); IMU disablement freezes the held accel/gyro
-  sample and stops the streaming-bias drift while GPS continues; sensor-failure
-  flag stops measurement updates. Exposes `nextUniform01()` — a uniform draw in
-  [0, 1) from the shared kernel RNG stream, re-seeded by `setSeed` — which
-  `processWarheads` uses for in-band kill decisions.
-- `NavigationSystem.cpp`: alignment, strapdown INS, and coupled 15-state EKF.
-- `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, and latency.
-- `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff; reads
-  the per-entity `navigationConstant`/`waypointGain` from `GuidanceBlock`;
-  communication-failure flag zeroes commanded acceleration (ballistic).
-- `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin
-  control; reads the per-entity gains (`kAccelP/kRateP/kAlphaP/kRollP/kRollD`)
-  and `maxDeflectionRad` from `ControlBlock`.
-- `EntityStatusBlock.hpp`: per-entity health, alive state, and the deterministic
-  failure flags (motor, actuator, sensor, communications); structural failure
-  is `isAlive=false` + `health=0`.
-- `SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`, `BatchRunner`: study
-  wrappers; frame normalization is implemented in `Reporting.hpp` and
-  versioned CSV/binary output in `StudyOutput.hpp/.cpp`, including the binary
-  reader `StudyOutputReader::read`. `BatchRunner`
-  aggregate metrics `maxAltitudeM`/`maxSpeedMps` track the trajectory maximum,
-  not just the final state.
+- `SensorSystem.cpp`: frame-aware IMU/GPS; per-entity GPS scheduling; IMU disable
+  freezes sample + stops bias drift while GPS continues; sensor-failure stops
+  updates. Exposes `nextUniform01()` (uniform [0,1) from shared kernel RNG) used by
+  `processWarheads`.
+- `NavigationSystem.cpp`: alignment, strapdown INS, coupled 15-state EKF.
+- `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, latency.
+- `GuidanceSystem.cpp`: PN, waypoint, seeker APN handoff; reads
+  `navigationConstant`/`waypointGain`; comms-failure zeroes accel.
+- `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
+  + `maxDeflectionRad`.
+- `EntityStatusBlock.hpp`: health, alive state, deterministic failure flags;
+  structural failure = `isAlive=false` + `health=0`.
+- Study wrappers (`SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`,
+  `BatchRunner`); frame normalization in `Reporting.hpp`, versioned CSV/binary in
+  `StudyOutput.hpp/.cpp` incl. `StudyOutputReader::read`; `BatchRunner`
+  `maxAltitudeM`/`maxSpeedMps` track trajectory maxima.
 
 ### Designer → engine pipeline
 
-- `data/profiles/sa_missile_mk1.json` and `data/profiles/target_drone.json`
-  are engine design manifests (`{ name, description, physics: <VehicleConfig
-  snake_case> }`), consumed via `designRef`. The missile manifest wires the
-  four subsystem profile ids (`aeroProfileId`/`motorProfileId`/
-  `seekerProfileId`/`sensorProfileId`) to `data/aero/sa_missile_mk1_aero.json`,
-  `data/motors/sa_missile_mk1_motor.json` (two-stage booster + sustainer),
-  `data/seekers/aesa_tracker_v1.json` (RF, FOV 6° / gimbal 65°), and
-  `data/sensors/sa_missile_mk1_imu.json`. The profile ids are authoritative
-  over the inline placeholder blocks, which must remain present because
-  `VehicleConfig::from_json` requires all sub-object keys. The drone manifest
-  has no propulsion/seeker of consequence and wires `rcsProfileId` to the new
-  flat RCS table.
-- `data/rcs/target_drone_rcs.json`: flat 1.5 m² (1.7609 dBsm) RCS table in
-  RCSDatabase format (two breakpoints each axis, uniform `rcs_table_dbsm`).
-- `data/scenarios/intercept_test_01.json`: rewritten in the engine ScenarioConfig
-  schema (`environment`, `primary_entity_index`, two entities with
-  `design_ref` + `init_state` + `initial_guidance_mode` /
-  `initial_target_*` / `initial_max_accel`).   The designer's original ECEF-style
-  Earth-radius coordinates sit below the WGS84 ellipsoid (unflyable); the
-  scenario runs in the engine's local ENU frame, with the engagement re-baselined
-  to 15 km downrange / 8 km up (the table-aero missile flies faster and
-  lower-drag, so the original 20 km / 10 km geometry no longer fits the seeker's
-  ~3 km acquisition range). The scenario is a deterministically
-  tuned data set (sensor seed `0xDEADBEEF`); the missile uses proximity fusing
-  (50 m trigger / 50 m lethal radius / 90 m falloff) and the drone a low-drag
-  airframe (S=1.0, cd=0.02, clAlpha=0.5).
-- `config/SeekerTypeStrings.hpp`: shared inline `seekerTypeToString`/
-  `seekerTypeFromString` snake_case maps for `SeekerType`, deduplicated so
-  `ConfigSerialization.cpp` and `SeekerProfileDatabase.cpp` use one ODR-safe
-  definition. No `to_json`/`from_json` for `SeekerType` is declared anywhere;
-  callers map the string explicitly.
-- Cleanup: the stale 0-byte `data/profiles/aesa_tracker_v1.json` was deleted;
-  the seeker part now lives at `data/seekers/aesa_tracker_v1.json`.
+- `data/profiles/sa_missile_mk1.json`, `target_drone.json`: engine design manifests
+  (`{ name, description, physics: <VehicleConfig> }`), consumed via `design_ref`.
+  Missile wires the four profile ids to `data/aero/sa_missile_mk1_aero.json`,
+  `data/motors/sa_missile_mk1_motor.json` (two-stage),
+  `data/seekers/aesa_tracker_v1.json` (RF, FOV 6°/gimbal 65°), `data/sensors/
+  sa_missile_mk1_imu.json`; profile ids authoritative over inline placeholders
+  (which must exist: `from_json` requires all sub-object keys). Drone wires
+  `rcsProfileId` to the flat RCS table.
+- `data/rcs/target_drone_rcs.json`: flat 1.5 m² (1.7609 dBsm) RCS table (two
+  breakpoints per axis, uniform `rcs_table_dbsm`).
+- `data/scenarios/intercept_test_01.json`: ScenarioConfig schema (`environment`,
+  `primary_entity_index`, entities with `design_ref` + `init_state` +
+  `initial_guidance_mode` + `initial_target_*` + `initial_max_accel`); local ENU,
+  15 km/8 km (SPEC §5.5); seed `0xDEADBEEF`; missile proximity fusing (50/50/90 m),
+  drone low-drag (S=1.0, cd=0.02, clAlpha=0.5).
+- `config/SeekerTypeStrings.hpp`: shared snake_case seeker-type maps, one ODR-safe
+  definition.
+- Cleanup: stale 0-byte `data/profiles/aesa_tracker_v1.json` deleted; seeker part
+  moved to `data/seekers/aesa_tracker_v1.json`.
 
 ## 6. ECEF kernel integration
 
-Set `EnvironmentConfig::earth.useEcefTruth = true` before creating entities.
-Initial positions and velocities are then absolute ECEF values, normally made
-with `Models::geodeticToEcef`.
+Set `EnvironmentConfig::earth.useEcefTruth = true` before creating entities;
+initial states are absolute ECEF, normally via `Models::geodeticToEcef`.
 
 | Consumer | ECEF behavior |
 | --- | --- |
-| CPU truth | Geodetic atmosphere and ECEF earth acceleration |
-| Sensors | ECEF/world GPS and ECEF gravity-compensated IMU |
-| Navigation | ECEF initial alignment, INS, and EKF state |
-| Seekers/guidance | Relative vectors in the shared ECEF frame |
-| Events | Local ENU terrain anchor and WGS84 ellipsoid impact clamp |
+| CPU truth | Geodetic atmosphere, ECEF earth acceleration |
+| Sensors | ECEF/world GPS, ECEF gravity-compensated IMU |
+| Navigation | ECEF initial alignment, INS, EKF |
+| Seekers/guidance | Relative vectors in shared ECEF frame |
+| Events | Local ENU terrain anchor, WGS84 ellipsoid impact clamp |
 
-The local mode remains the default. Study wrappers use the shared reporting
-layer for ECEF altitude/coordinate summaries and versioned CSV/binary
-recording; a binary reader is implemented, and richer production telemetry
-remains future work.
+Local mode remains default. Study wrappers share reporting for ECEF summaries;
+binary reader implemented; richer telemetry future.
 
 ## 7. Validation inventory
+
+35 deterministic CTest programs:
 
 | Test | Coverage |
 | --- | --- |
@@ -296,160 +208,101 @@ remains future work.
 | `rigidbody`, `vehicleconfig`, `intercept` | truth dynamics and control |
 | `integrator` | RK4/RK45 and impact interpolation |
 | `seeker`, `navigation`, `environment` | GNC and environment MVPs |
+| `seeker_rich`, `earth_rate_gyro`, `coning_sculling` | richer seekers; earth-rate gyro; coning/sculling |
 | `earth`, `earth_frames`, `earth_transport` | WGS84 conversion and local frames |
 | `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation |
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation |
 | `guidance`, `scenario` | guidance and scenario contracts |
-| `kernel_lifecycle` | freed-slot reuse reset and non-positive-timestep rejection |
-| `failure` | deterministic failure/damage semantics: motor thrust/mass-flow stop, actuator fin freeze, sensor measurement stop, communication guidance zero, structural deactivation, per-type events, and argument validation |
-| `lever_arm` | per-entity IMU lever-arm specific-force correction (α×l + ω×(ω×l)) |
-| `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording/reading |
-| `config_wiring` | per-entity sensor enablement (IMU freeze, GPS scheduling/disable) and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp |
-| `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) with the leftover-propellant dump (curve-end case dumps `cap − burned` leftover so post-sep mass lands exactly on dry + later-stage reserves and inertia rescales by the post-dump mass ratio; exhaustion burnout dumps ~0 and stays byte-identical; `dumpedMassKg` on the event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
-| `warhead_falloff` | fragmentation/overpressure falloff band: pure `warheadKillProbability` law checks (1.0 inside lethal, linear `(falloff−d)/(falloff−lethal)` decay in the band, 0 beyond; flat/`falloff<=lethal` step function); kernel integration (proximity detonation in-band, guaranteed kill/miss at the band edges); pinned fixed-seed in-band outcome (seed `0xFA11`, d=30 m, p=0.5 → KILL); flat-law warheads never consume the kernel RNG stream (seed `0x3` scene with five flat detonations before an in-band detonation); `falloff_radius_m` JSON round-trip, backward-compat missing-key→0.0, and `falloff < lethal` rejected at load and at `createVehicle` |
-| `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`), the round-trip of the four profile-id keys, and a legacy-compat case (a pre-feature `VehicleConfig` without the profile-id keys still deserializes with empty ids) |
-| `profile_database` | per-subsystem profile DB parsing (aero/motor/seek/sensor) with defaults for omitted keys; `loadProfile` returning `false` on any failure (missing file, malformed JSON, wrong-typed field, missing required seeker `type`/motor `stages`); `createVehicle` profile-wins resolution into the SoA blocks; empty-id regression (inline config untouched); missing/schema-broken profile → `std::runtime_error` naming the file; shipped `data/aero|motors|seekers|sensors` examples parse |
-| `designer_pipeline` | end-to-end designer→engine chain: loads `data/scenarios/intercept_test_01.json`, resolves both `design_ref` manifests into `VehicleConfig` (opposing allegiances, ProNav mode), verifies the four missile subsystem profile ids and the drone `rcsProfileId` reach the SoA blocks (motor stage count 2, seeker FOV 6°/gimbal 65° vs the inline 60° placeholder, drone RCS id in the status block), runs the intercept, and asserts a real guided intercept (min miss 45.4 m < 50 m at t≈11.5 s, now flying on the data-driven aero coefficient tables) plus a proximity-warhead kill via the event system |
-| `rocket_mvp` | first-principles WGS84 single-stage rocket-launch verification (local ENU, Somigliana normal gravity at 28.5°N, ISA-1976, pressure-interpolated Isp, fuel-limited burnout, RK4 dt=0.01 s, ballistic): T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (T/m − g_lat ≈ 110.2 m/s²), burnout time within the pressure-interpolated-Isp band [5.39, 6.13] s, mass at cutoff ≈ 350 kg, cutoff velocity vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry), apogee band and no-drag bound, max dynamic pressure (~242 kPa), ISA-1976 sea-level density 1.225 kg/m³, WGS84 geodetic↔ECEF round trip, Somigliana gravity monotone and altitude-accurate (<0.1%), lateral drift ~0, and a 70°-elevation arcing case; discriminates the free-thrust-tail propulsion bug |
-| `coefficient_table` | unit coverage of the aero table machinery: `interpolateCoefficient` exact at every breakpoint, bilinear interior values (midpoint averaging and arbitrary-point formula), clamping below/above both grid bounds (including the first-breakpoint in-bin regression), and `AeroTables::isValid` accepting valid grids and rejecting non-ascending/empty/mis-dimensioned breakpoint or table grids |
-| `rocket_mvp_tables` | the same 5 m×0.4 m/500 kg/60 kN vertical-launch vehicle as `rocket_mvp` run under both aero models (constant coefficients vs the sa_missile_mk1 cd(M,α)/cl(M,α) tables): asserts the table path engages (apogee differs by > 500 m), the physical direction (table apogee 24.79 km > constant 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa — the low subsonic table cd reduces drag and the faster boost velocity dominates max-Q's V²), and table-run flight sanity (apogee band, burnout V in [600, 870] m/s, lateral drift < 1 m, burnout time within the Isp band); also proves the constant-coefficient fallback is byte-identical to `rocket_mvp` |
+| `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
+| `failure` | deterministic failure/damage semantics and events |
+| `lever_arm` | per-entity IMU lever-arm correction (α×l + ω×(ω×l)) |
+| `reporting` | versioned local/ECEF output, field selection, binary record/read |
+| `config_wiring` | per-entity sensor enablement, guidance/autopilot gain wiring |
+| `staging_warhead` | two-stage separation (dump, inertia rescale, event) + fusing |
+| `warhead_falloff` | falloff law (1/linear/0), fixed-seed in-band outcome, flat-law RNG exclusion, round-trip + reject |
+| `serialization` | config round-trip, scenario/design load-save, `designRef` override, four profile-id keys, legacy-compat |
+| `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
+| `designer_pipeline` | manifest→`designRef`→profile-id→intercept (45.4 m miss) + kill |
+| `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
+| `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
+| `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
 
-Every runtime increment MUST add or update a deterministic regression, run
-`git diff --check`, build Release, and run complete CTest.
+Every runtime increment MUST add/update a deterministic regression, run
+`git diff --check`, build Release, run complete CTest.
 
 ## 8. Milestone record
 
 | Milestone | Result | Checkpoint |
 | --- | --- | --- |
-| W1–W7 | vehicle, rigid body, control, integration, events, seeker, navigation MVPs | cumulative through `2611f6f` |
-| W8 | scenario/guidance contract and isolated batch execution | `cac69c4` |
-| W9 | WGS84 normal gravity and local Coriolis | `0d4ec1c` |
-| W10 | local ECEF/ENU/NED frames and centrifugal term | `c548e88` |
+| W1–W7 | vehicle/rigid-body/control/integration/events/seeker/navigation MVPs | cumulative `2611f6f` |
+| W8 | scenario/guidance contract, isolated batch | `cac69c4` |
+| W9 | WGS84 normal gravity + local Coriolis | `0d4ec1c` |
+| W10 | local ECEF/ENU/NED frames + centrifugal | `c548e88` |
 | W11 | local moving-origin transport rate | `f781b3d` |
 | W12 | spherical point-mass gravity | `a47d329` |
 | W13 | standalone rotating-Earth ECEF propagator | `5a8d0f9` |
-| W14 | opt-in kernel ECEF truth across physics/events/sensors/navigation | `40af724` |
-| W15 | frame-aware study-wrapper reporting and versioned CSV output | `d1bd26f` |
-| W16 | configurable CSV/binary study output and structured status metadata | `1ff6d1e` |
-| W21 | flattened per-vehicle subsystem `VehicleConfig`, snake_case JSON/design/scenario serialization | current |
-| W22 | per-entity sensor enablement and guidance/autopilot gain wiring (`config_wiring_test`) | current |
-| W23 | multi-stage propulsion staging and warhead fusing (`staging_warhead_test`) | current |
-| W24 | profile-id database layer (`profile_database_test`): aero/motor/seek/sensor single-profile loaders, `createVehicle` profile-wins resolution, shared snake_case profile schema | current |
-| W25 | designer→engine pipeline (`designer_pipeline_test`): engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, end-to-end guided intercept + proximity-warhead kill | current |
-| W26 | first-principles rocket-launch verification (`rocket_mvp_test`) + propulsion-law fix: WGS84 single-stage launch cross-checked by hand (T0 thrust/mass flow, initial accel, ideal rocket-equation cutoff velocity, apogee/max-Q), and the fuel-depletion guard now scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail) | current |
-| W27 | data-driven aero coefficient tables (`coefficient_table_test`, `rocket_mvp_tables_test`): optional cd(M, α)/cl(M, α) `aero_tables` on `AeroConfig`/`data/aero/*.json` (mach/aoa breakpoints, cl/cd tables, [mach][aoa] grid), bilinearly interpolated and clamped at runtime with a byte-identical constant-coefficient fallback; tables authoritative for cd/cl, moments/side-force remain the linear engineering model; re-baselined the designer pipeline to table aero (min miss 45.4 m after W28, engagement 15 km/8 km, drone vz=-60) | current |
-| W28 | quick-fidelity batch: leftover-propellant dump at stage separation (`staging_warhead_test` curve-end/exhaustion cases) — vehicle mass lands exactly on the new floor, inertia rescales by the post-dump mass ratio, `dumpedMassKg` reported on `StageSeparation`, exhaustion burnouts byte-identical; warhead fragmentation/overpressure falloff band (`warhead_falloff_test`) — optional `falloffRadiusM` (0.0 default = flat law, byte-identical), linear decay in the band, RNG draw only when `0 < p < 1`; designer SAM warhead now lethal 50 m / trigger 50 m / falloff 90 m (deterministic kill at trigger crossing), designer-pipeline min miss 45.4 m at t≈11.5 s | current |
+| W14 | opt-in kernel ECEF truth | `40af724` |
+| W15 | frame-aware study reporting, versioned CSV | `d1bd26f` |
+| W16 | configurable CSV/binary output + status metadata | `1ff6d1e` |
+| W21 | flattened `VehicleConfig`, snake_case serialization | current |
+| W22 | per-entity sensor enablement + gain wiring (`config_wiring_test`) | current |
+| W23 | multi-stage staging + warhead fusing (`staging_warhead_test`) | current |
+| W24 | profile-id DB layer (`profile_database_test`) | current |
+| W25 | designer→engine pipeline (`designer_pipeline_test`): manifests, flat RCS table, scenario, `SeekerTypeStrings` dedup, guided intercept + kill | current |
+| W26 | rocket verification (`rocket_mvp_test`) + propulsion-law fix (`T = ṁ·Isp·g0`) | current |
+| W27 | data-driven aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (45.4 m miss after W28, 15 km/8 km) | current |
+| W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 45.4 m miss | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
 ### 9.1 External architecture decisions
 
-StrikeEngine is library-only. The executable shell, Designer UI, visualization,
-and optional ECS/editor mapping belong to StrikeSim or another consuming
-application. StrikeSim is expected to own the Design, Simulate, and CEM
-surfaces and consume the installable, versioned StrikeEngine package.
-
-StrikeCEM remains a separate project with its own authority documents, CLI, and
-`strikecem_lib` shared library. StrikeSim is the embedding boundary for CEM;
-StrikeEngine does not absorb CEM source. Designer identity, revision, geometry
-provenance, and export validation must remain explicit across the
-StrikeDesigner → StrikeCEM (RCS) / StrikeCFD (aero) → StrikeEngine handoff.
-
-The intended delivery order is: stabilize the public C++ API and package,
-then build the StrikeSim shell/Designer integration, then embed StrikeCEM.
-StrikeCEM offline work may proceed independently. A future protobuf/gRPC or
-REST API may wrap the stable C++ API, but it is not part of the current library
-contract.
-
-Future programs: aero (cd/cl) coefficient tables are produced by a future
-**StrikeCFD** program (Barrowman first-cut → CFD validation) in a separate
-project/folder; **StrikeCEM** separately produces the radar-cross-section
-signature tables; and the eventual goal is to build **StrikeDesigner** inside
-**StrikeSim** on the stabilized StrikeEngine.
-
-The pre-restructure implementation is preserved in the git tag
-`legacy/pre-restructure-v1`; it is rollback history, not an active source tree.
+StrikeEngine is library-only; shell/Designer UI/visualization/ECS mapping belong
+to StrikeSim or another consumer. StrikeSim owns Design/Simulate/CEM surfaces and
+consumes the installable versioned package. StrikeCEM is separate (own authority
+docs, CLI, `strikecem_lib`); StrikeEngine does not absorb CEM source. Identity,
+revision, geometry provenance, and export validation stay explicit across the
+StrikeDesigner → StrikeCEM (RCS) / StrikeCFD (aero) → StrikeEngine handoff. Order:
+stabilize the public C++ API/package → StrikeSim shell/Designer → embed StrikeCEM;
+StrikeCEM offline work may proceed independently. A future protobuf/gRPC or REST
+API may wrap the stable C++ API (not current contract). Pre-restructure code is in
+git tag `legacy/pre-restructure-v1` (rollback history, not active source).
 
 ### 9.2 Deferred feature inventory
 
-The following ideas came from the original architecture inventory and remain
-tracked here so they are not mistaken for missing documentation or current
-runtime guarantees:
+Tracked so these are not mistaken for missing docs or current guarantees:
 
-- **Physics and environment:** moment and lateral/β coefficient tables,
-  `AeroForces` data, advanced atmosphere and
-  weather, DEM/DTED loading and query services, global terrain tile streaming,
-  datum/geoid handling, and polar/dateline policy. (cd/cl coefficient tables are
-  implemented; see §5.)
-- **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,
-  radar altimeter, and richer measurement timing/calibration. Sensor lever
-  arms, coning/sculling, and earth-rate gyro compensation are implemented
-  (MVP). Lever arms: per-entity `VehicleConfig::imuLeverArmX/Y/Z` drives the
-  IMU specific-force correction `alpha x l + omega x (omega x l)`. Coning and
-  sculling: the strapdown uses a rotation-vector attitude update (exact
-  delta-quaternion, validated 456x tighter than the first-order step on a
-  coning environment) plus the single-interval sculling compensation
-  `+0.5 (omega x f) dt^2` (the two-interval Bortz cross-terms were evaluated
-  numerically and do not improve the point-sampled per-step scheme). Earth-rate
-  gyro: `EnvironmentConfig::earth.includeEarthRateGyro` (ECEF truth mode only)
-  models the gyro as measuring the inertial body rate and compensates it in the
-  INS. Earth-rate gyro remains off for local flat-earth truth because the gyro
-  there already resolves the non-rotating-frame body rate; correct local
-  earth-rate compensation requires the rotating-frame (ECEF) navigation path.
-- **Guidance, control, and seekers:** trajectory, waypoint, and energy
-  managers; pursuit guidance; LQR/MPC; seeker management and blended handoff;
-  imaging IR; dynamic SARH illuminator tracking; multi-target tracking; and
-  band-resolved IR extinction. Semi-active radar (SARH, bistatic with a static
-  illuminator), passive RF (homes on target EIRP), Beer-Lambert IR
-  transmittance, and chaff/flare decoys are implemented (MVP); the seeker
-  parameters are exposed through the public `SeekerConfig` surface
-  (`VehicleConfig::seeker`).
-- **Execution and platforms:** parallel CPU execution, validated Vulkan/CPU
-  parity, GPU ECEF truth, and CUDA if a concrete requirement is established.
-- **Tools and integration:** richer telemetry schemas,
-  versioned scenario/config schema evolution, plotting/analysis/
-  scenario-generation tools, shared logging/units/profiling utilities,
-  visualization/debug drawing, and the future API server wrapper.
+- **Physics/environment:** moment + lateral/β tables, `AeroForces`, advanced
+  atmosphere/weather, DEM/DTED loading + streaming, datum/geoid, polar/dateline.
+  (cd/cl tables implemented — §5.)
+- **Navigation/sensing:** sensor fusion, magnetometer, barometer, radar altimeter,
+  richer timing/calibration. (Lever arms, coning/sculling, earth-rate gyro done —
+  MVP; SPEC §7.1–7.2.)
+- **Guidance/control/seekers:** trajectory/waypoint/energy managers, pursuit,
+  LQR/MPC, seeker management + blended handoff, imaging IR, dynamic SARH
+  illuminator tracking, multi-target tracking, band-resolved extinction. (SARH,
+  PassiveRF, Beer-Lambert IR, chaff/flare done — MVP.)
+- **Execution/platforms:** parallel CPU, validated Vulkan/CPU parity, GPU ECEF,
+  CUDA (if required).
+- **Tools/integration:** richer telemetry schemas, versioned schema evolution,
+  plotting/analysis/scenario tools, shared logging/units/profiling,
+  visualization/debug drawing, future API server wrapper.
 
 ## 10. Known limitations and prioritized backlog
 
-1. **Study output consumers:** the binary reader is implemented
-   (`StudyOutputReader::read`); richer telemetry schemas, streaming record
-   sinks, and configurable output selection beyond the current wrapper records
-   remain.
-2. **Global terrain:** runtime terrain is still a callback with no DEM/DTED
-   ingestion. Add DEM/DTED tiles, interpolation, streaming, datum/geoid
-   policy, dateline/polar handling, and frame-aware collision queries.
-3. **Failures:** motor, actuator, sensor, structural, and communications
-   failure models and event semantics are implemented (MVP) as deterministic
-   per-entity flags with events (`failure_test`). Probabilistic degradation,
-   partial health effects beyond deactivation, and repair remain open.
-4. **GNC fidelity:** sensor lever arms, coning/sculling, and earth-rate gyro
-   compensation are implemented (MVP). Lever arms: per-entity
-   `VehicleConfig::imuLeverArm*` rigid-body specific-force correction
-   (`lever_arm_test`). Coning/sculling: rotation-vector attitude update and
-   single-interval sculling compensation (`coning_sculling_test`). Earth-rate
-   gyro: `includeEarthRateGyro` in ECEF truth mode only (`earth_rate_gyro_test`).
-   Earth-rate gyro stays off for local flat-earth truth because the gyro there
-   already resolves the non-rotating-frame body rate; correct local earth-rate
-   compensation requires the rotating-frame (ECEF) navigation path. Richer
-   seekers are implemented (MVP): SARH (bistatic, static illuminator), passive
-   RF (EIRP), Beer-Lambert IR transmittance, chaff/flare decoys, and
-   strongest-signal acquisition via the public `SeekerConfig` surface
-   (`seeker_rich_test`). Remaining: imaging IR, multi-target tracking, dynamic
-   illuminator tracking, and band-resolved extinction.
-5. **Guidance/aero:** add trajectory management, pursuit, LQR/MPC, blended
-   handoff, and moment/lateral coefficient tables. (cd/cl coefficient tables
-   are implemented; see §5.)
-6. **GPU parity:** validate Vulkan against CPU truth, add GPU ECEF support, and
-   implement CUDA if required.
-7. **Applications:** implement the explicit versioned StrikeSim/
-   StrikeDesigner/StrikeCEM/StrikeCFD handoffs and provenance; do not hide them
-   in this library.
+Consolidated with §9.2 and FIDELITY §5 — highest-value gaps: study-output
+telemetry (binary reader done); global terrain (DEM/DTED ingestion, streaming,
+datum/geoid, dateline/polar); probabilistic failure degradation/partial
+health/repair (deterministic flags done, MVP); GNC depth (imaging IR, multi-target,
+dynamic illuminator, band-resolved extinction, multi-rate timestamp
+interpolation); guidance/aero depth (trajectory management, pursuit, LQR/MPC,
+blended handoff, moment/lateral tables — cd/cl done); GPU parity (validate Vulkan
+vs CPU, GPU ECEF, CUDA if required); explicit versioned StrikeSim/StrikeDesigner/
+StrikeCEM/StrikeCFD handoffs and provenance.
 
 ## 11. Change and release gate
 
 Public behavior changes MUST update `SPEC.md`, this record, related config/data
-documentation, and regression tests. A historical note or backlog line is not
-implementation evidence; accepted inputs, outputs, defaults, failure behavior,
-and executable validation are required.
+docs, and regression tests. A historical note or backlog line is not evidence;
+accepted inputs, outputs, defaults, failure behavior, and executable validation are
+required.
