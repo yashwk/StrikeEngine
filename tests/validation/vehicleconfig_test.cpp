@@ -28,12 +28,12 @@ int main() {
         init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
         init.wx = 0; init.wy = 0; init.wz = 0;
         init.mass = 100.0;
-        init.Ixx = 2.0; init.Iyy = 8.0; init.Izz = 8.0;
 
         VehicleConfig cfg;   // default: no thrust curve => coasting
-        cfg.referenceArea = 0.2;
-        cfg.cd = 0.3;
-        cfg.clAlpha = 0.5;
+        cfg.Ixx = 2.0; cfg.Iyy = 8.0; cfg.Izz = 8.0;
+        cfg.aero.referenceArea = 0.2;
+        cfg.aero.cd = 0.3;
+        cfg.aero.clAlpha = 0.5;
 
         const auto id = kernel.createVehicle(init, cfg);
         auto& phys = kernel.getPhysics();
@@ -61,17 +61,19 @@ int main() {
         init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
         init.wx = 0; init.wy = 0; init.wz = 0;
         init.mass = 500.0;
-        init.Ixx = 3.0; init.Iyy = 10.0; init.Izz = 10.0;
 
         VehicleConfig cfg;
+        cfg.Ixx = 3.0; cfg.Iyy = 10.0; cfg.Izz = 10.0;
         cfg.massDry = 370.0;                 // 130 kg fuel
-        cfg.referenceArea = 0.5;
-        cfg.cd = 0.15;
-        cfg.clAlpha = 2.5;
-        cfg.clFin = 2.0;
-        cfg.thrustCurve = { {0.0, 50000.0}, {5.0, 50000.0}, {5.1, 0.0}, {100.0, 0.0} };
-        cfg.vacuumIsp = 250.0;
-        cfg.seaLevelIsp = 220.0;
+        cfg.aero.referenceArea = 0.5;
+        cfg.aero.cd = 0.15;
+        cfg.aero.clAlpha = 2.5;
+        cfg.aero.clFin = 2.0;
+        StageConfig stage;
+        stage.thrustCurve = { {0.0, 50000.0}, {5.0, 50000.0}, {5.1, 0.0}, {100.0, 0.0} };
+        stage.vacuumIsp = 250.0;
+        stage.seaLevelIsp = 220.0;
+        cfg.propulsion.stages.push_back(stage);
 
         const auto id = kernel.createVehicle(init, cfg);
 

@@ -44,6 +44,8 @@ struct PhysicsBlock {
 	std::vector<double> clMax;             // max |CL| (stall / control limit)
 	std::vector<int>    propulsionId;      // index into backend propulsion pool; -1 = none
 	std::vector<double> ignitionTime;      // s (thrust curve evaluated at t - ignitionTime)
+	std::vector<int>    stageIndex;        // active stage; -1 = coasting/finished
+	std::vector<int>    stageCount;        // number of registered stages
 
 	// Actuator truth (achieved deflections, rad)
 	std::vector<double> finPitch, finYaw, finRoll;

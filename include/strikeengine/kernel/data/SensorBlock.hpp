@@ -24,6 +24,11 @@ namespace StrikeEngine::Kernel {
         std::vector<double> gpsVelNoiseStdDev;
         std::vector<double> imuLeverArmX, imuLeverArmY, imuLeverArmZ;  // body-frame IMU lever arm (m)
         
+        // Per-entity device enablement + GPS rate (config wiring).
+        std::vector<bool> imuEnabled;           // IMU measurements produced while true
+        std::vector<bool> gpsEnabled;           // GPS samples produced while true
+        std::vector<double> gpsUpdateRateHz;    // per-entity GPS update rate (Hz)
+
         std::size_t size = 0;
     };
 

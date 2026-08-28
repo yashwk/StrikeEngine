@@ -10,6 +10,7 @@ namespace StrikeEngine::Kernel {
 
     enum class EventType {
         MotorBurnout,
+        StageSeparation,
         TargetImpact,
         GroundImpact,
         Detonation,

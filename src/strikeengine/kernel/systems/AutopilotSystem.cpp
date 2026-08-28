@@ -80,17 +80,17 @@ namespace StrikeEngine::Kernel {
         // (positive wz / fin). The signs below match AeroModel's documented
         // X-forward/Y-right/Z-down convention.
         const double pitchFeedForward = std::clamp(
-            -kAccelP * azSpecificCmd, -0.35, 0.35);
+            -control.kAccelP[id] * azSpecificCmd, -0.35, 0.35);
         const double yawFeedForward = std::clamp(
-            kAccelP * aySpecificCmd, -0.35, 0.35);
+            control.kAccelP[id] * aySpecificCmd, -0.35, 0.35);
         const double pitchRateDamping = std::clamp(
-            -kRateP * nav.estWy[id], -0.20, 0.20);
+            -control.kRateP[id] * nav.estWy[id], -0.20, 0.20);
         const double yawRateDamping = std::clamp(
-            -kRateP * nav.estWz[id], -0.20, 0.20);
+            -control.kRateP[id] * nav.estWz[id], -0.20, 0.20);
         const double pitchAoaDamping = std::clamp(
-            -kAlphaP * alpha, -0.15, 0.15);
+            -control.kAlphaP[id] * alpha, -0.15, 0.15);
         const double yawAoaDamping = std::clamp(
-            -kAlphaP * beta, -0.15, 0.15);
+            -control.kAlphaP[id] * beta, -0.15, 0.15);
 
         double pitchDeflection = pitchFeedForward + pitchRateDamping + pitchAoaDamping;
         double yawDeflection   = yawFeedForward + yawRateDamping + yawAoaDamping;
@@ -115,10 +115,10 @@ namespace StrikeEngine::Kernel {
                          0.0, 0.0, -1.0, gBx, gBy, gBz);
         const double verticality = std::clamp(gBz, 0.0, 1.0);
         const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
-        double rollDeflection = verticality * (-kRollP * rollError - kRollD * nav.estWx[id]);
+        double rollDeflection = verticality * (-control.kRollP[id] * rollError - control.kRollD[id] * nav.estWx[id]);
 
         // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority).
-        constexpr double maxDeflection = 0.43;
+        const double maxDeflection = control.maxDeflectionRad[id];
         const double pitchClamped = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
         const double yawClamped   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
         control.pitchCommand[id] = pitchClamped;

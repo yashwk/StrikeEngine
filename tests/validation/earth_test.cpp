@@ -29,10 +29,10 @@ VehicleInitState makeVehicle(double vx, double pz)
 VehicleConfig makeVacuumConfig()
 {
     VehicleConfig config;
-    config.referenceArea = 0.0;
-    config.cd = 0.0;
-    config.clAlpha = 0.0;
-    config.clFin = 0.0;
+    config.aero.referenceArea = 0.0;
+    config.aero.cd = 0.0;
+    config.aero.clAlpha = 0.0;
+    config.aero.clFin = 0.0;
     return config;
 }
 

@@ -82,7 +82,7 @@ namespace StrikeEngine::Kernel {
         // The seeker angles and rates are relative to the missile body.
         
         // a_cmd = N * V_c * d(lambda)/dt
-        const double N = 3.5;
+        const double N = guidance.navigationConstant[id];
         double vc = std::abs(seeker.targetRangeRate[id]); // positive closing velocity
         if (vc < 1.0) vc = 1.0;
 
@@ -151,7 +151,7 @@ namespace StrikeEngine::Kernel {
 
         // Acceleration demand up to the maneuver limit (2 g here); the
         // autopilot/servo limits bound the physical response.
-        const double k = 20.0;
+        const double k = guidance.waypointGain[id];
         guidance.commandedAccelX[id] = k * (rx / r_mag);
         guidance.commandedAccelY[id] = k * (ry / r_mag);
         guidance.commandedAccelZ[id] = k * (rz / r_mag);

@@ -34,15 +34,24 @@ namespace StrikeEngine::Kernel {
         double qx, qy, qz, qw;
         double wx, wy, wz;
         double mass;
-        double Ixx = 1.0, Iyy = 10.0, Izz = 10.0;
-
-        EntityType type = EntityType::Missile;
         Allegiance allegiance = Allegiance::Friendly;
+    };
 
-        SeekerType seekerType = SeekerType::None;
-        std::string rcsProfileId = "";
-        std::string irProfileId = "";
-        double emitterEirpW = 0.0;   // target-side EIRP (W); 0 = no emitter
+    // Per-entity multi-stage propulsion plan (see SimulationKernel::processStaging).
+    struct StagePlan {
+        std::vector<int>    poolIds;       // backend propulsion pool id per stage
+        std::vector<double> burnDurations; // thrust-curve end time per stage (s)
+        std::vector<double> dropMasses;    // structure dropped after each stage (kg)
+    };
+
+    // Per-entity warhead state (see SimulationKernel::processWarheads).
+    struct WarheadState {
+        double lethalRadiusM = 0.0;
+        FusingType fusing = FusingType::Impact;
+        double proximityTriggerM = 0.0;
+        double timedDelaySec = 0.0;
+        double launchTime = 0.0;
+        bool detonated = false;
     };
 
     enum class BackendType {
@@ -125,6 +134,13 @@ namespace StrikeEngine::Kernel {
         std::vector<PhysicsId> freeList;
         std::unique_ptr<PhysicsBackend> backend;
         EnvironmentConfig environment;
+
+        // Per-entity staging + warhead state (parallel to physics entities).
+        std::vector<StagePlan> stagePlans;
+        std::vector<WarheadState> warheads;
+
+        void processStaging();
+        void processWarheads();
     };
 
 } // namespace StrikeEngine::Kernel

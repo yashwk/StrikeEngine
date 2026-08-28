@@ -23,20 +23,22 @@ int main() {
     missile.qw = 0.0; missile.qx = 1.0; missile.qy = 0.0; missile.qz = 0.0;
     missile.wx = 0.0; missile.wy = 0.0; missile.wz = 0.0;
     missile.mass = 500.0;
-    // Realistic inertia: 500 kg, ~3.5 m long, ~0.8 m diameter
-    // Iyy ~= m*L^2/12 ~= 510, Ixx ~= m*D^2/8 ~= 40
-    missile.Ixx = 40.0; missile.Iyy = 510.0; missile.Izz = 510.0;
 
     VehicleConfig missileCfg;
+    // Realistic inertia: 500 kg, ~3.5 m long, ~0.8 m diameter
+    // Iyy ~= m*L^2/12 ~= 510, Ixx ~= m*D^2/8 ~= 40
+    missileCfg.Ixx = 40.0; missileCfg.Iyy = 510.0; missileCfg.Izz = 510.0;
     missileCfg.massDry = 370.0;                 // 130 kg fuel
-    missileCfg.referenceArea = 0.5;
-    missileCfg.referenceLength = 1.0;
-    missileCfg.cd = 0.15;
-    missileCfg.clAlpha = 2.5;                   // AoA lift
-    missileCfg.clFin = 2.0;                     // fin lift (control authority!)
-    missileCfg.thrustCurve = { {0.0, 50000.0}, {5.0, 50000.0}, {5.1, 0.0}, {100.0, 0.0} };
-    missileCfg.vacuumIsp = 250.0;
-    missileCfg.seaLevelIsp = 220.0;
+    missileCfg.aero.referenceArea = 0.5;
+    missileCfg.aero.referenceLength = 1.0;
+    missileCfg.aero.cd = 0.15;
+    missileCfg.aero.clAlpha = 2.5;                   // AoA lift
+    missileCfg.aero.clFin = 2.0;                     // fin lift (control authority!)
+    StageConfig missileStage;
+    missileStage.thrustCurve = { {0.0, 50000.0}, {5.0, 50000.0}, {5.1, 0.0}, {100.0, 0.0} };
+    missileStage.vacuumIsp = 250.0;
+    missileStage.seaLevelIsp = 220.0;
+    missileCfg.propulsion.stages.push_back(missileStage);
 
     const auto missileId = kernel.createVehicle(missile, missileCfg);
 
@@ -46,13 +48,13 @@ int main() {
     target.vx = 0.0; target.vy = 0.0; target.vz = 0.0;
     target.qw = 1.0; target.qx = 0.0; target.qy = 0.0; target.qz = 0.0;
     target.mass = 100.0;
-    // 100 kg, 2 m long, 0.4 m diameter drone: Iyy ~= 33, Ixx ~= 2
-    target.Ixx = 2.0; target.Iyy = 33.0; target.Izz = 33.0;
 
     VehicleConfig targetCfg;   // coasting
-    targetCfg.referenceArea = 0.2;
-    targetCfg.cd = 0.3;
-    targetCfg.clAlpha = 0.5;
+    // 100 kg, 2 m long, 0.4 m diameter drone: Iyy ~= 33, Ixx ~= 2
+    targetCfg.Ixx = 2.0; targetCfg.Iyy = 33.0; targetCfg.Izz = 33.0;
+    targetCfg.aero.referenceArea = 0.2;
+    targetCfg.aero.cd = 0.3;
+    targetCfg.aero.clAlpha = 0.5;
 
     const auto targetId = kernel.createVehicle(target, targetCfg);
 

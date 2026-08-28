@@ -64,6 +64,8 @@ namespace StrikeEngine::Kernel {
         seekerSystem.reset();
         sensorSystem.reset();
         freeList.clear();
+        stagePlans.clear();
+        warheads.clear();
         time.reset();
     }
 
@@ -105,21 +107,34 @@ namespace StrikeEngine::Kernel {
             physicsBlock.clMax.push_back(2.0);
             physicsBlock.propulsionId.push_back(-1);
             physicsBlock.ignitionTime.push_back(0.0);
+            physicsBlock.stageIndex.push_back(-1);
+            physicsBlock.stageCount.push_back(0);
             physicsBlock.finPitch.push_back(0.0); physicsBlock.finYaw.push_back(0.0); physicsBlock.finRoll.push_back(0.0);
             physicsBlock.active.push_back(true);
             physicsBlock.motorFailed.push_back(false);
             physicsBlock.actuatorFailed.push_back(false);
 
+            stagePlans.push_back(StagePlan{});
+            warheads.push_back(WarheadState{});
+
             controlBlock.thrustCommand.push_back(0);
             controlBlock.pitchCommand.push_back(0);
             controlBlock.yawCommand.push_back(0);
             controlBlock.rollCommand.push_back(0);
+            controlBlock.kAccelP.push_back(0.030);
+            controlBlock.kRateP.push_back(1.000);
+            controlBlock.kAlphaP.push_back(0.200);
+            controlBlock.kRollP.push_back(0.10);
+            controlBlock.kRollD.push_back(0.05);
+            controlBlock.maxDeflectionRad.push_back(0.43);
 
             guidanceBlock.mode.push_back(GuidanceMode::None);
             guidanceBlock.targetX.push_back(0); guidanceBlock.targetY.push_back(0); guidanceBlock.targetZ.push_back(0);
             guidanceBlock.targetVx.push_back(0); guidanceBlock.targetVy.push_back(0); guidanceBlock.targetVz.push_back(0);
             guidanceBlock.commandedAccelX.push_back(0); guidanceBlock.commandedAccelY.push_back(0); guidanceBlock.commandedAccelZ.push_back(0);
             guidanceBlock.maxAccel.push_back(0.0);
+            guidanceBlock.navigationConstant.push_back(3.5);
+            guidanceBlock.waypointGain.push_back(20.0);
 
             statusBlock.type.push_back(EntityType::Missile);
             statusBlock.allegiance.push_back(Allegiance::Friendly);
@@ -142,6 +157,9 @@ namespace StrikeEngine::Kernel {
             sensorBlock.imuLeverArmX.push_back(0.0);
             sensorBlock.imuLeverArmY.push_back(0.0);
             sensorBlock.imuLeverArmZ.push_back(0.0);
+            sensorBlock.imuEnabled.push_back(true);
+            sensorBlock.gpsEnabled.push_back(true);
+            sensorBlock.gpsUpdateRateHz.push_back(1.0);
 
             seekerBlock.type.push_back(SeekerType::None);
             seekerBlock.transmitterPowerW.push_back(1000.0);
@@ -184,54 +202,94 @@ namespace StrikeEngine::Kernel {
         controlBlock.pitchCommand[id] = 0;
         controlBlock.yawCommand[id] = 0;
         controlBlock.rollCommand[id] = 0;
+        controlBlock.kAccelP[id] = config.guidanceAutopilot.kAccelP;
+        controlBlock.kRateP[id] = config.guidanceAutopilot.kRateP;
+        controlBlock.kAlphaP[id] = config.guidanceAutopilot.kAlphaP;
+        controlBlock.kRollP[id] = config.guidanceAutopilot.kRollP;
+        controlBlock.kRollD[id] = config.guidanceAutopilot.kRollD;
+        controlBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
 
         guidanceBlock.mode[id] = GuidanceMode::None;
         guidanceBlock.targetX[id] = 0; guidanceBlock.targetY[id] = 0; guidanceBlock.targetZ[id] = 0;
         guidanceBlock.targetVx[id] = 0; guidanceBlock.targetVy[id] = 0; guidanceBlock.targetVz[id] = 0;
         guidanceBlock.commandedAccelX[id] = 0; guidanceBlock.commandedAccelY[id] = 0; guidanceBlock.commandedAccelZ[id] = 0;
         guidanceBlock.maxAccel[id] = 0.0;
+        guidanceBlock.navigationConstant[id] = config.guidanceAutopilot.navigationConstant;
+        guidanceBlock.waypointGain[id] = config.guidanceAutopilot.waypointGain;
 
-        sensorBlock.accelNoiseStdDev[id] = 0.1;
-        sensorBlock.accelBiasStdDev[id] = 0.01;
-        sensorBlock.gyroNoiseStdDev[id] = 0.01;
-        sensorBlock.gyroBiasStdDev[id] = 0.001;
-        sensorBlock.gpsPosNoiseStdDev[id] = 5.0;
-        sensorBlock.gpsVelNoiseStdDev[id] = 0.5;
-        sensorBlock.imuLeverArmX[id] = config.imuLeverArmX;
-        sensorBlock.imuLeverArmY[id] = config.imuLeverArmY;
-        sensorBlock.imuLeverArmZ[id] = config.imuLeverArmZ;
+        sensorBlock.accelNoiseStdDev[id] = config.sensor.accelNoiseStdDev;
+        sensorBlock.accelBiasStdDev[id] = config.sensor.accelBiasStdDev;
+        sensorBlock.gyroNoiseStdDev[id] = config.sensor.gyroNoiseStdDev;
+        sensorBlock.gyroBiasStdDev[id] = config.sensor.gyroBiasStdDev;
+        sensorBlock.gpsPosNoiseStdDev[id] = config.sensor.gpsPosNoiseStdDev;
+        sensorBlock.gpsVelNoiseStdDev[id] = config.sensor.gpsVelNoiseStdDev;
+        sensorBlock.imuLeverArmX[id] = config.sensor.imuLeverArmX;
+        sensorBlock.imuLeverArmY[id] = config.sensor.imuLeverArmY;
+        sensorBlock.imuLeverArmZ[id] = config.sensor.imuLeverArmZ;
+        sensorBlock.imuEnabled[id] = config.sensor.imuEnabled;
+        sensorBlock.gpsEnabled[id] = config.sensor.gpsEnabled;
+        sensorBlock.gpsUpdateRateHz[id] = config.sensor.gpsUpdateRateHz;
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
         physicsBlock.qw[id] = init.qw; physicsBlock.qx[id] = init.qx; physicsBlock.qy[id] = init.qy; physicsBlock.qz[id] = init.qz;
         physicsBlock.wx[id] = init.wx; physicsBlock.wy[id] = init.wy; physicsBlock.wz[id] = init.wz;
         physicsBlock.alphax[id] = 0.0; physicsBlock.alphay[id] = 0.0; physicsBlock.alphaz[id] = 0.0;
-        physicsBlock.Ixx[id] = init.Ixx; physicsBlock.Iyy[id] = init.Iyy; physicsBlock.Izz[id] = init.Izz;
-        physicsBlock.mass[id] = init.mass;
-        physicsBlock.massDry[id] = (config.massDry < 0.0) ? init.mass : config.massDry;
-        physicsBlock.referenceArea[id] = config.referenceArea;
-        physicsBlock.referenceLength[id] = config.referenceLength;
-        physicsBlock.cd[id] = config.cd;
-        physicsBlock.clAlpha[id] = config.clAlpha;
-        physicsBlock.clFin[id] = config.clFin;
-        physicsBlock.clMax[id] = config.clMax;
+        physicsBlock.Ixx[id] = config.Ixx; physicsBlock.Iyy[id] = config.Iyy; physicsBlock.Izz[id] = config.Izz;
+
+        // Multi-stage propulsion: register every stage with a non-empty thrust
+        // curve in the backend pool and wire the first stage. Separable dry
+        // masses (all stages except the last) form the initial massDry floor;
+        // processStaging() drops them and advances the active stage.
+        StagePlan plan;
+        for (const auto& stage : config.propulsion.stages) {
+            if (stage.thrustCurve.empty()) continue;
+            auto prop = std::make_shared<Models::PropulsionModel>(
+                Models::ThrustCurve(stage.thrustCurve),
+                stage.vacuumIsp, stage.seaLevelIsp);
+            plan.poolIds.push_back(backend->registerPropulsion(std::move(prop)));
+            // Burnout time = last time the curve still produces positive thrust
+            // (the trailing zero-thrust sentinel marks the end of the burn).
+            double burnDuration = 0.0;
+            for (const auto& p : stage.thrustCurve) {
+                if (p.thrust_n > 0.0) burnDuration = p.time_s;
+            }
+            plan.burnDurations.push_back(burnDuration);
+            plan.dropMasses.push_back(stage.dryMassKg);
+        }
+        double separableDry = 0.0;
+        for (std::size_t s = 0; s + 1 < plan.dropMasses.size(); ++s) {
+            separableDry += plan.dropMasses[s];
+        }
+        if (plan.poolIds.empty()) {
+            physicsBlock.propulsionId[id] = -1;
+            physicsBlock.stageIndex[id] = -1;
+            physicsBlock.stageCount[id] = 0;
+            stagePlans[id] = StagePlan{};
+        } else {
+            physicsBlock.propulsionId[id] = plan.poolIds.front();
+            physicsBlock.stageIndex[id] = 0;
+            physicsBlock.stageCount[id] = static_cast<int>(plan.poolIds.size());
+            stagePlans[id] = std::move(plan);
+        }
+
+        physicsBlock.mass[id] = (config.initialMass >= 0.0) ? config.initialMass : init.mass;
+        const double finalDry = (config.massDry < 0.0) ? physicsBlock.mass[id] : config.massDry;
+        physicsBlock.massDry[id] = finalDry + separableDry;
+
+        physicsBlock.referenceArea[id] = config.aero.referenceArea;
+        physicsBlock.referenceLength[id] = config.aero.referenceLength;
+        physicsBlock.cd[id] = config.aero.cd;
+        physicsBlock.clAlpha[id] = config.aero.clAlpha;
+        physicsBlock.clFin[id] = config.aero.clFin;
+        physicsBlock.clMax[id] = config.aero.clMax;
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;
         physicsBlock.motorFailed[id] = false;
         physicsBlock.actuatorFailed[id] = false;
 
-        // Per-entity propulsion registration (W1): empty curve => coasting vehicle
-        if (!config.thrustCurve.empty()) {
-            auto prop = std::make_shared<Models::PropulsionModel>(
-                Models::ThrustCurve(config.thrustCurve),
-                config.vacuumIsp, config.seaLevelIsp);
-            physicsBlock.propulsionId[id] = backend->registerPropulsion(std::move(prop));
-        } else {
-            physicsBlock.propulsionId[id] = -1;
-        }
-
-        statusBlock.type[id] = init.type;
+        statusBlock.type[id] = config.type;
         statusBlock.allegiance[id] = init.allegiance;
         statusBlock.health[id] = 100.0;
         statusBlock.isAlive[id] = true;
@@ -239,15 +297,21 @@ namespace StrikeEngine::Kernel {
         statusBlock.actuatorFailed[id] = false;
         statusBlock.sensorFailed[id] = false;
         statusBlock.commsFailed[id] = false;
-        statusBlock.rcsProfileId[id] = init.rcsProfileId;
-        statusBlock.irProfileId[id] = init.irProfileId;
-        statusBlock.emitterEirpW[id] = init.emitterEirpW;
+        statusBlock.rcsProfileId[id] = config.rcsProfileId;
+        statusBlock.irProfileId[id] = config.irProfileId;
+        statusBlock.emitterEirpW[id] = config.emitterEirpW;
 
-        // Per-entity seeker configuration (W: public SeekerConfig surface).
-        // Legacy init.seekerType still drives the type when the config leaves
-        // it at the default None, so existing scenarios are unchanged.
-        seekerBlock.type[id] = (config.seeker.type == SeekerType::None)
-            ? init.seekerType : config.seeker.type;
+        // Warhead state (fusing + lethality handled by processWarheads()).
+        warheads[id] = WarheadState{};
+        warheads[id].lethalRadiusM = config.warhead.lethalRadiusM;
+        warheads[id].fusing = config.warhead.fusing;
+        warheads[id].proximityTriggerM = config.warhead.proximityTriggerM;
+        warheads[id].timedDelaySec = config.warhead.timedDelaySec;
+        warheads[id].launchTime = time.currentTime();
+        warheads[id].detonated = false;
+
+        // Per-entity seeker configuration (public SeekerConfig surface).
+        seekerBlock.type[id] = config.seeker.type;
         seekerBlock.transmitterPowerW[id] = config.seeker.transmitterPowerW;
         seekerBlock.antennaGainDb[id] = config.seeker.antennaGainDb;
         seekerBlock.wavelengthM[id] = config.seeker.wavelengthM;
@@ -354,6 +418,95 @@ namespace StrikeEngine::Kernel {
         }
     }
 
+    void SimulationKernel::processStaging() {
+        for (std::size_t i = 0; i < physicsBlock.size; ++i) {
+            if (!physicsBlock.active[i]) continue;
+            if (physicsBlock.stageCount[i] <= 0) continue;
+            const int si = physicsBlock.stageIndex[i];
+            if (si < 0 || si + 1 >= physicsBlock.stageCount[i]) continue;
+            const StagePlan& plan = stagePlans[i];
+            if (si + 1 >= static_cast<int>(plan.poolIds.size())) continue;
+
+            // Burnout: the active stage's thrust curve has fully elapsed.
+            if (time.currentTime() - physicsBlock.ignitionTime[i] < plan.burnDurations[si]) {
+                continue;
+            }
+
+            // Separation: drop the spent stage's structure and rescale inertia.
+            const double drop = plan.dropMasses[si];
+            const double oldMass = physicsBlock.mass[i];
+            const double newMass = oldMass - drop;
+            const double ratio = (oldMass > 1e-12) ? (newMass / oldMass) : 1.0;
+            physicsBlock.mass[i] = newMass;
+            physicsBlock.massDry[i] -= drop;
+            physicsBlock.Ixx[i] *= ratio;
+            physicsBlock.Iyy[i] *= ratio;
+            physicsBlock.Izz[i] *= ratio;
+
+            // Ignite the next stage.
+            ++physicsBlock.stageIndex[i];
+            physicsBlock.propulsionId[i] = plan.poolIds[physicsBlock.stageIndex[i]];
+            physicsBlock.ignitionTime[i] = time.currentTime();
+
+            SimulationEvent evt;
+            evt.type = EventType::StageSeparation;
+            evt.entityId = i;
+            evt.timestamp = time.currentTime();
+            evt.customCode = si;
+            eventSystem.dispatch(evt);
+        }
+    }
+
+    void SimulationKernel::processWarheads() {
+        for (std::size_t i = 0; i < warheads.size(); ++i) {
+            WarheadState& wh = warheads[i];
+            if (wh.detonated || wh.lethalRadiusM <= 0.0) continue;
+
+            bool trigger = false;
+            switch (wh.fusing) {
+                case FusingType::Impact:
+                    trigger = !statusBlock.isAlive[i];
+                    break;
+                case FusingType::Proximity: {
+                    if (wh.proximityTriggerM > 0.0) {
+                        const double r2 = wh.proximityTriggerM * wh.proximityTriggerM;
+                        for (std::size_t j = 0; j < physicsBlock.size; ++j) {
+                            if (j == i || !statusBlock.isAlive[j]) continue;
+                            const double dx = physicsBlock.px[j] - physicsBlock.px[i];
+                            const double dy = physicsBlock.py[j] - physicsBlock.py[i];
+                            const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
+                            if (dx*dx + dy*dy + dz*dz <= r2) { trigger = true; break; }
+                        }
+                    }
+                    break;
+                }
+                case FusingType::Timed:
+                    trigger = (time.currentTime() - wh.launchTime) >= wh.timedDelaySec;
+                    break;
+            }
+            if (!trigger) continue;
+
+            wh.detonated = true;
+            SimulationEvent evt;
+            evt.type = EventType::Detonation;
+            evt.entityId = i;
+            evt.timestamp = time.currentTime();
+            eventSystem.dispatch(evt);
+
+            // Flat lethal-radius kill: any alive entity within range is destroyed.
+            const double r2 = wh.lethalRadiusM * wh.lethalRadiusM;
+            for (std::size_t j = 0; j < physicsBlock.size; ++j) {
+                if (j == i || !statusBlock.isAlive[j]) continue;
+                const double dx = physicsBlock.px[j] - physicsBlock.px[i];
+                const double dy = physicsBlock.py[j] - physicsBlock.py[i];
+                const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
+                if (dx*dx + dy*dy + dz*dz <= r2) {
+                    applyDamage(j, 100.0);
+                }
+            }
+        }
+    }
+
     void SimulationKernel::queueCommand(const SimulationCommand& cmd) {
         commandProcessor.enqueueCommand(cmd);
     }
@@ -371,7 +524,10 @@ namespace StrikeEngine::Kernel {
         
         // 1. Advance true physics
         backend->step(physicsBlock, controlBlock, time.currentTime(), dt);
-        
+
+        // 1.5 Stage separation (multi-stage propulsion)
+        processStaging();
+
         // 2. Generate noisy sensor measurements
         sensorSystem.update(physicsBlock, sensorBlock, statusBlock, time.currentTime(), dt, environment);
         
@@ -391,6 +547,10 @@ namespace StrikeEngine::Kernel {
         eventSystem.evaluate(
             physicsBlock, statusBlock, time.currentTime(), dt,
             previousPx, previousPy, previousPz, environment);
+
+        // 5.5 Warhead fusing/detonation (after impacts are known)
+        processWarheads();
+
         eventSystem.processQueue();
     }
 

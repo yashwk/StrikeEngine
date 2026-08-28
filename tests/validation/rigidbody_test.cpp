@@ -29,17 +29,17 @@ int main() {
         init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
         init.wx = 10.0; init.wy = 2.0; init.wz = 3.0;   // off-axis spin (Iyy != Izz)
         init.mass = 100.0;
-        init.Ixx = 3.0; init.Iyy = 10.0; init.Izz = 12.0;
 
         VehicleConfig cfg;   // no motor
-        cfg.cd = 0.0;        // no drag; lift cannot matter at zero velocity
+        cfg.Ixx = 3.0; cfg.Iyy = 10.0; cfg.Izz = 12.0;
+        cfg.aero.cd = 0.0;   // no drag; lift cannot matter at zero velocity
 
         const auto id = kernel.createVehicle(init, cfg);
 
         auto& phys = kernel.getPhysics();
-        const double E0 = 0.5 * (init.Ixx * init.wx * init.wx +
-                                 init.Iyy * init.wy * init.wy +
-                                 init.Izz * init.wz * init.wz);
+        const double E0 = 0.5 * (cfg.Ixx * init.wx * init.wx +
+                                 cfg.Iyy * init.wy * init.wy +
+                                 cfg.Izz * init.wz * init.wz);
 
         double maxNormErr = 0.0;
         constexpr double dt = 0.01;
@@ -87,14 +87,14 @@ int main() {
         init.qw = 0.0; init.qx = 1.0; init.qy = 0.0; init.qz = 0.0;
         init.wx = 0; init.wy = 0; init.wz = 0;
         init.mass = 100.0;
-        init.Ixx = 3.0; init.Iyy = 33.0; init.Izz = 33.0;   // ~2 m airframe
 
         VehicleConfig cfg;   // no motor, fins can pitch
-        cfg.referenceArea = 0.8;   // lifting area for a 100 kg sign-test airframe
-        cfg.clFin = 1.0;           // fin lift coefficient (fins are small surfaces:
-                                   // force authority well below the body lift)
-        cfg.clAlpha = 4.0;         // body+tail AoA lift slope
-        cfg.cd = 0.3;
+        cfg.Ixx = 3.0; cfg.Iyy = 33.0; cfg.Izz = 33.0;   // ~2 m airframe
+        cfg.aero.referenceArea = 0.8;   // lifting area for a 100 kg sign-test airframe
+        cfg.aero.clFin = 1.0;           // fin lift coefficient (fins are small surfaces:
+                                        // force authority well below the body lift)
+        cfg.aero.clAlpha = 4.0;         // body+tail AoA lift slope
+        cfg.aero.cd = 0.3;
 
         const auto id = kernel.createVehicle(init, cfg);
 

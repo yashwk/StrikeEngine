@@ -24,8 +24,8 @@ VehicleInitState makeVehicle(const EcefCoordinate& position, double vx = 0.0)
 VehicleConfig vacuumConfig()
 {
     VehicleConfig config;
-    config.referenceArea = 0.0;
-    config.cd = 0.0;
+    config.aero.referenceArea = 0.0;
+    config.aero.cd = 0.0;
     return config;
 }
 

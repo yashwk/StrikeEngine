@@ -27,6 +27,10 @@ namespace StrikeEngine::Kernel {
         // Set per entity via SimulationCommand::maxAccel.
         std::vector<double> maxAccel;
 
+        // Per-entity guidance-law tuning (design-time configurable).
+        std::vector<double> navigationConstant;  // APN navigation constant N
+        std::vector<double> waypointGain;        // m/s^2 per unit range fraction
+
         // Output: Required acceleration command
         std::vector<double> commandedAccelX;
         std::vector<double> commandedAccelY;

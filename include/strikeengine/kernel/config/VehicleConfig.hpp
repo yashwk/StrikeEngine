@@ -1,48 +1,47 @@
 #pragma once
 
-#include <vector>
-#include <strikeengine/models/physics/propulsion/ThrustCurve.hpp>
+#include <string>
+#include <strikeengine/kernel/data/EntityStatusBlock.hpp>
+#include <strikeengine/kernel/config/AeroConfig.hpp>
+#include <strikeengine/kernel/config/PropulsionConfig.hpp>
+#include <strikeengine/kernel/config/SensorConfig.hpp>
+#include <strikeengine/kernel/config/GuidanceAutopilotConfig.hpp>
+#include <strikeengine/kernel/config/WarheadConfig.hpp>
 #include <strikeengine/kernel/config/SeekerConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
     /**
-     * @brief Per-vehicle truth-model configuration (W1: per-entity vehicle config).
+     * @brief Per-vehicle truth-model configuration (flattened simulation view).
      *
-     * Passed to SimulationKernel::createVehicle(init, config) to define the
-     * physics properties that used to be shared across ALL entities:
-     *   - aero geometry (reference area/length) and coefficients
-     *   - dry mass (fuel model: mass burns down to dryMass, never below)
-     *   - propulsion (thrust curve + Isp); an empty thrust curve = coasting
+     * Composition of the vehicle's subsystem configurations: aero, propulsion
+     * (single-stage for now; multi-stage ignition/separation is a later
+     * increment), seeker, sensors, guidance/autopilot gains, and warhead.
+     * Structural summary fields (initialMass/massDry/inertias) are the
+     * designer output from geometry.
      *
-     * Defaults describe a coasting vehicle with the legacy MVP aero
-     * coefficients (CD=0.3, no lift). Explicitly configure motors and
-     * lift-related coefficients to get steered/boosted vehicles.
+     * Passed to SimulationKernel::createVehicle(init, config). Lookups of
+     * aero/motor/seek/sensor profiles from a profile-id database are a future
+     * layer on top of this flat struct.
      */
     struct VehicleConfig {
-        // --- Geometry / mass ---
-        double referenceArea   = 0.1;   // m^2
-        double referenceLength = 1.0;   // m (moment arm for torques)
-        double massDry         = -1.0;  // kg; < 0  =>  dry mass == total mass (no fuel)
+        EntityType type = EntityType::Missile;
 
-        // --- Aerodynamics (body frame, aerospace X-fwd/Y-right/Z-down) ---
-        double cd      = 0.3;   // drag coefficient
-        double clAlpha = 0.0;   // lift slope per rad of angle of attack
-        double clFin   = 0.0;   // fin lift coefficient per rad of deflection
-        double clMax   = 2.0;   // max |CL| (stall/control-surface limit)
+        // Structural summary (designer output from geometry)
+        double initialMass = -1.0;   // kg; <0 => launch mass = init.mass
+        double massDry     = -1.0;   // kg; <0 => dry mass == launch mass (no fuel)
+        double Ixx = 1.0, Iyy = 10.0, Izz = 10.0;
 
-        // --- Sensor geometry ---
-        double imuLeverArmX = 0.0;  // m, body-frame offset from centre of mass to IMU
-        double imuLeverArmY = 0.0;
-        double imuLeverArmZ = 0.0;
+        AeroConfig       aero;
+        PropulsionConfig propulsion;
+        SeekerConfig     seeker;
+        SensorConfig     sensor;
+        GuidanceAutopilotConfig guidanceAutopilot;
+        WarheadConfig    warhead;
 
-        // --- Seeker (public per-entity config; defaults match legacy values) ---
-        SeekerConfig seeker;
-
-        // --- Propulsion (empty curve => no motor, vehicle coasts) ---
-        std::vector<Models::ThrustDataPoint> thrustCurve;  // time_s vs thrust_N
-        double vacuumIsp = 250.0;                          // s
-        double seaLevelIsp = 220.0;                        // s
+        std::string rcsProfileId = "";
+        std::string irProfileId  = "";
+        double emitterEirpW = 0.0;
     };
 
 } // namespace StrikeEngine::Kernel

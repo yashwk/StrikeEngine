@@ -14,6 +14,12 @@ namespace StrikeEngine::Kernel {
     struct ScenarioEntityConfig {
         VehicleInitState initState;
         VehicleConfig vehicleConfig;
+
+        // Path to a design file (JSON). During scenario deserialization a
+        // non-empty designRef is resolved via loadDesignPhysics and OVERRIDES
+        // any inline vehicleConfig. loadInto does not resolve it.
+        std::string designRef = "";
+
         GuidanceMode initialGuidanceMode = GuidanceMode::None;
         
         double initialTargetX = 0.0;
@@ -40,6 +46,12 @@ namespace StrikeEngine::Kernel {
         // Entity selected by study wrappers for per-scenario summaries and
         // sweep/Monte Carlo rows. Zero preserves legacy behavior.
         std::size_t primaryEntityIndex = 0;
+
+        // Serialize/deserialize this scenario to/from a JSON file.
+        // save() returns false if the file cannot be opened; load() throws
+        // std::runtime_error if the file is missing or the JSON is malformed.
+        bool save(const std::string& path) const;
+        static ScenarioConfig load(const std::string& path);
 
         // Apply this scenario to the given kernel
         void loadInto(SimulationKernel& kernel) const {

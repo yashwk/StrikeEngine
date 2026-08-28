@@ -24,9 +24,9 @@ ScenarioConfig makeScenario(double initialSpeed)
     entity.initState.qy = 0.0;
     entity.initState.qz = 0.0;
     entity.initState.mass = 100.0;
-    entity.vehicleConfig.referenceArea = 0.4;
+    entity.vehicleConfig.aero.referenceArea = 0.4;
     entity.vehicleConfig.massDry = 90.0;
-    entity.vehicleConfig.cd = 0.2;
+    entity.vehicleConfig.aero.cd = 0.2;
     scenario.entities.push_back(entity);
     return scenario;
 }

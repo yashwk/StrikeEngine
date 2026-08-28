@@ -48,8 +48,9 @@ namespace StrikeEngine::Kernel {
 
     private:
         std::mt19937 rng;
-        double lastGpsUpdateTime = 0.0;
-        double gpsUpdateRate = 1.0; // 1 Hz GPS update
+        // Per-entity last GPS update time (s). GPS scheduling is now per-entity
+        // (enabled flag + gpsUpdateRateHz in SensorBlock).
+        std::vector<double> lastGpsUpdateTime;
         
         // Random walk biases (true biases drifting over time)
         // In a perfectly pure SoA, these true biases would live in another block (e.g. TrueSensorStateBlock),

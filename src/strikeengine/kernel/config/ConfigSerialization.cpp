@@ -1,0 +1,542 @@
+#include <strikeengine/kernel/config/ConfigSerialization.hpp>
+
+#include <nlohmann/json.hpp>
+
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace StrikeEngine::Kernel {
+
+using json = nlohmann::json;
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// Enum <-> snake_case string maps
+// ---------------------------------------------------------------------------
+
+std::string entityTypeToString(EntityType t) {
+    switch (t) {
+        case EntityType::Missile: return "missile";
+        case EntityType::Aircraft: return "aircraft";
+        case EntityType::SurfaceTarget: return "surface_target";
+        case EntityType::RadarSite: return "radar_site";
+        case EntityType::Chaff: return "chaff";
+        case EntityType::Flare: return "flare";
+    }
+    throw std::runtime_error("ConfigSerialization: unhandled EntityType");
+}
+
+EntityType entityTypeFromString(const std::string& s) {
+    if (s == "missile") return EntityType::Missile;
+    if (s == "aircraft") return EntityType::Aircraft;
+    if (s == "surface_target") return EntityType::SurfaceTarget;
+    if (s == "radar_site") return EntityType::RadarSite;
+    if (s == "chaff") return EntityType::Chaff;
+    if (s == "flare") return EntityType::Flare;
+    throw std::runtime_error("ConfigSerialization: unknown EntityType string '" + s + "'");
+}
+
+std::string allegianceToString(Allegiance a) {
+    switch (a) {
+        case Allegiance::Friendly: return "friendly";
+        case Allegiance::Hostile: return "hostile";
+        case Allegiance::Neutral: return "neutral";
+    }
+    throw std::runtime_error("ConfigSerialization: unhandled Allegiance");
+}
+
+Allegiance allegianceFromString(const std::string& s) {
+    if (s == "friendly") return Allegiance::Friendly;
+    if (s == "hostile") return Allegiance::Hostile;
+    if (s == "neutral") return Allegiance::Neutral;
+    throw std::runtime_error("ConfigSerialization: unknown Allegiance string '" + s + "'");
+}
+
+std::string seekerTypeToString(SeekerType t) {
+    switch (t) {
+        case SeekerType::None: return "none";
+        case SeekerType::RF: return "rf";
+        case SeekerType::IR: return "ir";
+        case SeekerType::PassiveRF: return "passive_rf";
+        case SeekerType::SARH: return "sarh";
+    }
+    throw std::runtime_error("ConfigSerialization: unhandled SeekerType");
+}
+
+SeekerType seekerTypeFromString(const std::string& s) {
+    if (s == "none") return SeekerType::None;
+    if (s == "rf") return SeekerType::RF;
+    if (s == "ir") return SeekerType::IR;
+    if (s == "passive_rf") return SeekerType::PassiveRF;
+    if (s == "sarh") return SeekerType::SARH;
+    throw std::runtime_error("ConfigSerialization: unknown SeekerType string '" + s + "'");
+}
+
+std::string fusingTypeToString(FusingType t) {
+    switch (t) {
+        case FusingType::Impact: return "impact";
+        case FusingType::Proximity: return "proximity";
+        case FusingType::Timed: return "timed";
+    }
+    throw std::runtime_error("ConfigSerialization: unhandled FusingType");
+}
+
+FusingType fusingTypeFromString(const std::string& s) {
+    if (s == "impact") return FusingType::Impact;
+    if (s == "proximity") return FusingType::Proximity;
+    if (s == "timed") return FusingType::Timed;
+    throw std::runtime_error("ConfigSerialization: unknown FusingType string '" + s + "'");
+}
+
+std::string guidanceModeToString(GuidanceMode m) {
+    switch (m) {
+        case GuidanceMode::None: return "none";
+        case GuidanceMode::ProportionalNavigation: return "proportional_navigation";
+        case GuidanceMode::Waypoint: return "waypoint";
+    }
+    throw std::runtime_error("ConfigSerialization: unhandled GuidanceMode");
+}
+
+GuidanceMode guidanceModeFromString(const std::string& s) {
+    if (s == "none") return GuidanceMode::None;
+    if (s == "proportional_navigation") return GuidanceMode::ProportionalNavigation;
+    if (s == "waypoint") return GuidanceMode::Waypoint;
+    throw std::runtime_error("ConfigSerialization: unknown GuidanceMode string '" + s + "'");
+}
+
+// ---------------------------------------------------------------------------
+// Parsing / file I/O helpers
+// ---------------------------------------------------------------------------
+
+json parseJsonText(const std::string& jsonText, const char* what) {
+    try {
+        return json::parse(jsonText);
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("ConfigSerialization: failed to parse ") +
+                                 what + ": " + e.what());
+    }
+}
+
+std::string readTextFile(const std::string& path, const char* what) {
+    std::ifstream f(path);
+    if (!f.is_open()) {
+        throw std::runtime_error(std::string("ConfigSerialization: cannot open ") +
+                                 what + " file '" + path + "'");
+    }
+    std::ostringstream buffer;
+    buffer << f.rdbuf();
+    return buffer.str();
+}
+
+bool isBlank(const std::string& s) {
+    for (char c : s) {
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\f' && c != '\v') {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <typename T>
+T getChecked(const json& j, const char* what) {
+    try {
+        return j.get<T>();
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("ConfigSerialization: invalid ") +
+                                 what + ": " + e.what());
+    }
+}
+
+} // namespace
+
+} // namespace StrikeEngine::Kernel
+
+namespace StrikeEngine::Models {
+
+// ThrustDataPoint is in StrikeEngine::Models; ADL finds these overloads when
+// (de)serializing the thrust_curve vector inside StageConfig.
+void to_json(nlohmann::json& j, const ThrustDataPoint& p) {
+    j = nlohmann::json{{"time_s", p.time_s}, {"thrust_n", p.thrust_n}};
+}
+
+void from_json(const nlohmann::json& j, ThrustDataPoint& p) {
+    p.time_s = j.at("time_s").get<double>();
+    p.thrust_n = j.at("thrust_n").get<double>();
+}
+
+} // namespace StrikeEngine::Models
+
+namespace StrikeEngine::Kernel {
+
+// ---------------------------------------------------------------------------
+// to_json / from_json for the config structs (internal to this translation
+// unit; never declared in public headers).
+// ---------------------------------------------------------------------------
+
+// --- Pure-scalar structs ---------------------------------------------------
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(AeroConfig, referenceArea, referenceLength,
+                                   cd, clAlpha, clFin, clMax)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(SensorConfig, imuEnabled, gpsEnabled,
+                                   accelNoiseStdDev, accelBiasStdDev,
+                                   gyroNoiseStdDev, gyroBiasStdDev,
+                                   gpsPosNoiseStdDev, gpsVelNoiseStdDev,
+                                   gpsUpdateRateHz, imuLeverArmX, imuLeverArmY,
+                                   imuLeverArmZ)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GuidanceAutopilotConfig, navigationConstant,
+                                   waypointGain, kAccelP, kRateP, kAlphaP,
+                                   kRollP, kRollD, maxDeflectionRad,
+                                   servoTimeConstantSec, maxServoRateRadPerSec)
+
+// --- StageConfig / PropulsionConfig ----------------------------------------
+
+void to_json(json& j, const StageConfig& s) {
+    j = json();
+    j["thrust_curve"] = s.thrustCurve;
+    j["vacuum_isp"] = s.vacuumIsp;
+    j["sea_level_isp"] = s.seaLevelIsp;
+    j["propellant_mass_kg"] = s.propellantMassKg;
+    j["dry_mass_kg"] = s.dryMassKg;
+}
+
+void from_json(const json& j, StageConfig& s) {
+    s.thrustCurve = j.at("thrust_curve").get<std::vector<Models::ThrustDataPoint>>();
+    s.vacuumIsp = j.at("vacuum_isp").get<double>();
+    s.seaLevelIsp = j.at("sea_level_isp").get<double>();
+    s.propellantMassKg = j.at("propellant_mass_kg").get<double>();
+    s.dryMassKg = j.at("dry_mass_kg").get<double>();
+}
+
+void to_json(json& j, const PropulsionConfig& p) {
+    j = json();
+    j["stages"] = p.stages;
+}
+
+void from_json(const json& j, PropulsionConfig& p) {
+    p.stages = j.at("stages").get<std::vector<StageConfig>>();
+}
+
+// --- SeekerConfig -----------------------------------------------------------
+
+void to_json(json& j, const SeekerConfig& s) {
+    j = json();
+    j["type"] = seekerTypeToString(s.type);
+    j["transmitter_power_w"] = s.transmitterPowerW;
+    j["antenna_gain_db"] = s.antennaGainDb;
+    j["wavelength_m"] = s.wavelengthM;
+    j["noise_floor_w"] = s.noiseFloorW;
+    j["snr_threshold_db"] = s.snrThresholdDb;
+    j["sensitivity_w"] = s.sensitivityW;
+    j["wavelength_band"] = s.wavelengthBand;
+    j["ir_extinction_per_m"] = s.irExtinctionPerM;
+    j["illuminator_px"] = s.illuminatorPx;
+    j["illuminator_py"] = s.illuminatorPy;
+    j["illuminator_pz"] = s.illuminatorPz;
+    j["illuminator_power_w"] = s.illuminatorPowerW;
+    j["illuminator_gain_db"] = s.illuminatorGainDb;
+    j["illuminator_wavelength_m"] = s.illuminatorWavelengthM;
+    j["field_of_view_half_angle_rad"] = s.fieldOfViewHalfAngleRad;
+    j["gimbal_azimuth_limit_rad"] = s.gimbalAzimuthLimitRad;
+    j["gimbal_elevation_limit_rad"] = s.gimbalElevationLimitRad;
+    j["lock_hysteresis_db"] = s.lockHysteresisDb;
+    j["lock_dropout_time_sec"] = s.lockDropoutTimeSec;
+    j["measurement_latency_sec"] = s.measurementLatencySec;
+}
+
+void from_json(const json& j, SeekerConfig& s) {
+    s.type = seekerTypeFromString(j.at("type").get<std::string>());
+    s.transmitterPowerW = j.at("transmitter_power_w").get<double>();
+    s.antennaGainDb = j.at("antenna_gain_db").get<double>();
+    s.wavelengthM = j.at("wavelength_m").get<double>();
+    s.noiseFloorW = j.at("noise_floor_w").get<double>();
+    s.snrThresholdDb = j.at("snr_threshold_db").get<double>();
+    s.sensitivityW = j.at("sensitivity_w").get<double>();
+    s.wavelengthBand = j.at("wavelength_band").get<int>();
+    s.irExtinctionPerM = j.at("ir_extinction_per_m").get<double>();
+    s.illuminatorPx = j.at("illuminator_px").get<double>();
+    s.illuminatorPy = j.at("illuminator_py").get<double>();
+    s.illuminatorPz = j.at("illuminator_pz").get<double>();
+    s.illuminatorPowerW = j.at("illuminator_power_w").get<double>();
+    s.illuminatorGainDb = j.at("illuminator_gain_db").get<double>();
+    s.illuminatorWavelengthM = j.at("illuminator_wavelength_m").get<double>();
+    s.fieldOfViewHalfAngleRad = j.at("field_of_view_half_angle_rad").get<double>();
+    s.gimbalAzimuthLimitRad = j.at("gimbal_azimuth_limit_rad").get<double>();
+    s.gimbalElevationLimitRad = j.at("gimbal_elevation_limit_rad").get<double>();
+    s.lockHysteresisDb = j.at("lock_hysteresis_db").get<double>();
+    s.lockDropoutTimeSec = j.at("lock_dropout_time_sec").get<double>();
+    s.measurementLatencySec = j.at("measurement_latency_sec").get<double>();
+}
+
+// --- WarheadConfig ----------------------------------------------------------
+
+void to_json(json& j, const WarheadConfig& w) {
+    j = json();
+    j["mass_kg"] = w.massKg;
+    j["fusing"] = fusingTypeToString(w.fusing);
+    j["proximity_trigger_m"] = w.proximityTriggerM;
+    j["timed_delay_sec"] = w.timedDelaySec;
+    j["lethal_radius_m"] = w.lethalRadiusM;
+}
+
+void from_json(const json& j, WarheadConfig& w) {
+    w.massKg = j.at("mass_kg").get<double>();
+    w.fusing = fusingTypeFromString(j.at("fusing").get<std::string>());
+    w.proximityTriggerM = j.at("proximity_trigger_m").get<double>();
+    w.timedDelaySec = j.at("timed_delay_sec").get<double>();
+    w.lethalRadiusM = j.at("lethal_radius_m").get<double>();
+}
+
+// --- VehicleConfig ----------------------------------------------------------
+
+void to_json(json& j, const VehicleConfig& v) {
+    j = json();
+    j["type"] = entityTypeToString(v.type);
+    j["initial_mass"] = v.initialMass;
+    j["mass_dry"] = v.massDry;
+    j["inertia_xx"] = v.Ixx;
+    j["inertia_yy"] = v.Iyy;
+    j["inertia_zz"] = v.Izz;
+    j["aero"] = v.aero;
+    j["propulsion"] = v.propulsion;
+    j["seeker"] = v.seeker;
+    j["sensor"] = v.sensor;
+    j["guidance_autopilot"] = v.guidanceAutopilot;
+    j["warhead"] = v.warhead;
+    j["rcs_profile_id"] = v.rcsProfileId;
+    j["ir_profile_id"] = v.irProfileId;
+    j["emitter_eirp_w"] = v.emitterEirpW;
+}
+
+void from_json(const json& j, VehicleConfig& v) {
+    v.type = entityTypeFromString(j.at("type").get<std::string>());
+    v.initialMass = j.at("initial_mass").get<double>();
+    v.massDry = j.at("mass_dry").get<double>();
+    v.Ixx = j.at("inertia_xx").get<double>();
+    v.Iyy = j.at("inertia_yy").get<double>();
+    v.Izz = j.at("inertia_zz").get<double>();
+    v.aero = j.at("aero").get<AeroConfig>();
+    v.propulsion = j.at("propulsion").get<PropulsionConfig>();
+    v.seeker = j.at("seeker").get<SeekerConfig>();
+    v.sensor = j.at("sensor").get<SensorConfig>();
+    v.guidanceAutopilot = j.at("guidance_autopilot").get<GuidanceAutopilotConfig>();
+    v.warhead = j.at("warhead").get<WarheadConfig>();
+    v.rcsProfileId = j.at("rcs_profile_id").get<std::string>();
+    v.irProfileId = j.at("ir_profile_id").get<std::string>();
+    v.emitterEirpW = j.at("emitter_eirp_w").get<double>();
+}
+
+// --- EarthEnvironmentConfig / EnvironmentConfig ------------------------------
+
+void to_json(json& j, const EarthEnvironmentConfig& e) {
+    j = json();
+    j["use_ecef_truth"] = e.useEcefTruth;
+    j["use_wgs84_gravity"] = e.useWgs84Gravity;
+    j["use_spherical_gravity"] = e.useSphericalGravity;
+    j["include_coriolis"] = e.includeCoriolis;
+    j["include_centrifugal"] = e.includeCentrifugal;
+    j["include_transport_rate"] = e.includeTransportRate;
+    j["include_earth_rate_gyro"] = e.includeEarthRateGyro;
+    j["reference_latitude_rad"] = e.referenceLatitudeRad;
+    j["reference_longitude_rad"] = e.referenceLongitudeRad;
+}
+
+void from_json(const json& j, EarthEnvironmentConfig& e) {
+    e.useEcefTruth = j.at("use_ecef_truth").get<bool>();
+    e.useWgs84Gravity = j.at("use_wgs84_gravity").get<bool>();
+    e.useSphericalGravity = j.at("use_spherical_gravity").get<bool>();
+    e.includeCoriolis = j.at("include_coriolis").get<bool>();
+    e.includeCentrifugal = j.at("include_centrifugal").get<bool>();
+    e.includeTransportRate = j.at("include_transport_rate").get<bool>();
+    e.includeEarthRateGyro = j.at("include_earth_rate_gyro").get<bool>();
+    e.referenceLatitudeRad = j.at("reference_latitude_rad").get<double>();
+    e.referenceLongitudeRad = j.at("reference_longitude_rad").get<double>();
+}
+
+void to_json(json& j, const EnvironmentConfig& e) {
+    j = json();
+    j["earth"] = e.earth;
+}
+
+void from_json(const json& j, EnvironmentConfig& e) {
+    e = EnvironmentConfig();  // callbacks reset to flat/zero defaults
+    e.earth = j.at("earth").get<EarthEnvironmentConfig>();
+}
+
+// --- VehicleInitState -------------------------------------------------------
+
+void to_json(json& j, const VehicleInitState& s) {
+    j = json();
+    j["px"] = s.px;
+    j["py"] = s.py;
+    j["pz"] = s.pz;
+    j["vx"] = s.vx;
+    j["vy"] = s.vy;
+    j["vz"] = s.vz;
+    j["qx"] = s.qx;
+    j["qy"] = s.qy;
+    j["qz"] = s.qz;
+    j["qw"] = s.qw;
+    j["wx"] = s.wx;
+    j["wy"] = s.wy;
+    j["wz"] = s.wz;
+    j["mass"] = s.mass;
+    j["allegiance"] = allegianceToString(s.allegiance);
+}
+
+void from_json(const json& j, VehicleInitState& s) {
+    // Missing fields fall back to: positions/velocities/rates 0, identity
+    // quaternion, mass 0, allegiance "friendly".
+    s.px = j.value("px", 0.0);
+    s.py = j.value("py", 0.0);
+    s.pz = j.value("pz", 0.0);
+    s.vx = j.value("vx", 0.0);
+    s.vy = j.value("vy", 0.0);
+    s.vz = j.value("vz", 0.0);
+    s.qx = j.value("qx", 0.0);
+    s.qy = j.value("qy", 0.0);
+    s.qz = j.value("qz", 0.0);
+    s.qw = j.value("qw", 1.0);
+    s.wx = j.value("wx", 0.0);
+    s.wy = j.value("wy", 0.0);
+    s.wz = j.value("wz", 0.0);
+    s.mass = j.value("mass", 0.0);
+    s.allegiance = allegianceFromString(j.value("allegiance", std::string("friendly")));
+}
+
+// --- ScenarioEntityConfig / ScenarioConfig -----------------------------------
+
+void to_json(json& j, const ScenarioEntityConfig& e) {
+    j = json();
+    j["init_state"] = e.initState;
+    j["vehicle_config"] = e.vehicleConfig;
+    j["design_ref"] = e.designRef;
+    j["initial_guidance_mode"] = guidanceModeToString(e.initialGuidanceMode);
+    j["initial_target_x"] = e.initialTargetX;
+    j["initial_target_y"] = e.initialTargetY;
+    j["initial_target_z"] = e.initialTargetZ;
+    j["initial_target_vx"] = e.initialTargetVx;
+    j["initial_target_vy"] = e.initialTargetVy;
+    j["initial_target_vz"] = e.initialTargetVz;
+    j["initial_max_accel"] = e.initialMaxAccel;
+}
+
+void from_json(const json& j, ScenarioEntityConfig& e) {
+    e.initState = j.at("init_state").get<VehicleInitState>();
+    e.initialGuidanceMode = guidanceModeFromString(
+        j.at("initial_guidance_mode").get<std::string>());
+    e.initialTargetX = j.at("initial_target_x").get<double>();
+    e.initialTargetY = j.at("initial_target_y").get<double>();
+    e.initialTargetZ = j.at("initial_target_z").get<double>();
+    e.initialTargetVx = j.at("initial_target_vx").get<double>();
+    e.initialTargetVy = j.at("initial_target_vy").get<double>();
+    e.initialTargetVz = j.at("initial_target_vz").get<double>();
+    e.initialMaxAccel = j.at("initial_max_accel").get<double>();
+
+    e.designRef = j.value("design_ref", std::string(""));
+    if (!e.designRef.empty()) {
+        // A design file overrides any inline vehicle config.
+        e.vehicleConfig = loadDesignPhysics(e.designRef);
+    } else {
+        e.vehicleConfig = j.at("vehicle_config").get<VehicleConfig>();
+    }
+}
+
+void to_json(json& j, const ScenarioConfig& s) {
+    j = json();
+    j["name"] = s.name;
+    j["description"] = s.description;
+    j["environment"] = s.environment;
+    j["primary_entity_index"] = s.primaryEntityIndex;
+    j["entities"] = s.entities;
+}
+
+void from_json(const json& j, ScenarioConfig& s) {
+    s.name = j.at("name").get<std::string>();
+    s.description = j.at("description").get<std::string>();
+    s.environment = j.at("environment").get<EnvironmentConfig>();
+    s.primaryEntityIndex = j.at("primary_entity_index").get<std::size_t>();
+    s.entities = j.at("entities").get<std::vector<ScenarioEntityConfig>>();
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+std::string serializeVehicleConfig(const VehicleConfig& config) {
+    return json(config).dump();
+}
+
+VehicleConfig deserializeVehicleConfig(const std::string& jsonText) {
+    json j = parseJsonText(jsonText, "VehicleConfig");
+    return getChecked<VehicleConfig>(j, "VehicleConfig");
+}
+
+std::string serializeEnvironment(const EnvironmentConfig& environment) {
+    return json(environment).dump();
+}
+
+EnvironmentConfig deserializeEnvironment(const std::string& jsonText) {
+    json j = parseJsonText(jsonText, "EnvironmentConfig");
+    return getChecked<EnvironmentConfig>(j, "EnvironmentConfig");
+}
+
+std::string serializeScenario(const ScenarioConfig& scenario) {
+    return json(scenario).dump();
+}
+
+ScenarioConfig deserializeScenario(const std::string& jsonText) {
+    json j = parseJsonText(jsonText, "ScenarioConfig");
+    return getChecked<ScenarioConfig>(j, "ScenarioConfig");
+}
+
+std::string serializeDesign(const std::string& name,
+                            const std::string& geometryJson,
+                            const VehicleConfig& physics) {
+    json j;
+    j["name"] = name;
+    if (!isBlank(geometryJson)) {
+        try {
+            j["geometry"] = json::parse(geometryJson);
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("ConfigSerialization: failed to parse "
+                                                 "design geometry: ") + e.what());
+        }
+    }
+    j["physics"] = physics;
+    return j.dump();
+}
+
+VehicleConfig loadDesignPhysics(const std::string& filePath) {
+    const std::string text = readTextFile(filePath, "design");
+    json j = parseJsonText(text, "design file");
+    try {
+        return j.at("physics").get<VehicleConfig>();
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("ConfigSerialization: design file '") +
+                                 filePath + "' has invalid or missing 'physics': " +
+                                 e.what());
+    }
+}
+
+// --- ScenarioConfig::save / load --------------------------------------------
+
+bool ScenarioConfig::save(const std::string& path) const {
+    std::ofstream f(path);
+    if (!f.is_open()) {
+        return false;
+    }
+    f << serializeScenario(*this);
+    return static_cast<bool>(f);
+}
+
+ScenarioConfig ScenarioConfig::load(const std::string& path) {
+    return deserializeScenario(readTextFile(path, "scenario"));
+}
+
+} // namespace StrikeEngine::Kernel

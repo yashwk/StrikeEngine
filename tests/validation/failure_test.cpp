@@ -52,8 +52,14 @@ VehicleInitState makeInit(double pz, double mass)
     init.qw = 1.0; init.qx = 0.0; init.qy = 0.0; init.qz = 0.0;
     init.wx = 0.0; init.wy = 0.0; init.wz = 0.0;
     init.mass = mass;
-    init.Ixx = 3.0; init.Iyy = 10.0; init.Izz = 10.0;
     return init;
+}
+
+VehicleConfig makeInertialConfig()
+{
+    VehicleConfig cfg;
+    cfg.Ixx = 3.0; cfg.Iyy = 10.0; cfg.Izz = 10.0;
+    return cfg;
 }
 
 } // namespace
@@ -72,15 +78,17 @@ int main()
         SimulationKernel kernel;
         kernel.setRandomSeed(0xF171u);
         VehicleInitState init = makeInit(5000.0, 500.0);
-        VehicleConfig cfg;
+        VehicleConfig cfg = makeInertialConfig();
         cfg.massDry = 370.0;
-        cfg.referenceArea = 0.5;
-        cfg.cd = 0.15;
-        cfg.clAlpha = 2.5;
-        cfg.clFin = 2.0;
-        cfg.thrustCurve = { {0.0, 50000.0}, {20.0, 50000.0}, {20.1, 0.0}, {100.0, 0.0} };
-        cfg.vacuumIsp = 250.0;
-        cfg.seaLevelIsp = 220.0;
+        cfg.aero.referenceArea = 0.5;
+        cfg.aero.cd = 0.15;
+        cfg.aero.clAlpha = 2.5;
+        cfg.aero.clFin = 2.0;
+        StageConfig stage;
+        stage.thrustCurve = { {0.0, 50000.0}, {20.0, 50000.0}, {20.1, 0.0}, {100.0, 0.0} };
+        stage.vacuumIsp = 250.0;
+        stage.seaLevelIsp = 220.0;
+        cfg.propulsion.stages.push_back(stage);
         const PhysicsId id = kernel.createVehicle(init, cfg);
         const auto& phys = kernel.getPhysics();
 
@@ -102,11 +110,11 @@ int main()
         SimulationKernel kernel;
         kernel.setRandomSeed(0xF172u);
         VehicleInitState init = makeInit(2000.0, 200.0);
-        VehicleConfig cfg;
-        cfg.referenceArea = 0.5;
-        cfg.cd = 0.15;
-        cfg.clAlpha = 2.5;
-        cfg.clFin = 2.0;
+        VehicleConfig cfg = makeInertialConfig();
+        cfg.aero.referenceArea = 0.5;
+        cfg.aero.cd = 0.15;
+        cfg.aero.clAlpha = 2.5;
+        cfg.aero.clFin = 2.0;
         const PhysicsId id = kernel.createVehicle(init, cfg);
 
         SimulationCommand cmd;
@@ -135,7 +143,7 @@ int main()
     {
         SimulationKernel kernel;
         kernel.setRandomSeed(0xF173u);
-        const PhysicsId id = kernel.createVehicle(makeInit(3000.0, 150.0));
+        const PhysicsId id = kernel.createVehicle(makeInit(3000.0, 150.0), makeInertialConfig());
         const auto& sensors = kernel.getSensors();
 
         constexpr double dt = 0.1;
@@ -160,11 +168,11 @@ int main()
         SimulationKernel kernel;
         kernel.setRandomSeed(0xF174u);
         VehicleInitState init = makeInit(2000.0, 200.0);
-        VehicleConfig cfg;
-        cfg.referenceArea = 0.5;
-        cfg.cd = 0.15;
-        cfg.clAlpha = 2.5;
-        cfg.clFin = 2.0;
+        VehicleConfig cfg = makeInertialConfig();
+        cfg.aero.referenceArea = 0.5;
+        cfg.aero.cd = 0.15;
+        cfg.aero.clAlpha = 2.5;
+        cfg.aero.clFin = 2.0;
         const PhysicsId id = kernel.createVehicle(init, cfg);
 
         SimulationCommand cmd;
@@ -201,7 +209,7 @@ int main()
         kernel.setRandomSeed(0xF175u);
         EventCounters counters;
         subscribeCounter(kernel, counters);
-        const PhysicsId id = kernel.createVehicle(makeInit(2000.0, 200.0));
+        const PhysicsId id = kernel.createVehicle(makeInit(2000.0, 200.0), makeInertialConfig());
         const auto& phys = kernel.getPhysics();
         const auto& status = kernel.getStatus();
 
@@ -212,7 +220,7 @@ int main()
         check(counters.structuralFailure == 1,
               "applyDamage dispatches exactly one StructuralFailure event");
 
-        const PhysicsId id2 = kernel.createVehicle(makeInit(2000.0, 200.0));
+        const PhysicsId id2 = kernel.createVehicle(makeInit(2000.0, 200.0), makeInertialConfig());
         kernel.failEntity(id2, FailureMode::StructuralFailure);
         check(!status.isAlive[id2] && !phys.active[id2] && status.health[id2] == 0.0,
               "failEntity(StructuralFailure) deactivates the entity");
@@ -227,7 +235,7 @@ int main()
         kernel.setRandomSeed(0xF176u);
         EventCounters counters;
         subscribeCounter(kernel, counters);
-        const PhysicsId id = kernel.createVehicle(makeInit(3000.0, 150.0));
+        const PhysicsId id = kernel.createVehicle(makeInit(3000.0, 150.0), makeInertialConfig());
         const auto& status = kernel.getStatus();
         const auto& phys = kernel.getPhysics();
 
@@ -279,7 +287,7 @@ int main()
     // ---- Argument validation and partial damage ----
     {
         SimulationKernel kernel;
-        const PhysicsId id = kernel.createVehicle(makeInit(2000.0, 100.0));
+        const PhysicsId id = kernel.createVehicle(makeInit(2000.0, 100.0), makeInertialConfig());
         const auto& status = kernel.getStatus();
 
         kernel.applyDamage(id, 40.0);

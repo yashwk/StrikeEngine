@@ -44,13 +44,8 @@ namespace StrikeEngine::Kernel {
             ControlBlock& control);
 
         // Direct acceleration-command controller: feed-forward fin demand
-        // plus body-rate and AoA damping. The old acceleration->rate cascade
-        // could request an impossible rate and then saturate the fins.
-        static constexpr double kAccelP     = 0.030; // rad deflection per (m/s^2)
-        static constexpr double kRateP      = 1.000; // rad deflection per (rad/s)
-        static constexpr double kAlphaP     = 0.200; // rad deflection per rad AoA/beta
-        static constexpr double kRollP      = 0.10;  // roll deflection per rad roll
-        static constexpr double kRollD      = 0.05;  // roll deflection per (rad/s)
+        // plus body-rate and AoA damping. Per-entity gains now live in
+        // ControlBlock (design-time configurable); see SimulationKernel.
     };
 
 } // namespace StrikeEngine::Kernel

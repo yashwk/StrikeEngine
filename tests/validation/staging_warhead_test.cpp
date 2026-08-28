@@ -1,0 +1,135 @@
+#include <strikeengine/kernel/SimulationKernel.hpp>
+#include <strikeengine/kernel/config/VehicleConfig.hpp>
+
+#include <cstdio>
+#include <cmath>
+#include <algorithm>
+
+using namespace StrikeEngine::Kernel;
+
+static int failures = 0;
+static void check(bool ok, const char* what) {
+    std::printf("  [%s] %s\n", ok ? "PASS" : "FAIL", what);
+    if (!ok) ++failures;
+}
+
+static VehicleInitState makeInit(double px, double py, double pz, double mass = 100.0) {
+    VehicleInitState init{};
+    init.px = px; init.py = py; init.pz = pz;
+    init.vx = 0; init.vy = 0; init.vz = 0;
+    init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
+    init.wx = 0; init.wy = 0; init.wz = 0;
+    init.mass = mass;
+    return init;
+}
+
+int main() {
+    std::printf("=== staging_warhead_test: multi-stage propulsion + warhead fusing ===\n");
+
+    // ---- Part A: two-stage propulsion ----
+    {
+        SimulationKernel kernel;
+        kernel.setRandomSeed(0x5A17u);
+
+        int separations = 0, detonations = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::StageSeparation) ++separations;
+            if (e.type == EventType::Detonation) ++detonations;
+        });
+
+        VehicleConfig cfg;
+        cfg.initialMass = 200.0;
+        cfg.massDry = 100.0;
+        cfg.Ixx = 10.0; cfg.Iyy = 20.0; cfg.Izz = 20.0;
+
+        StageConfig s0;
+        s0.thrustCurve = {{0.0, 50000.0}, {2.0, 50000.0}, {2.001, 0.0}, {100.0, 0.0}};
+        s0.dryMassKg = 50.0;
+        StageConfig s1;
+        s1.thrustCurve = {{0.0, 20000.0}, {1.0, 20000.0}, {1.001, 0.0}, {100.0, 0.0}};
+        s1.dryMassKg = 0.0;
+        cfg.propulsion.stages = {s0, s1};
+
+        const auto id = kernel.createVehicle(makeInit(0, 0, 1000.0), cfg);
+        const auto& phys = kernel.getPhysics();
+
+        check(phys.stageCount[id] == 2, "two stages registered");
+        check(phys.stageIndex[id] == 0, "stage 0 active at launch");
+        check(std::abs(phys.massDry[id] - 150.0) < 1e-9,
+              "initial massDry is final dry + separable dry (100 + 50)");
+
+        for (int step = 0; step < 250; ++step) kernel.step(0.01);  // 2.5 s (> stage-0 burnout)
+
+        check(separations == 1, "exactly one StageSeparation event fired");
+        check(phys.stageIndex[id] == 1, "stage 1 is active after separation");
+        check(std::abs(phys.massDry[id] - 100.0) < 1e-9,
+              "separation drops the spent stage dry mass (150 -> 100)");
+        check(phys.mass[id] < 200.0 - 49.0, "mass dropped spent structure and propellant");
+        check(phys.Ixx[id] < 10.0, "inertia rescaled down at separation");
+        check(detonations == 0, "no warhead detonation on a motor-only vehicle");
+    }
+
+    // ---- Part B: proximity fuse ----
+    {
+        SimulationKernel kernel;
+        int detonations = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::Detonation) ++detonations;
+        });
+
+        VehicleConfig cfg;
+        cfg.warhead.fusing = FusingType::Proximity;
+        cfg.warhead.proximityTriggerM = 40.0;
+        cfg.warhead.lethalRadiusM = 60.0;
+        const auto id = kernel.createVehicle(makeInit(0, 0, 100.0), cfg);
+        const auto tid = kernel.createVehicle(makeInit(30.0, 0, 100.0));  // ~30 m away, within 40 m
+
+        kernel.step(0.01);
+        check(detonations >= 1, "proximity fuse detonates near the target");
+        check(!kernel.getStatus().isAlive[tid], "target destroyed within lethal radius");
+        check(kernel.getStatus().isAlive[id], "warhead vehicle itself survives (MVP)");
+    }
+
+    // ---- Part C: timed fuse ----
+    {
+        SimulationKernel kernel;
+        int detonations = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::Detonation) ++detonations;
+        });
+
+        VehicleConfig cfg;
+        cfg.warhead.fusing = FusingType::Timed;
+        cfg.warhead.timedDelaySec = 0.2;
+        cfg.warhead.lethalRadiusM = 60.0;
+        kernel.createVehicle(makeInit(0, 0, 100.0), cfg);
+        const auto tid = kernel.createVehicle(makeInit(20.0, 0, 100.0));  // ~20 m away
+
+        for (int step = 0; step < 30; ++step) kernel.step(0.01);  // 0.3 s
+        check(detonations >= 1, "timed fuse detonates after its delay");
+        check(!kernel.getStatus().isAlive[tid], "target destroyed within lethal radius");
+    }
+
+    // ---- Part D: impact fuse (on ground impact) ----
+    {
+        SimulationKernel kernel;
+        int detonations = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::Detonation) ++detonations;
+        });
+
+        VehicleConfig cfg;
+        cfg.warhead.fusing = FusingType::Impact;
+        cfg.warhead.lethalRadiusM = 120.0;
+        const auto id = kernel.createVehicle(makeInit(0, 0, 0.5), cfg);   // falls to ground
+        const auto tid = kernel.createVehicle(makeInit(0, 0, 100.0));     // 100 m above
+
+        for (int step = 0; step < 60; ++step) kernel.step(0.01);  // 0.6 s (ground impact)
+        check(detonations >= 1, "impact fuse detonates on ground impact");
+        check(!kernel.getStatus().isAlive[id], "warhead vehicle killed by ground impact");
+        check(!kernel.getStatus().isAlive[tid], "nearby target killed by the warhead");
+    }
+
+    std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
+    return failures == 0 ? 0 : 1;
+}

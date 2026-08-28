@@ -62,8 +62,8 @@ Kernel::ScenarioConfig makeEcefScenario()
         entity.initState.pz = position.z;
         entity.initState.qw = 1.0;
         entity.initState.mass = 100.0;
-        entity.vehicleConfig.referenceArea = 0.0;
-        entity.vehicleConfig.cd = 0.0;
+        entity.vehicleConfig.aero.referenceArea = 0.0;
+        entity.vehicleConfig.aero.cd = 0.0;
         scenario.entities.push_back(entity);
     }
     return scenario;

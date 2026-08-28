@@ -26,7 +26,7 @@ namespace StrikeEngine::Kernel {
         trueGyroBiasX.clear();
         trueGyroBiasY.clear();
         trueGyroBiasZ.clear();
-        lastGpsUpdateTime = 0.0;
+        lastGpsUpdateTime.clear();
     }
 
     void SensorSystem::ensureCapacity(std::size_t size) {
@@ -37,6 +37,9 @@ namespace StrikeEngine::Kernel {
             trueGyroBiasX.resize(size, 0.0);
             trueGyroBiasY.resize(size, 0.0);
             trueGyroBiasZ.resize(size, 0.0);
+        }
+        if (lastGpsUpdateTime.size() < size) {
+            lastGpsUpdateTime.resize(size, 0.0);
         }
     }
 
@@ -60,12 +63,9 @@ namespace StrikeEngine::Kernel {
             sensors.gpsVelX.resize(size); sensors.gpsVelY.resize(size); sensors.gpsVelZ.resize(size);
             sensors.gpsUpdated.resize(size);
             sensors.imuLeverArmX.resize(size); sensors.imuLeverArmY.resize(size); sensors.imuLeverArmZ.resize(size);
-        }
-
-        bool updateGps = false;
-        if (currentTime - lastGpsUpdateTime >= 1.0 / gpsUpdateRate) {
-            updateGps = true;
-            lastGpsUpdateTime = currentTime;
+            sensors.imuEnabled.resize(size, true);
+            sensors.gpsEnabled.resize(size, true);
+            sensors.gpsUpdateRateHz.resize(size, 1.0);
         }
 
         std::normal_distribution<double> stdNorm(0.0, 1.0);
@@ -78,6 +78,17 @@ namespace StrikeEngine::Kernel {
             if (i < status.sensorFailed.size() && status.sensorFailed[i]) {
                 sensors.gpsUpdated[i] = false;
                 continue;
+            }
+
+            // Per-entity GPS refresh scheduling: a sample is produced only when
+            // the GPS device is enabled and the per-entity interval has elapsed.
+            bool updateGps = false;
+            if (sensors.gpsEnabled[i]) {
+                const double period = 1.0 / sensors.gpsUpdateRateHz[i];
+                if (currentTime - lastGpsUpdateTime[i] >= period) {
+                    updateGps = true;
+                    lastGpsUpdateTime[i] = currentTime;
+                }
             }
 
             // 1. IMU Specific Force (world-frame acceleration minus gravity).
@@ -166,22 +177,26 @@ namespace StrikeEngine::Kernel {
                 bfz += termAz + termCz;
             }
 
-            // Random walk biases (slow drift) - very simple model
-            trueAccelBiasX[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
-            trueAccelBiasY[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
-            trueAccelBiasZ[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
-            trueGyroBiasX[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
-            trueGyroBiasY[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
-            trueGyroBiasZ[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
+            // Random walk biases + measurement output. A disabled IMU freezes
+            // its last measurements and stops its streaming-bias drift.
+            if (sensors.imuEnabled[i]) {
+                // Random walk biases (slow drift) - very simple model
+                trueAccelBiasX[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
+                trueAccelBiasY[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
+                trueAccelBiasZ[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
+                trueGyroBiasX[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
+                trueGyroBiasY[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
+                trueGyroBiasZ[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
 
-            // Add noise and bias
-            sensors.accelX[i] = bfx + trueAccelBiasX[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
-            sensors.accelY[i] = bfy + trueAccelBiasY[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
-            sensors.accelZ[i] = bfz + trueAccelBiasZ[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
+                // Add noise and bias
+                sensors.accelX[i] = bfx + trueAccelBiasX[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
+                sensors.accelY[i] = bfy + trueAccelBiasY[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
+                sensors.accelZ[i] = bfz + trueAccelBiasZ[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
 
-            sensors.gyroX[i] = bwx + trueGyroBiasX[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
-            sensors.gyroY[i] = bwy + trueGyroBiasY[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
-            sensors.gyroZ[i] = bwz + trueGyroBiasZ[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
+                sensors.gyroX[i] = bwx + trueGyroBiasX[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
+                sensors.gyroY[i] = bwy + trueGyroBiasY[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
+                sensors.gyroZ[i] = bwz + trueGyroBiasZ[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
+            }
 
             // 2. GPS Update
             sensors.gpsUpdated[i] = updateGps;

@@ -43,10 +43,10 @@ int main() {
     init.qz = 0.0;
     init.wx = 0; init.wy = 0; init.wz = 0;
     init.mass = 100.0;
-    init.Ixx = 1.0; init.Iyy = 10.0; init.Izz = 10.0;
 
     VehicleConfig cfg;
-    cfg.referenceArea = 0.0;   // coasting point mass: no aero torques
+    cfg.Ixx = 1.0; cfg.Iyy = 10.0; cfg.Izz = 10.0;
+    cfg.aero.referenceArea = 0.0;   // coasting point mass: no aero torques
 
     // Kernel A: gyro models the earth rate; INS compensates it.
     EnvironmentConfig envA;

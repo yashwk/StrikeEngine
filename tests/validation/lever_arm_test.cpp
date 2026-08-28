@@ -37,14 +37,14 @@ int main() {
     init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
     init.wx = 0; init.wy = 0; init.wz = 1.0;
     init.mass = 100.0;
-    init.Ixx = 1.0; init.Iyy = 10.0; init.Izz = 10.0;
 
     VehicleConfig base;
-    base.referenceArea = 0.0;   // coasting point mass: no aero, steady spin
+    base.Ixx = 1.0; base.Iyy = 10.0; base.Izz = 10.0;
+    base.aero.referenceArea = 0.0;   // coasting point mass: no aero, steady spin
 
     // Kernel A: IMU offset 1 m along body +Y from the centre of mass.
     VehicleConfig cfgA = base;
-    cfgA.imuLeverArmY = 1.0;
+    cfgA.sensor.imuLeverArmY = 1.0;
     SimulationKernel kernelA;
     kernelA.setRandomSeed(42u);
     kernelA.createVehicle(init, cfgA);

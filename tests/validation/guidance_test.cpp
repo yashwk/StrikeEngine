@@ -47,6 +47,8 @@ int main()
     guidance.targetX = {1000.0}; guidance.targetY = {0.0}; guidance.targetZ = {0.0};
     guidance.targetVx = {0.0}; guidance.targetVy = {10.0}; guidance.targetVz = {0.0};
     guidance.maxAccel = {0.0};
+    guidance.navigationConstant = {3.5};
+    guidance.waypointGain = {20.0};
     guidance.commandedAccelX = {0.0}; guidance.commandedAccelY = {0.0};
     guidance.commandedAccelZ = {0.0};
 
