@@ -49,6 +49,7 @@ namespace StrikeEngine::Kernel {
     // Per-entity warhead state (see SimulationKernel::processWarheads).
     struct WarheadState {
         double lethalRadiusM = 0.0;
+        double falloffRadiusM = 0.0;
         FusingType fusing = FusingType::Impact;
         double proximityTriggerM = 0.0;
         double timedDelaySec = 0.0;

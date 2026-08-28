@@ -334,6 +334,7 @@ void to_json(json& j, const WarheadConfig& w) {
     j["proximity_trigger_m"] = w.proximityTriggerM;
     j["timed_delay_sec"] = w.timedDelaySec;
     j["lethal_radius_m"] = w.lethalRadiusM;
+    j["falloff_radius_m"] = w.falloffRadiusM;
 }
 
 void from_json(const json& j, WarheadConfig& w) {
@@ -342,6 +343,14 @@ void from_json(const json& j, WarheadConfig& w) {
     w.proximityTriggerM = j.at("proximity_trigger_m").get<double>();
     w.timedDelaySec = j.at("timed_delay_sec").get<double>();
     w.lethalRadiusM = j.at("lethal_radius_m").get<double>();
+    // Optional: pre-existing files without the key load the flat law (0.0).
+    w.falloffRadiusM = j.value("falloff_radius_m", 0.0);
+    if (w.falloffRadiusM > 0.0 && w.falloffRadiusM < w.lethalRadiusM) {
+        throw std::runtime_error("ConfigSerialization: invalid falloff_radius_m (" +
+                                 std::to_string(w.falloffRadiusM) + " m) below "
+                                 "lethal_radius_m (" +
+                                 std::to_string(w.lethalRadiusM) + " m)");
+    }
 }
 
 // --- VehicleConfig ----------------------------------------------------------

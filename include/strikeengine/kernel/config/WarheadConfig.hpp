@@ -12,6 +12,10 @@ namespace StrikeEngine::Kernel {
         double proximityTriggerM = 0.0;
         double timedDelaySec = 0.0;
         double lethalRadiusM = 0.0;
+        // Outer edge of the fragmentation/overpressure falloff band (m).
+        // 0.0 (or <= lethalRadiusM) disables the band and restores the flat
+        // lethal-radius kill law.
+        double falloffRadiusM = 0.0;
     };
 
 } // namespace StrikeEngine::Kernel

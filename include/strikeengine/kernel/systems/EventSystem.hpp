@@ -28,6 +28,9 @@ namespace StrikeEngine::Kernel {
         double timestamp;
         // Optional custom data
         int customCode = 0;
+        // Stage-separation payload: unburned propellant jettisoned with the
+        // spent stage (kg). 0.0 when the stage burned out by exhaustion.
+        double dumpedMassKg = 0.0;
     };
 
     using EventCallback = std::function<void(const SimulationEvent&)>;

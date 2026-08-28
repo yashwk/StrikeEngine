@@ -41,6 +41,10 @@ The project boundaries are explicit:
 - StrikeCEM remains a separate project. Its CLI is retained for offline batch
   work and its `strikecem_lib` shared library is the intended embedding
   boundary for StrikeSim; StrikeCEM source is not part of StrikeEngine.
+  StrikeCEM produces the aerodynamic coefficient tables (Barrowman first-cut →
+  CFD). CFD validation is **StrikeCFD**, a separate project in a different
+  folder. The eventual goal is to build the **StrikeDesigner** surface inside
+  **StrikeSim** on the stabilized StrikeEngine.
 - StrikeDesigner owns design intent and identity, StrikeCEM owns computation,
   validation, and provenance, and StrikeEngine owns runtime simulation and
   signature/database lookup. Integration must carry identity and revision
@@ -57,7 +61,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **34/34 CTest tests passing** in Release.
+The current validated checkpoint is **35/35 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -214,7 +218,8 @@ structs `aero`, `propulsion`, `seeker`, `sensor`, `guidanceAutopilot`,
   gains `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
   `servoTimeConstantSec`, and `maxServoRateRadPerSec`.
 - `WarheadConfig`: `massKg`, `FusingType` (`Impact`/`Proximity`/`Timed`),
-  `proximityTriggerM`, `timedDelaySec`, and `lethalRadiusM`.
+  `proximityTriggerM`, `timedDelaySec`, `lethalRadiusM`, and the optional
+  `falloffRadiusM` (0.0 default = flat lethal-radius law; see §8).
 - `SeekerConfig`: per-entity seeker type and RF/IR/SARH parameters.
 
 An empty thrust curve means coasting. A configured motor burns only while fuel
@@ -303,7 +308,7 @@ Earth-radius offsets.
 `intercept_test_01` is a deterministically tuned data set (sensor seed
 `0xDEADBEEF`) used to demonstrate the designer→engine pipeline end-to-end; it
 is not a guidance-performance claim. Its assertions — a real guided intercept
-(min miss 16.96 m < 50 m at t≈11.7 s, now flying on the data-driven aero
+(min miss 45.4 m < 50 m at t≈11.5 s, now flying on the data-driven aero
 coefficient tables) and a proximity-warhead kill via the
 event system — are pipeline evidence, not a general accuracy guarantee.
 
@@ -345,8 +350,9 @@ at the profile loader, and is never allowed to reach the interpolator.
 
 Moments and side-force remain the linear engineering model; coefficient tables
 for moments (cm) and lateral/β stability, plus Mach-scaled fin effectiveness,
-are future extensions. Tables are intended to be produced by a future
-strikeCEM pipeline (Barrowman first-cut → CFD) and consumed by StrikeEngine.
+are future extensions. Tables are produced by the StrikeCEM program (Barrowman
+first-cut → CFD), with CFD validation under the separate StrikeCFD project, and
+consumed by StrikeEngine.
 
 ### 6.3 Rotation and actuators
 
@@ -376,8 +382,9 @@ stages except the last.
 
 After each physics step the kernel's staging pass detects the active stage's
 burnout — the last time in its thrust curve that still produces positive
-thrust. On burnout it drops the spent stage's `dryMassKg` from both current
-mass and `massDry`, rescales `Ixx/Iyy/Izz` by the current-to-new mass ratio,
+thrust. On burnout it jettisons the spent stage's unburned (leftover)
+propellant, drops the spent stage's `dryMassKg` from both current mass and
+`massDry`, rescales `Ixx/Iyy/Izz` by the post-dump current-to-new mass ratio,
 advances to the next stage, resets the stage ignition time, and dispatches a
 timestamped `StageSeparation` event.
 
@@ -385,7 +392,14 @@ A stage with `propellantMassKg > 0` burns only its declared propellant: the
 mass-flow floor becomes `massDry` plus the propellant reserved for later
 stages, and the stage separates on propellant exhaustion (or curve end,
 whichever comes first). A stage with `propellantMassKg <= 0` keeps the
-curve-end behavior. Leftover propellant in a spent stage is not dumped (MVP).
+curve-end behavior.
+
+The leftover-propellant dump lands the vehicle mass exactly on the new stage's
+floor (`massDry` plus the remaining stages' reserved propellant) at separation;
+the dumped amount is reported on the `StageSeparation` event as `dumpedMassKg`.
+A stage that burned out by propellant exhaustion had already pinned its mass to
+that floor, so its leftover is ~0 and exhaustion burnouts are byte-identical to
+the pre-dump behavior.
 
 The propulsion law `T = ṁ·Isp·g0` is enforced at every instant, including fuel
 exhaustion: the fuel-depletion guard caps mass flow to the propellant remaining
@@ -501,17 +515,28 @@ and not probabilistic, partial health has no effect beyond deactivation, and
 repair is not modeled.
 
 Multi-stage vehicles dispatch a `StageSeparation` event when a spent stage
-separates (§6.5). Warhead fusing is evaluated each step after ground-impact
+separates (§6.5); the event reports the jettisoned leftover propellant in
+`dumpedMassKg`. Warhead fusing is evaluated each step after ground-impact
 detection. The fuse triggers as follows:
 
 - `Impact` detonates when the carrying entity is deactivated (ground impact);
 - `Proximity` detonates when an alive entity is within `proximityTriggerM`;
 - `Timed` detonates `timedDelaySec` after launch.
 
-Detonation dispatches a timestamped `Detonation` event and destroys (health
-set to zero) every other alive entity within `lethalRadiusM`. A warhead with
-`lethalRadiusM <= 0` is inert. The lethality model is a flat radius cut; there
-is no fragmentation or overpressure falloff curve yet.
+Detonation dispatches a timestamped `Detonation` event and applies a
+fragmentation/overpressure kill law to every other alive entity. With
+`falloffRadiusM <= 0` (or `<= lethalRadiusM`) the law is flat: guaranteed kill
+inside `lethalRadiusM`, none beyond — the pre-feature behavior, byte-identical.
+With `falloffRadiusM > lethalRadiusM` the kill probability is 1 inside
+`lethalRadiusM`, decays linearly
+`(falloffRadiusM − d) / (falloffRadiusM − lethalRadiusM)` across the band
+`(lethalRadiusM, falloffRadiusM]`, and is 0 beyond `falloffRadiusM`. A kill is
+deterministic when the probability is >= 1; otherwise a uniform draw from the
+kernel RNG stream decides only when `0 < p < 1`, so flat-law warheads
+(`falloffRadiusM <= 0`) never consume the kernel RNG stream. A warhead with
+`lethalRadiusM <= 0` is inert. A `falloff_radius_m` below `lethal_radius_m` is
+rejected at load and at `createVehicle`; a missing `falloff_radius_m` key loads
+as 0.0 (flat law), preserving backward compatibility.
 
 Available wrappers:
 

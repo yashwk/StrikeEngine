@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **34/34 CTest tests pass**.
+- Release validation: **35/35 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -117,7 +117,15 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   `createVehicle(config)` wiring of subsystem config into the per-entity SoA
   blocks, including the profile-id resolution step (a non-empty profile id
   replaces the inline sub-config; a failed load throws `std::runtime_error`
-  naming the file), plus the `processStaging` and `processWarheads` passes.
+  naming the file), plus the `processStaging` pass (stage separation with the
+  leftover-propellant dump: jettisons the spent stage's unburned propellant so
+  mass lands exactly on the post-dump floor, drops the dry mass, rescales
+  inertia by the post-dump mass ratio, and reports `dumpedMassKg` on the
+  `StageSeparation` event) and the `processWarheads` pass (impact/proximity/
+  timed fusing with an optional fragmentation/overpressure falloff band:
+  guaranteed kill inside `lethalRadiusM`, linear `(falloff−d)/(falloff−lethal)`
+  decay in the band, 0 beyond, with an RNG draw only when `0 < p < 1` so
+  flat-law warheads never consume the kernel RNG stream).
 - `EnvironmentConfig.hpp`: terrain/wind callbacks and earth options including
   `useEcefTruth`, gravity selection, Coriolis, centrifugal, and transport.
 - `ScenarioConfig.hpp`: scenario metadata, environment, entity/vehicle setup,
@@ -131,7 +139,9 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
 - `config/AeroConfig.hpp`, `config/PropulsionConfig.hpp` (with `StageConfig`),
   `config/SensorConfig.hpp`, `config/GuidanceAutopilotConfig.hpp`,
   `config/WarheadConfig.hpp`, and `config/SeekerConfig.hpp`: per-subsystem
-  configuration structs.
+  configuration structs. `WarheadConfig` carries the optional `falloffRadiusM`
+  (outer edge of the fragmentation/overpressure falloff band; 0.0 or
+  `<= lethalRadiusM` disables the band and restores the flat lethal-radius law).
 - `config/ConfigSerialization.hpp/.cpp`: snake_case JSON (de)serialization of
   all config structs, enums as snake_case strings, `ScenarioConfig::save/load`,
   and `serializeDesign`/`loadDesignPhysics`. `AeroConfig` and `SensorConfig`
@@ -140,7 +150,10 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   share one schema. `AeroConfig` carries the optional `aero_tables` block
   (emitted only when non-empty, parsed only when present so pre-feature files
   still load; a parsed `AeroTables` that fails `isValid` throws
-  `std::runtime_error` naming the reason). Uses nlohmann/json privately behind
+  `std::runtime_error` naming the reason). `WarheadConfig` serializes
+  `falloff_radius_m` (emitted always; parsed with a 0.0 default so pre-feature
+  files load the flat law; a value above zero but below `lethal_radius_m`
+  throws `std::runtime_error`). Uses nlohmann/json privately behind
   a public string API;
   nlohmann is never exposed in public headers.
 - `profiles/AeroProfileDatabase.hpp/.cpp`, `profiles/MotorProfileDatabase.hpp/
@@ -190,14 +203,18 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
 - `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid
   impact clamping, and the failure/damage event vocabulary (`MotorFailure`,
   `ActuatorFailure`, `SensorFailure`, `StructuralFailure`,
-  `CommunicationFailure`).
+  `CommunicationFailure`). `SimulationEvent` carries a `dumpedMassKg` payload
+  on `StageSeparation` (unburned propellant jettisoned with the spent stage;
+  0.0 on exhaustion burnouts).
 
 ### GNC and studies
 
 - `SensorSystem.cpp`: noisy frame-aware IMU/GPS; per-entity GPS scheduling
   (`gpsEnabled`, `gpsUpdateRateHz`); IMU disablement freezes the held accel/gyro
   sample and stops the streaming-bias drift while GPS continues; sensor-failure
-  flag stops measurement updates.
+  flag stops measurement updates. Exposes `nextUniform01()` — a uniform draw in
+  [0, 1) from the shared kernel RNG stream, re-seeded by `setSeed` — which
+  `processWarheads` uses for in-band kill decisions.
 - `NavigationSystem.cpp`: alignment, strapdown INS, and coupled 15-state EKF.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, and latency.
 - `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff; reads
@@ -242,8 +259,8 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   lower-drag, so the original 20 km / 10 km geometry no longer fits the seeker's
   ~3 km acquisition range). The scenario is a deterministically
   tuned data set (sensor seed `0xDEADBEEF`); the missile uses proximity fusing
-  (40 m trigger / 40 m lethal radius) and the drone a low-drag airframe
-  (S=1.0, cd=0.02, clAlpha=0.5).
+  (50 m trigger / 50 m lethal radius / 90 m falloff) and the drone a low-drag
+  airframe (S=1.0, cd=0.02, clAlpha=0.5).
 - `config/SeekerTypeStrings.hpp`: shared inline `seekerTypeToString`/
   `seekerTypeFromString` snake_case maps for `SeekerType`, deduplicated so
   `ConfigSerialization.cpp` and `SeekerProfileDatabase.cpp` use one ODR-safe
@@ -288,10 +305,11 @@ remains future work.
 | `lever_arm` | per-entity IMU lever-arm specific-force correction (α×l + ω×(ω×l)) |
 | `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording/reading |
 | `config_wiring` | per-entity sensor enablement (IMU freeze, GPS scheduling/disable) and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp |
-| `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
+| `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) with the leftover-propellant dump (curve-end case dumps `cap − burned` leftover so post-sep mass lands exactly on dry + later-stage reserves and inertia rescales by the post-dump mass ratio; exhaustion burnout dumps ~0 and stays byte-identical; `dumpedMassKg` on the event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
+| `warhead_falloff` | fragmentation/overpressure falloff band: pure `warheadKillProbability` law checks (1.0 inside lethal, linear `(falloff−d)/(falloff−lethal)` decay in the band, 0 beyond; flat/`falloff<=lethal` step function); kernel integration (proximity detonation in-band, guaranteed kill/miss at the band edges); pinned fixed-seed in-band outcome (seed `0xFA11`, d=30 m, p=0.5 → KILL); flat-law warheads never consume the kernel RNG stream (seed `0x3` scene with five flat detonations before an in-band detonation); `falloff_radius_m` JSON round-trip, backward-compat missing-key→0.0, and `falloff < lethal` rejected at load and at `createVehicle` |
 | `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`), the round-trip of the four profile-id keys, and a legacy-compat case (a pre-feature `VehicleConfig` without the profile-id keys still deserializes with empty ids) |
 | `profile_database` | per-subsystem profile DB parsing (aero/motor/seek/sensor) with defaults for omitted keys; `loadProfile` returning `false` on any failure (missing file, malformed JSON, wrong-typed field, missing required seeker `type`/motor `stages`); `createVehicle` profile-wins resolution into the SoA blocks; empty-id regression (inline config untouched); missing/schema-broken profile → `std::runtime_error` naming the file; shipped `data/aero|motors|seekers|sensors` examples parse |
-| `designer_pipeline` | end-to-end designer→engine chain: loads `data/scenarios/intercept_test_01.json`, resolves both `design_ref` manifests into `VehicleConfig` (opposing allegiances, ProNav mode), verifies the four missile subsystem profile ids and the drone `rcsProfileId` reach the SoA blocks (motor stage count 2, seeker FOV 6°/gimbal 65° vs the inline 60° placeholder, drone RCS id in the status block), runs the intercept, and asserts a real guided intercept (min miss 16.96 m < 50 m at t≈11.7 s, now flying on the data-driven aero coefficient tables) plus a proximity-warhead kill via the event system |
+| `designer_pipeline` | end-to-end designer→engine chain: loads `data/scenarios/intercept_test_01.json`, resolves both `design_ref` manifests into `VehicleConfig` (opposing allegiances, ProNav mode), verifies the four missile subsystem profile ids and the drone `rcsProfileId` reach the SoA blocks (motor stage count 2, seeker FOV 6°/gimbal 65° vs the inline 60° placeholder, drone RCS id in the status block), runs the intercept, and asserts a real guided intercept (min miss 45.4 m < 50 m at t≈11.5 s, now flying on the data-driven aero coefficient tables) plus a proximity-warhead kill via the event system |
 | `rocket_mvp` | first-principles WGS84 single-stage rocket-launch verification (local ENU, Somigliana normal gravity at 28.5°N, ISA-1976, pressure-interpolated Isp, fuel-limited burnout, RK4 dt=0.01 s, ballistic): T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (T/m − g_lat ≈ 110.2 m/s²), burnout time within the pressure-interpolated-Isp band [5.39, 6.13] s, mass at cutoff ≈ 350 kg, cutoff velocity vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry), apogee band and no-drag bound, max dynamic pressure (~242 kPa), ISA-1976 sea-level density 1.225 kg/m³, WGS84 geodetic↔ECEF round trip, Somigliana gravity monotone and altitude-accurate (<0.1%), lateral drift ~0, and a 70°-elevation arcing case; discriminates the free-thrust-tail propulsion bug |
 | `coefficient_table` | unit coverage of the aero table machinery: `interpolateCoefficient` exact at every breakpoint, bilinear interior values (midpoint averaging and arbitrary-point formula), clamping below/above both grid bounds (including the first-breakpoint in-bin regression), and `AeroTables::isValid` accepting valid grids and rejecting non-ascending/empty/mis-dimensioned breakpoint or table grids |
 | `rocket_mvp_tables` | the same 5 m×0.4 m/500 kg/60 kN vertical-launch vehicle as `rocket_mvp` run under both aero models (constant coefficients vs the sa_missile_mk1 cd(M,α)/cl(M,α) tables): asserts the table path engages (apogee differs by > 500 m), the physical direction (table apogee 24.79 km > constant 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa — the low subsonic table cd reduces drag and the faster boost velocity dominates max-Q's V²), and table-run flight sanity (apogee band, burnout V in [600, 870] m/s, lateral drift < 1 m, burnout time within the Isp band); also proves the constant-coefficient fallback is byte-identical to `rocket_mvp` |
@@ -319,7 +337,8 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W24 | profile-id database layer (`profile_database_test`): aero/motor/seek/sensor single-profile loaders, `createVehicle` profile-wins resolution, shared snake_case profile schema | current |
 | W25 | designer→engine pipeline (`designer_pipeline_test`): engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, end-to-end guided intercept + proximity-warhead kill | current |
 | W26 | first-principles rocket-launch verification (`rocket_mvp_test`) + propulsion-law fix: WGS84 single-stage launch cross-checked by hand (T0 thrust/mass flow, initial accel, ideal rocket-equation cutoff velocity, apogee/max-Q), and the fuel-depletion guard now scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail) | current |
-| W27 | data-driven aero coefficient tables (`coefficient_table_test`, `rocket_mvp_tables_test`): optional cd(M, α)/cl(M, α) `aero_tables` on `AeroConfig`/`data/aero/*.json` (mach/aoa breakpoints, cl/cd tables, [mach][aoa] grid), bilinearly interpolated and clamped at runtime with a byte-identical constant-coefficient fallback; tables authoritative for cd/cl, moments/side-force remain the linear engineering model; re-baselined the designer pipeline to table aero (min miss 16.96 m, engagement 15 km/8 km, drone vz=-60) | current |
+| W27 | data-driven aero coefficient tables (`coefficient_table_test`, `rocket_mvp_tables_test`): optional cd(M, α)/cl(M, α) `aero_tables` on `AeroConfig`/`data/aero/*.json` (mach/aoa breakpoints, cl/cd tables, [mach][aoa] grid), bilinearly interpolated and clamped at runtime with a byte-identical constant-coefficient fallback; tables authoritative for cd/cl, moments/side-force remain the linear engineering model; re-baselined the designer pipeline to table aero (min miss 45.4 m after W28, engagement 15 km/8 km, drone vz=-60) | current |
+| W28 | quick-fidelity batch: leftover-propellant dump at stage separation (`staging_warhead_test` curve-end/exhaustion cases) — vehicle mass lands exactly on the new floor, inertia rescales by the post-dump mass ratio, `dumpedMassKg` reported on `StageSeparation`, exhaustion burnouts byte-identical; warhead fragmentation/overpressure falloff band (`warhead_falloff_test`) — optional `falloffRadiusM` (0.0 default = flat law, byte-identical), linear decay in the band, RNG draw only when `0 < p < 1`; designer SAM warhead now lethal 50 m / trigger 50 m / falloff 90 m (deterministic kill at trigger crossing), designer-pipeline min miss 45.4 m at t≈11.5 s | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -341,6 +360,11 @@ then build the StrikeSim shell/Designer integration, then embed StrikeCEM.
 StrikeCEM offline work may proceed independently. A future protobuf/gRPC or
 REST API may wrap the stable C++ API, but it is not part of the current library
 contract.
+
+Future programs: aero coefficient tables are produced by a future **StrikeCEM**
+program (Barrowman first-cut → CFD); CFD is **StrikeCFD**, a separate project in
+a different folder; and the eventual goal is to build **StrikeDesigner** inside
+**StrikeSim** on the stabilized StrikeEngine.
 
 The pre-restructure implementation is preserved in the git tag
 `legacy/pre-restructure-v1`; it is rollback history, not an active source tree.

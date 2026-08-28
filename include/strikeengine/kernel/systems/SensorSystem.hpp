@@ -41,6 +41,13 @@ namespace StrikeEngine::Kernel {
         void setSeed(std::uint32_t seed);
 
         /**
+         * @brief Draw a uniform random value in [0, 1) from the shared kernel
+         * RNG stream. Re-seeded by setSeed() like the sensor models, so a fixed
+         * seed makes every stochastic consumer of the stream deterministic.
+         */
+        double nextUniform01();
+
+        /**
          * @brief Clear per-entity sensor state (streaming biases, GPS phase)
          * so a reset kernel starts clean without reseeding the RNG stream.
          */

@@ -96,6 +96,9 @@ target_link_libraries(config_wiring_test PRIVATE strikeengine)
 add_executable(staging_warhead_test validation/staging_warhead_test.cpp)
 target_link_libraries(staging_warhead_test PRIVATE strikeengine)
 
+add_executable(warhead_falloff_test validation/warhead_falloff_test.cpp)
+target_link_libraries(warhead_falloff_test PRIVATE strikeengine)
+
 add_executable(serialization_test validation/serialization_test.cpp)
 target_link_libraries(serialization_test PRIVATE strikeengine)
 
@@ -203,6 +206,9 @@ set_tests_properties(config_wiring PROPERTIES TIMEOUT 120)
 
 add_test(NAME staging_warhead COMMAND staging_warhead_test)
 set_tests_properties(staging_warhead PROPERTIES TIMEOUT 120)
+
+add_test(NAME warhead_falloff COMMAND warhead_falloff_test)
+set_tests_properties(warhead_falloff PROPERTIES TIMEOUT 120)
 
 add_test(NAME serialization COMMAND serialization_test)
 set_tests_properties(serialization PROPERTIES TIMEOUT 120)

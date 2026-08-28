@@ -19,6 +19,11 @@ namespace StrikeEngine::Kernel {
         rng.seed(seed);
     }
 
+    double SensorSystem::nextUniform01() {
+        std::uniform_real_distribution<double> uniform(0.0, 1.0);
+        return uniform(rng);
+    }
+
     void SensorSystem::reset() {
         trueAccelBiasX.clear();
         trueAccelBiasY.clear();

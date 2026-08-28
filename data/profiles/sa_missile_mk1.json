@@ -71,9 +71,10 @@
     "warhead": {
       "mass_kg": 15.0,
       "fusing": "proximity",
-      "proximity_trigger_m": 40.0,
+      "proximity_trigger_m": 50.0,
       "timed_delay_sec": 0.0,
-      "lethal_radius_m": 40.0
+      "lethal_radius_m": 50.0,
+      "falloff_radius_m": 90.0
     },
     "rcs_profile_id": "",
     "ir_profile_id": "",

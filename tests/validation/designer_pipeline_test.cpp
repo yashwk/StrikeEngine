@@ -76,9 +76,10 @@ int main()
           "missile inertia: slender-body roll axis -> inertia_xx");
     check(missileCfg.guidanceAutopilot.navigationConstant == 4.0,
           "guidance_autopilot navigationConstant = 4.0 from the designer");
-    check(missileCfg.warhead.lethalRadiusM == 40.0 && missileCfg.warhead.massKg == 15.0 &&
-              missileCfg.warhead.fusing == FusingType::Proximity,
-          "SAM warhead parsed (15 kg, proximity-fused, 40 m kill radius)");
+    check(missileCfg.warhead.lethalRadiusM == 50.0 && missileCfg.warhead.massKg == 15.0 &&
+              missileCfg.warhead.fusing == FusingType::Proximity &&
+              missileCfg.warhead.falloffRadiusM == 90.0,
+          "SAM warhead parsed (15 kg, proximity-fused, 50 m kill radius, 90 m falloff)");
 
     const VehicleConfig& droneCfg = scenario.entities[1].vehicleConfig;
     check(droneCfg.type == EntityType::Aircraft &&

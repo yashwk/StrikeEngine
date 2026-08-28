@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-26<br>
 **Runtime checkpoint:** `2664200`<br>
-**Validation result:** Release build, **34/34 CTest tests passed**
+**Validation result:** Release build, **35/35 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
 > is the normative product contract and [`IMPLEMENTATION.md`](IMPLEMENTATION.md)
@@ -54,9 +54,10 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; per-subsystem aero/motor/seek/sensor profile loaders (false on any load failure), `createVehicle` profile-wins resolution into the SoA blocks, empty-id regression, and missing/schema-broken profile → `std::runtime_error` naming the file. Shipped `data/aero`, `data/motors`, `data/seekers`, `data/sensors` example profiles parse. |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; per-entity IMU freeze, GPS scheduling/disable, and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp are covered. |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation (dry-mass drop, inertia rescale, `StageSeparation`) and impact/proximity/timed fusing (`Detonation`, flat lethal-radius kill) are covered. |
-| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` RCS table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, and an end-to-end guided intercept (16.96 m miss < 50 m at t≈11.7 s, now flying on the data-driven aero coefficient tables) with a proximity-warhead kill. Boundary: the scenario is a deterministically tuned data set (seed `0xDEADBEEF`) — a pipeline demonstration, not a guidance-performance claim; versioned provenance contracts remain future work. |
-| W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; first-principles WGS84 single-stage launch cross-checked by hand: T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (measured 110.275 vs hand-computed 110.208 m/s², ~T/m − g_lat), burnout time within the pressure-interpolated-Isp band, mass at cutoff ≈ 350 kg, cutoff velocity (686.8 m/s) vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry) (874.4 m/s, loss ≈ 187.7 m/s explained by gravity ≈ 53.4 + drag + pressure-interpolated Isp), apogee (17.19 km), max-Q (~242 kPa), ISA-1976 sea-level density, WGS84 round trip, Somigliana monotone gravity (<0.1% at altitude), lateral drift ~0, and a 70°-elevation arcing case. The fuel-depletion guard scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail); this fix reduced the designer-pipeline min miss to 16.96 m (with the subsequent table-aero re-baseline). |
+| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` RCS table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, and an end-to-end guided intercept (45.4 m miss < 50 m at t≈11.5 s, now flying on the data-driven aero coefficient tables) with a proximity-warhead kill. Boundary: the scenario is a deterministically tuned data set (seed `0xDEADBEEF`) — a pipeline demonstration, not a guidance-performance claim; versioned provenance contracts remain future work. |
+| W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; first-principles WGS84 single-stage launch cross-checked by hand: T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (measured 110.275 vs hand-computed 110.208 m/s², ~T/m − g_lat), burnout time within the pressure-interpolated-Isp band, mass at cutoff ≈ 350 kg, cutoff velocity (686.8 m/s) vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry) (874.4 m/s, loss ≈ 187.7 m/s explained by gravity ≈ 53.4 + drag + pressure-interpolated Isp), apogee (17.19 km), max-Q (~242 kPa), ISA-1976 sea-level density, WGS84 round trip, Somigliana monotone gravity (<0.1% at altitude), lateral drift ~0, and a 70°-elevation arcing case. The fuel-depletion guard scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail); this fix, with the later table-aero re-baseline and the W28 leftover-dump/falloff batch, yields the current designer-pipeline min miss of 45.4 m at t≈11.5 s. |
 | W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test` (bilinear interpolator: exact-at-breakpoints, interior, clamping, grid validation) and `rocket_mvp_tables_test` (the same 5 m×0.4 m/500 kg/60 kN vertical-launch vehicle under constant vs sa_missile_mk1 tables). Measured: the constant-coefficient run is byte-identical to `rocket_mvp` (parity); the table run flies HIGHER and FASTER — apogee 24.79 km vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa (the low subsonic table cd cuts drag and the faster boost velocity dominates max-Q's V²). Boundary: tables are authoritative for cd/cl only; moments and side-force remain the linear engineering model, and the tables are not yet CFD-validated (awaiting a future strikeCEM). |
+| W28 — Leftover-propellant dump + warhead falloff band | Implemented / MVP | `staging_warhead_test` and `warhead_falloff_test`; at stage separation the spent stage's unburned propellant is jettisoned so vehicle mass lands exactly on the new floor (dry mass + later-stage reserves), inertia rescales by the post-dump mass ratio, and `dumpedMassKg` is reported on `StageSeparation` (measured: a 50 kg cap burns 12.534 kg → 37.466 kg dumped, post-sep mass exactly 100.0 kg, Ixx rescale 5.3343; exhaustion burnouts dump ~0 and stay byte-identical). Optional `falloffRadiusM` on `WarheadConfig` (0.0 default = flat law, byte-identical) gives a linear fragmentation/overpressure falloff band — kill probability 1 inside `lethalRadiusM`, linear decay in the band, 0 beyond — with an RNG draw only when `0 < p < 1` so flat warheads never consume the kernel RNG stream. The designer SAM warhead (lethal 50 m / trigger 50 m / falloff 90 m) kills deterministically at trigger crossing; the booster-leftover dump lightens the sustainer so the intercept now closes at min miss 45.4 m at t≈11.5 s. |
 
 ## 3. Subsystem fidelity assessment
 
@@ -66,7 +67,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Rotational truth | Diagonal body inertia, gyroscopic coupling, body angular rates, quaternion attitude, and bounded fin moments. | **MVP / partial:** no full inertia-tensor or flexible-body model. |
 | Atmosphere | Layered ISA1976 atmosphere through 86 km, with density, pressure, temperature, and sound speed. | **Implemented for the stated envelope:** no weather or high-fidelity atmospheric model. |
 | Aerodynamics | Air-relative drag, angle-of-attack lift, fin pitch lift, yaw-fin side force, stability, rate damping, and bounded moments. Optional data-driven cd(M, α)/cl(M, α) coefficient tables (`aero_tables`) are bilinearly interpolated and clamped to the grid bounds; when present they are authoritative for cd/cl, with a constant-coefficient fallback. | **MVP / partial:** data-driven cd/cl coefficient tables (interpolated, clamped) with a constant-coefficient fallback; moments and side-force remain the linear engineering model; tables are not yet CFD-validated. |
-| Propulsion | Per-entity thrust curves, vacuum/sea-level Isp interpolation, mass flow, dry-mass limiting, axial body +X thrust, and ordered multi-stage staging (dry-mass drop, inertia rescale, stage separation). The motor law `T = ṁ·Isp·g0` is enforced at every instant: the fuel-depletion guard scales thrust with the capped mass flow, so thrust self-terminates at fuel exhaustion (no free-thrust tail). | **MVP / partial:** per-stage `propellantMassKg` caps stage drawdown (later-stage propellant reserved via a stage mass floor); no thrust vectoring or fuel-tank/engine failure model. |
+| Propulsion | Per-entity thrust curves, vacuum/sea-level Isp interpolation, mass flow, dry-mass limiting, axial body +X thrust, and ordered multi-stage staging (leftover-propellant dump at separation so mass lands exactly on the new floor, dry-mass drop, post-dump inertia rescale, `dumpedMassKg` on `StageSeparation`). The motor law `T = ṁ·Isp·g0` is enforced at every instant: the fuel-depletion guard scales thrust with the capped mass flow, so thrust self-terminates at fuel exhaustion (no free-thrust tail). | **MVP / partial:** per-stage `propellantMassKg` caps stage drawdown (later-stage propellant reserved via a stage mass floor); no thrust vectoring or fuel-tank/engine failure model. |
 | Actuators and control | World-to-body acceleration demand, bounded fin commands, first-order servo lag, rate limiting, pitch/yaw sign conventions, and per-entity configurable gains/clamp. | **MVP / partial:** fixed per-entity engineering gains; no gain scheduling, actuator failure, or advanced controller. |
 | Integration | Derivative callbacks with true stage re-evaluation for RK4/RK45; bounded adaptive substeps; interpolated impact crossing; kernel integrator selection exposed via `IntegratorType` at construction (CPU-side). | **MVP / partial:** no multirate solver or complete event-aware adaptive policy. |
 | Earth and frames | WGS84 conversion, normal and spherical gravity, ECEF/ENU/NED transforms, Coriolis, centrifugal, transport terms, standalone ECEF propagation, and opt-in kernel ECEF truth. | **MVP / partial:** no geoid, global terrain streaming, polar/dateline scenario policy, or complete earth-rate treatment across every subsystem. |
@@ -76,20 +77,20 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Seekers | Monostatic RF, SARH (bistatic, static illuminator), PassiveRF (target EIRP), and IR (Beer-Lambert transmittance) seekers; FOV/gimbal limits, lock hysteresis, filtered LOS rates, latency, friendly rejection, chaff/flare decoys, strongest-signal acquisition, and the public `SeekerConfig` surface. | **MVP / partial:** imaging IR, multi-target tracking, dynamic illuminator tracking, and band-resolved extinction are not implemented. |
 | Guidance | Stateless PN/APN helpers, target velocity, waypoint mode, seeker-lock APN handoff, and per-entity navigation/waypoint gains. | **MVP / partial:** no trajectory manager, pursuit, LQR/MPC, or blended handoff. |
 | Events and terrain | Terrain/wind callbacks, geodetic/local terrain views, real impact deactivation, position clamping, timestamped ground-impact events, and deterministic failure/damage events. | **MVP / partial:** no runtime DEM/DTED database, streaming, datum/geoid policy, or probabilistic failure model. |
-| Warhead and fusing | Impact/proximity/timed fusing driven by `WarheadConfig`; detonation dispatches a `Detonation` event and destroys every alive entity within `lethalRadiusM`; stage separation dispatches a `StageSeparation` event. | **MVP / partial:** the lethal-radius kill is a flat cut with no fragmentation or overpressure falloff curve; `lethalRadiusM <= 0` warheads are inert. |
+| Warhead and fusing | Impact/proximity/timed fusing driven by `WarheadConfig`; detonation dispatches a `Detonation` event and applies a fragmentation/overpressure kill law (flat inside `lethalRadiusM` when `falloffRadiusM <= 0`; otherwise guaranteed kill inside `lethalRadiusM`, linear `(falloff−d)/(falloff−lethal)` decay across `(lethalRadiusM, falloffRadiusM]`, 0 beyond, with an RNG draw only when `0 < p < 1`); stage separation dispatches a `StageSeparation` event carrying `dumpedMassKg`. | **MVP / partial:** the falloff band is linear (no blast-pressure or debris-density model); `lethalRadiusM <= 0` warheads are inert; `falloffRadiusM < lethalRadiusM` is rejected at load and at `createVehicle`. |
 | Failure and damage | Deterministic per-entity flags (`failEntity`/`applyDamage`) driving thrust/mass-flow cutoff, fin freeze, sensor dropout, ballistic comms loss, and structural deactivation with per-type events. | **MVP / partial:** flags are deterministic and not probabilistic; partial health has no effect beyond deactivation; repair is not modeled. |
 | Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, and isolated batch runner with configurable versioned CSV/binary reporting and a binary reader. | **MVP / partial:** richer telemetry and streaming remain, and some optimizer paths remain primary-entity oriented. |
 | Backends and packaging | Deterministic CPU/static library, CMake packaging, and optional Vulkan target. | **MVP / partial:** Vulkan parity is not validated, ECEF GPU support is open, and CUDA is not implemented. |
 
 ## 4. Quantitative validation evidence
 
-- The complete Release CTest suite is green: **34/34 tests passed** at the
+- The complete Release CTest suite is green: **35/35 tests passed** at the
   checkpoint recorded above.
 - The control regression reports a **0.76 m minimum miss** for its validated
   intercept scenario. This demonstrates the MVP control path; it is not a
   general accuracy guarantee.
-- The designer→engine pipeline regression reports a **16.96 m minimum miss**
-  at t≈11.7 s with a proximity-warhead kill (`designer_pipeline_test`), now
+- The designer→engine pipeline regression reports a **45.4 m minimum miss**
+  at t≈11.5 s with a proximity-warhead kill (`designer_pipeline_test`), now
   flying on the data-driven aero coefficient tables. This
   demonstrates the end-to-end designer→engine data contract (design manifest →
   `designRef` → profile-id wiring → kernel → intercept); it is a
@@ -151,15 +152,15 @@ to reliable downstream use:
    a full GPS-only positioning mode); a disabled GPS stops updates. Remaining:
    imaging IR, multi-target tracking, dynamic illuminator tracking, band-resolved
    extinction, and multi-rate timestamp interpolation.
-5. **Staging and warhead fidelity:** multi-stage staging (dry-mass drop, inertia
-    rescale, `StageSeparation`) and impact/proximity/timed fusing (flat lethal-
-    radius kill, `Detonation`) are implemented (MVP, `staging_warhead_test`).
-    The propulsion model now enforces `T = ṁ·Isp·g0` at fuel exhaustion (the
-    fuel-depletion guard scales thrust with the capped mass flow, so there is
-    no free-thrust tail), verified by `rocket_mvp_test`. Remaining: a
-    fragmentation/overpressure falloff curve and arbitrary stage-count
-    validation. (Per-stage propellant drawdown is implemented; leftover
-    propellant in a spent stage is not dumped.)
+5. **Staging and warhead fidelity:** multi-stage staging with the leftover-
+    propellant dump (mass lands exactly on the new floor, post-dump inertia
+    rescale, `dumpedMassKg` on `StageSeparation`) and impact/proximity/timed
+    fusing with the optional fragmentation/overpressure falloff band
+    (`staging_warhead_test`, `warhead_falloff_test`). The propulsion model now
+    enforces `T = ṁ·Isp·g0` at fuel exhaustion (the fuel-depletion guard scales
+    thrust with the capped mass flow, so there is no free-thrust tail), verified
+    by `rocket_mvp_test`. Remaining: arbitrary stage-count validation and a
+    physics-based (non-linear) blast/debris model.
 6. **Guidance and aero depth:** validated coefficient tables are done — aero is
    now data-driven (cd(M, α)/cl(M, α), bilinearly interpolated and clamped to
    grid bounds, with a constant-coefficient fallback; `coefficient_table_test`,
@@ -169,18 +170,24 @@ to reliable downstream use:
 7. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,
    and implement CUDA only if a project requirement is established.
 8. **Application handoffs:** the designer→engine data contract is now exercised
-   end-to-end (`designer_pipeline_test`): design manifests under `data/profiles`
-   are consumed via `design_ref` into `VehicleConfig`, profile ids resolve the
-   subsystem parts, and the scenario runs in the engine's local ENU frame. What
-   remains open is the explicit versioned StrikeSim, StrikeDesigner, and
-   StrikeCEM integration and provenance contracts (identity/revision/geometry
-   provenance metadata carried across the handoff).
+    end-to-end (`designer_pipeline_test`): design manifests under `data/profiles`
+    are consumed via `design_ref` into `VehicleConfig`, profile ids resolve the
+    subsystem parts, and the scenario runs in the engine's local ENU frame. What
+    remains open is the explicit versioned StrikeSim, StrikeDesigner, and
+    StrikeCEM integration and provenance contracts (identity/revision/geometry
+    provenance metadata carried across the handoff). Future programs: aero
+    coefficient tables are produced by a future **StrikeCEM** program (Barrowman
+    first-cut → CFD); CFD is **StrikeCFD**, a separate project in a different
+    folder; and the eventual goal is to build **StrikeDesigner** inside
+    **StrikeSim** on the stabilized engine.
 
 The profile-id database layer resolves aero/motor/seek/sensor lookups, but it
 does not change the status of the other deferred work, which stays deferred:
 power/comms/ECM models, StrikeCEM/CFD coupling, a full GPS-only positioning
-mode (current GPS-only aiding is not one), the fragmentation/overpressure
-falloff curve, and leftover-propellant-not-dumped in spent stages. The revived
+mode (current GPS-only aiding is not one), guidance depth (trajectory/pursuit/
+LQR/MPC), Vulkan/CPU parity, and full global terrain. The fragmentation/
+overpressure falloff curve and leftover-propellant dumping in spent stages are
+now implemented and are no longer deferred. The revived
 `data/aero`, `data/motors`, `data/seekers`, `data/sensors` profile artifacts and
 the rewritten flat snake_case `data/schemas/seeker_schema.json` are part of this
 layer; the designer-facing `data/profiles` manifests and `data/scenarios`
@@ -193,7 +200,7 @@ added for the flat target-drone RCS table.
 The pre-restart audit from 2026-08-25 recorded a 5/7 workstream result and
 identified failures in control signs, aerodynamic authority, integration,
 events, seeker fidelity, and navigation. Those measurements described the
-older implementation and are superseded by the W1–W27 verification above.
+older implementation and are superseded by the W1–W28 verification above.
 
 The historical measurements and commits remain available in repository
 history. They are not repeated here because retaining their stale tables in

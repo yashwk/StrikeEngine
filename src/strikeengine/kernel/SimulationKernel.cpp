@@ -8,8 +8,10 @@
 #include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
+#include <strikeengine/models/warhead/WarheadEffects.hpp>
 #include <stdexcept>
 #include <algorithm>
+#include <cmath>
 
 namespace StrikeEngine::Kernel {
 
@@ -369,8 +371,16 @@ namespace StrikeEngine::Kernel {
         statusBlock.emitterEirpW[id] = config.emitterEirpW;
 
         // Warhead state (fusing + lethality handled by processWarheads()).
+        if (config.warhead.falloffRadiusM > 0.0 &&
+            config.warhead.falloffRadiusM < config.warhead.lethalRadiusM) {
+            throw std::runtime_error("SimulationKernel: warhead falloff_radius_m (" +
+                                     std::to_string(config.warhead.falloffRadiusM) +
+                                     " m) is below lethal_radius_m (" +
+                                     std::to_string(config.warhead.lethalRadiusM) + " m)");
+        }
         warheads[id] = WarheadState{};
         warheads[id].lethalRadiusM = config.warhead.lethalRadiusM;
+        warheads[id].falloffRadiusM = config.warhead.falloffRadiusM;
         warheads[id].fusing = config.warhead.fusing;
         warheads[id].proximityTriggerM = config.warhead.proximityTriggerM;
         warheads[id].timedDelaySec = config.warhead.timedDelaySec;
@@ -507,13 +517,20 @@ namespace StrikeEngine::Kernel {
                 continue;
             }
 
-            // Separation: drop the spent stage's structure and rescale inertia.
+            // Separation: dump the spent stage's leftover propellant (unburned
+            // mass above the stage's floor of dry + fuel reserved for the
+            // remaining stages), drop its structure, and rescale inertia with
+            // the post-dump mass ratio. A stage that burned out by propellant
+            // exhaustion pinned itself to the floor, so leftover is ~0 and the
+            // behavior is unchanged.
             const double drop = plan.dropMasses[si];
             const double oldMass = physicsBlock.mass[i];
-            const double newMass = oldMass - drop;
-            const double ratio = (oldMass > 1e-12) ? (newMass / oldMass) : 1.0;
+            double leftover = oldMass - (physicsBlock.massDry[i] + plan.reservedAfter[si]);
+            if (leftover < 1e-6) leftover = 0.0;
+            const double newMass = oldMass - drop - leftover;
             physicsBlock.mass[i] = newMass;
             physicsBlock.massDry[i] -= drop;
+            const double ratio = (oldMass > 1e-12) ? (newMass / oldMass) : 1.0;
             physicsBlock.Ixx[i] *= ratio;
             physicsBlock.Iyy[i] *= ratio;
             physicsBlock.Izz[i] *= ratio;
@@ -524,9 +541,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.ignitionTime[i] = time.currentTime();
 
             // Raise the floor for the new active stage (reserve later stages'
-            // propellant again). Leftover propellant in the spent stage is not
-            // dumped; it carries into the remaining fuel pool (MVP
-            // simplification).
+            // propellant again).
             const int nextSi = physicsBlock.stageIndex[i];
             if (nextSi >= 0 && nextSi < static_cast<int>(plan.reservedAfter.size())) {
                 physicsBlock.stageMinMass[i] = physicsBlock.massDry[i] + plan.reservedAfter[nextSi];
@@ -537,6 +552,7 @@ namespace StrikeEngine::Kernel {
             evt.entityId = i;
             evt.timestamp = time.currentTime();
             evt.customCode = si;
+            evt.dumpedMassKg = leftover;
             eventSystem.dispatch(evt);
         }
     }
@@ -577,14 +593,23 @@ namespace StrikeEngine::Kernel {
             evt.timestamp = time.currentTime();
             eventSystem.dispatch(evt);
 
-            // Flat lethal-radius kill: any alive entity within range is destroyed.
-            const double r2 = wh.lethalRadiusM * wh.lethalRadiusM;
+            // Lethality with an optional fragmentation/overpressure falloff
+            // band: guaranteed kill inside lethalRadiusM, probabilistic kill
+            // across (lethalRadiusM, falloffRadiusM], no effect beyond. The
+            // RNG draw is taken only when the outcome is genuinely uncertain
+            // (0 < p < 1) so flat-law warheads (falloffRadiusM <= 0) never
+            // consume the kernel RNG stream and keep today's behavior.
             for (std::size_t j = 0; j < physicsBlock.size; ++j) {
                 if (j == i || !statusBlock.isAlive[j]) continue;
                 const double dx = physicsBlock.px[j] - physicsBlock.px[i];
                 const double dy = physicsBlock.py[j] - physicsBlock.py[i];
                 const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
-                if (dx*dx + dy*dy + dz*dz <= r2) {
+                const double missDistance = std::sqrt(dx*dx + dy*dy + dz*dz);
+                const double prob = Models::warheadKillProbability(
+                    missDistance, wh.lethalRadiusM, wh.falloffRadiusM);
+                const bool kill = (prob >= 1.0) ||
+                    (prob > 0.0 && prob >= sensorSystem.nextUniform01());
+                if (kill) {
                     applyDamage(j, 100.0);
                 }
             }

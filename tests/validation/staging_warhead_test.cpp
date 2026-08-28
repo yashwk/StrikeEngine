@@ -74,8 +74,12 @@ int main() {
         SimulationKernel kernel;
         kernel.setRandomSeed(0xABADu);
         int separations = 0;
+        double dumpedMass = -1.0;
         kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
-            if (e.type == EventType::StageSeparation) ++separations;
+            if (e.type == EventType::StageSeparation) {
+                ++separations;
+                dumpedMass = e.dumpedMassKg;
+            }
         });
 
         VehicleConfig cfg;
@@ -112,6 +116,69 @@ int main() {
               "drawdown case: propellant exhaustion fires StageSeparation");
         check(phys.stageIndex[id] == 1,
               "drawdown case: stage 1 active (separation from exhaustion, not the t=100 curve end)");
+        check(dumpedMass <= 1e-6,
+              "drawdown case: exhaustion burnout dumps no leftover propellant (mass already at the floor)");
+        check(std::abs(phys.mass[id] - 100.0) < 1e-6,
+              "drawdown case: post-separation mass is exactly dry mass (no dump)");
+    }
+
+    // ---- Part A3: curve-end burnout dumps leftover propellant ----
+    {
+        SimulationKernel kernel;
+        kernel.setRandomSeed(0xD1CEu);
+        int separations = 0;
+        double dumpedMass = -1.0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::StageSeparation) {
+                ++separations;
+                dumpedMass = e.dumpedMassKg;
+            }
+        });
+
+        VehicleConfig cfg;
+        cfg.initialMass = 200.0;
+        cfg.massDry = 100.0;
+        cfg.Ixx = 10.0; cfg.Iyy = 20.0; cfg.Izz = 20.0;
+
+        StageConfig s0;
+        // Equal vacuum/sea-level Isps so the mass flow is pressure-independent
+        // and the burned mass is exactly mdot * burn duration.
+        s0.thrustCurve = {{0.0, 50000.0}, {0.5, 50000.0}, {0.501, 0.0}, {100.0, 0.0}};
+        s0.vacuumIsp = 200.0;
+        s0.seaLevelIsp = 200.0;
+        s0.propellantMassKg = 50.0;   // cap = fuel pool (200 - 150 = 50)
+        s0.dryMassKg = 50.0;
+        StageConfig s1;
+        s1.thrustCurve = {{0.0, 20000.0}, {1.0, 20000.0}, {1.001, 0.0}, {100.0, 0.0}};
+        s1.dryMassKg = 0.0;
+        cfg.propulsion.stages = {s0, s1};
+
+        const auto id = kernel.createVehicle(makeInit(0, 0, 1000.0), cfg);
+        const auto& phys = kernel.getPhysics();
+
+        // The curve ends at t = 0.5 s well before the 50 kg cap is drawn down.
+        // RK4 samples the thrust curve at the base, two midpoints and the end
+        // of each step; the step whose base is the burn cutoff (t = 0.5) burns
+        // only its first sample (h/6), so the exact burned mass is
+        // mdot * (burnDuration - dt + dt/6) and leftover = cap - burned.
+        const double dt = 0.01;
+        const double mdot = 50000.0 / (200.0 * 9.80665);
+        const double burned = mdot * (0.5 - dt + dt / 6.0);
+        const double expectedLeftover = 50.0 - burned;
+        const double expectedOldMass = 200.0 - burned;
+
+        for (int step = 0; step < 100; ++step) kernel.step(0.01);  // 1 s (> stage-0 curve end)
+
+        check(separations == 1, "curve-end case: exactly one StageSeparation event fired");
+        check(phys.stageIndex[id] == 1, "curve-end case: stage 1 active after separation");
+        check(std::abs(phys.massDry[id] - 100.0) < 1e-9,
+              "curve-end case: separation drops the spent stage dry mass (150 -> 100)");
+        check(std::abs(dumpedMass - expectedLeftover) < 1e-6,
+              "curve-end case: dumped mass equals cap minus burned (leftover propellant)");
+        check(std::abs(phys.mass[id] - 100.0) < 1e-6,
+              "curve-end case: mass after separation is exactly dry + later-stage reserves (leftover dumped)");
+        check(std::abs(phys.Ixx[id] - 10.0 * (100.0 / expectedOldMass)) < 1e-9,
+              "curve-end case: inertia rescaled by the post-dump mass ratio");
     }
 
     // ---- Part B: proximity fuse ----
