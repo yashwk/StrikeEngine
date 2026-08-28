@@ -1,7 +1,7 @@
 # StrikeEngine — Fidelity Audit
 
 **Audit date:** 2026-08-26<br>
-**Runtime checkpoint:** `2664200`<br>
+**Runtime checkpoint:** `82bd30a`<br>
 **Validation result:** Release build, **35/35 CTest tests passed**
 
 > This document records measured fidelity and current limitations. [`SPEC.md`](SPEC.md)
