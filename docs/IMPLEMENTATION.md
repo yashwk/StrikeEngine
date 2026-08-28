@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **26/26 CTest tests pass**.
+- Release validation: **29/29 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -25,10 +25,10 @@ it is not an alternative authority.
 
 | Area | Responsibility |
 | --- | --- |
-| `include/strikeengine/kernel` | Public state blocks, kernel, systems, backends, integrators |
+| `include/strikeengine/kernel` | Public state blocks, kernel, systems, backends, integrators, subsystem config |
 | `include/strikeengine/models` | Stateless atmosphere, aero, propulsion, earth, guidance, signatures |
 | `include/strikeengine/simulation` | Single run, sweep, Monte Carlo, optimizer, batch wrappers |
-| `src/strikeengine` | Runtime and signature database implementations |
+| `src/strikeengine` | Runtime, config serialization, and signature database implementations |
 | `tests/validation` | End-to-end and subsystem regression programs |
 | `data/` | Example profiles, scenarios, tables, and schemas |
 | `docs/` | Authoritative contracts and measured evidence records |
@@ -87,31 +87,51 @@ indices; inactive entities are skipped.
 1. Save previous positions and advance kernel time.
 2. Apply queued commands.
 3. Advance truth physics through the selected backend/integrator.
-4. Generate IMU/GPS measurements.
-5. Propagate and fuse navigation.
-6. Update seekers, lock state, filtered LOS rates, and delayed outputs.
-7. Compute guidance demands.
-8. Convert demands to actuator commands.
-9. Evaluate terrain/ground events and dispatch events.
+4. Run the staging pass (`processStaging`, multi-stage separation).
+5. Generate IMU/GPS measurements.
+6. Propagate and fuse navigation.
+7. Update seekers, lock state, filtered LOS rates, and delayed outputs.
+8. Compute guidance demands.
+9. Convert demands to actuator commands.
+10. Evaluate terrain/ground events.
+11. Run the warhead pass (`processWarheads`, after impacts are known).
+12. Dispatch the queued event queue.
 
 Truth is advanced before sensing; guidance and autopilot output affects the next
-physics step. This ordering is part of the integration contract.
+physics step. Staging runs immediately after truth so a burnout can drop mass
+and rescale inertia before sensing. Warheads run after impact evaluation so an
+impact fuse observes the deactivation state. This ordering is part of the
+integration contract.
 
 `SimulationKernel` accepts an `IntegratorType` (default RK4) which is applied
-CPU-side only.
+CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
+`stageIndex`/`stageCount` staging state.
 
 ## 5. Module ownership
 
 ### Core and configuration
 
 - `SimulationKernel.hpp/.cpp`: lifecycle, entity management, command queue,
-  orchestration, environment, public block access, and deterministic
-  failure/damage injection (`failEntity`, `applyDamage`).
+  orchestration, environment, public block access, deterministic
+  failure/damage injection (`failEntity`, `applyDamage`), and the
+  `createVehicle(config)` wiring of subsystem config into the per-entity SoA
+  blocks, plus the `processStaging` and `processWarheads` passes.
 - `EnvironmentConfig.hpp`: terrain/wind callbacks and earth options including
   `useEcefTruth`, gravity selection, Coriolis, centrifugal, and transport.
 - `ScenarioConfig.hpp`: scenario metadata, environment, entity/vehicle setup,
-  target state, and kernel loading.
-- `VehicleConfig.hpp`: per-entity geometry, aero, dry mass, thrust, and Isp.
+  target state, kernel loading, `save`/`load`, and the per-entity `designRef`
+  override.
+- `VehicleConfig.hpp`: the flattened per-vehicle subsystem view (`type`,
+  `initialMass`, `massDry`, `Ixx/Iyy/Izz`, `aero`, `propulsion`, `seeker`,
+  `sensor`, `guidanceAutopilot`, `warhead`, signature profile IDs, EIRP).
+- `config/AeroConfig.hpp`, `config/PropulsionConfig.hpp` (with `StageConfig`),
+  `config/SensorConfig.hpp`, `config/GuidanceAutopilotConfig.hpp`,
+  `config/WarheadConfig.hpp`, and `config/SeekerConfig.hpp`: per-subsystem
+  configuration structs.
+- `config/ConfigSerialization.hpp/.cpp`: snake_case JSON (de)serialization of
+  all config structs, enums as snake_case strings, `ScenarioConfig::save/load`,
+  and `serializeDesign`/`loadDesignPhysics`. Uses nlohmann/json privately behind
+  a public string API; nlohmann is never exposed in public headers.
 
 ### Truth and earth models
 
@@ -123,7 +143,8 @@ CPU-side only.
 - `CPUBackend.cpp`: stage-re-evaluated force model, body Euler dynamics,
   quaternion propagation, and servo dynamics. Reads the physical truth mirror
   of the motor/actuator failure flags (`PhysicsBlock::motorFailed` /
-  `actuatorFailed`).
+  `actuatorFailed`). Each non-empty-thrust-curve propulsion stage is registered
+  in the pool by `SimulationKernel::createVehicle`.
 - `EarthModel.hpp`: WGS84 conversion, normal gravity, Coriolis, curvature, and
   transport APIs.
 - `EarthFrames.hpp`: ECEF/ENU/NED transforms, local gravity, and centrifugal
@@ -136,13 +157,18 @@ CPU-side only.
 
 ### GNC and studies
 
-- `SensorSystem.cpp`: noisy frame-aware IMU/GPS; sensor-failure flag stops
-  measurement updates.
+- `SensorSystem.cpp`: noisy frame-aware IMU/GPS; per-entity GPS scheduling
+  (`gpsEnabled`, `gpsUpdateRateHz`); IMU disablement freezes the held accel/gyro
+  sample and stops the streaming-bias drift while GPS continues; sensor-failure
+  flag stops measurement updates.
 - `NavigationSystem.cpp`: alignment, strapdown INS, and coupled 15-state EKF.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, and latency.
-- `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff;
+- `GuidanceSystem.cpp`: PN, waypoint guidance, and seeker APN handoff; reads
+  the per-entity `navigationConstant`/`waypointGain` from `GuidanceBlock`;
   communication-failure flag zeroes commanded acceleration (ballistic).
-- `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin control.
+- `AutopilotSystem.cpp`: world-to-body demand conversion and bounded fin
+  control; reads the per-entity gains (`kAccelP/kRateP/kAlphaP/kRollP/kRollD`)
+  and `maxDeflectionRad` from `ControlBlock`.
 - `EntityStatusBlock.hpp`: per-entity health, alive state, and the deterministic
   failure flags (motor, actuator, sensor, communications); structural failure
   is `isAlive=false` + `health=0`.
@@ -188,6 +214,9 @@ remains future work.
 | `failure` | deterministic failure/damage semantics: motor thrust/mass-flow stop, actuator fin freeze, sensor measurement stop, communication guidance zero, structural deactivation, per-type events, and argument validation |
 | `lever_arm` | per-entity IMU lever-arm specific-force correction (α×l + ω×(ω×l)) |
 | `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording/reading |
+| `config_wiring` | per-entity sensor enablement (IMU freeze, GPS scheduling/disable) and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp |
+| `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
+| `serialization` | JSON round-trip of all config structs, scenario/design load-save, and malformed-input errors. The `designRef` override is implemented in `ScenarioEntityConfig::from_json` but is not separately exercised by this test |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -206,6 +235,9 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W14 | opt-in kernel ECEF truth across physics/events/sensors/navigation | `40af724` |
 | W15 | frame-aware study-wrapper reporting and versioned CSV output | `d1bd26f` |
 | W16 | configurable CSV/binary study output and structured status metadata | `1ff6d1e` |
+| W21 | flattened per-vehicle subsystem `VehicleConfig`, snake_case JSON/design/scenario serialization | current |
+| W22 | per-entity sensor enablement and guidance/autopilot gain wiring (`config_wiring_test`) | current |
+| W23 | multi-stage propulsion staging and warhead fusing (`staging_warhead_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -238,8 +270,8 @@ tracked here so they are not mistaken for missing documentation or current
 runtime guarantees:
 
 - **Physics and environment:** validated aerodynamic coefficient tables and
-  `AeroForces` data, a fuel/staging model, advanced atmosphere and weather,
-  DEM/DTED loading and query services, global terrain tile streaming,
+  `AeroForces` data, per-stage propellant drawdown, advanced atmosphere and
+  weather, DEM/DTED loading and query services, global terrain tile streaming,
   datum/geoid handling, and polar/dateline policy.
 - **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,
   radar altimeter, and richer measurement timing/calibration. Sensor lever
@@ -267,9 +299,9 @@ runtime guarantees:
 - **Execution and platforms:** parallel CPU execution, validated Vulkan/CPU
   parity, GPU ECEF truth, and CUDA if a concrete requirement is established.
 - **Tools and integration:** richer telemetry schemas,
-  versioned scenario/config loading, plotting/analysis/scenario-generation
-  tools, shared logging/units/profiling utilities, visualization/debug drawing,
-  and the future API server wrapper.
+  versioned scenario/config schema evolution, plotting/analysis/
+  scenario-generation tools, shared logging/units/profiling utilities,
+  visualization/debug drawing, and the future API server wrapper.
 
 ## 10. Known limitations and prioritized backlog
 

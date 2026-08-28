@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **26/26 CTest tests passing** in Release.
+The current validated checkpoint is **29/29 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -93,7 +93,8 @@ For every active entity:
 - all per-entity arrays have an entry at the entity index;
 - the attitude quaternion is normalized after integration;
 - mass is never below `massDry`;
-- achieved fin deflections are limited to ±0.43 rad;
+- achieved fin deflections are limited to ±0.43 rad (the integrator clamp; the
+  configurable `maxDeflectionRad` limits the commanded deflection, §7.4);
 - accelerations in `ax/ay/az` are refreshed after each step;
 - an entity deactivated by ground impact is not advanced by later systems.
 
@@ -191,13 +192,36 @@ rejected: `step(dt)` throws `std::invalid_argument` when `dt <= 0.0`.
 
 ### 5.2 Vehicle initialization and configuration
 
-`VehicleInitState` supplies position, velocity, quaternion, body rates, mass,
-principal inertias, entity type, allegiance, and signature profile IDs.
-`VehicleConfig` supplies per-entity reference area/length, drag and lift
-coefficients, dry mass, thrust curve, and Isp values.
+`VehicleInitState` supplies the 6-DOF pose (position, velocity, quaternion,
+body rates), mass, and allegiance. Fields that previously lived on the init
+state (type, seeker type, signature profile IDs, emitter EIRP, principal
+inertias) now live on `VehicleConfig`.
+
+`VehicleConfig` is the flattened per-vehicle subsystem view: the structural
+summary (`type`, `initialMass`, `massDry`, `Ixx/Iyy/Izz`) and the subsystem
+structs `aero`, `propulsion`, `seeker`, `sensor`, `guidanceAutopilot`,
+`warhead`, plus the signature fields `rcsProfileId`, `irProfileId`, and
+`emitterEirpW`.
+
+- `AeroConfig`: reference area/length and drag/lift coefficients.
+- `PropulsionConfig`: an ordered `stages` list of `StageConfig`
+  (`thrustCurve`, `vacuumIsp`/`seaLevelIsp`, `propellantMassKg`, `dryMassKg`).
+- `SensorConfig`: `imuEnabled`/`gpsEnabled` flags, IMU and GPS noise/bias
+  standard deviations, `gpsUpdateRateHz`, and the IMU body-frame lever arm.
+- `GuidanceAutopilotConfig`: `navigationConstant`, `waypointGain`, autopilot
+  gains `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
+  `servoTimeConstantSec`, and `maxServoRateRadPerSec`.
+- `WarheadConfig`: `massKg`, `FusingType` (`Impact`/`Proximity`/`Timed`),
+  `proximityTriggerM`, `timedDelaySec`, and `lethalRadiusM`.
+- `SeekerConfig`: per-entity seeker type and RF/IR/SARH parameters.
 
 An empty thrust curve means coasting. A configured motor burns only while fuel
 remains and mass flow is clamped at dry mass. Thrust acts along body +X.
+Multi-stage propulsion is described in §6.5 and warhead fusing in §8.
+
+Profile-id database lookups (aero/motor/seek/sensor) are a future layer on top
+of this flat struct: the profile IDs are carried and serialized but are not
+resolved against an external database.
 
 ### 5.3 Commands and guidance state
 
@@ -221,6 +245,30 @@ x/y are the ENU displacement from the configured reference.
 `windVelocity(x, y, z, time)` returns world/ECEF air-mass velocity in m/s. The
 truth model subtracts it from vehicle velocity before aerodynamic evaluation.
 Null callbacks fall back to zero wind and zero terrain.
+
+### 5.5 Configuration serialization and design interchange
+
+All configuration structs serialize to snake_case JSON with enums encoded as
+snake_case strings. The public API operates on JSON text; the underlying
+nlohmann/json dependency is never exposed in public headers.
+
+- `serializeVehicleConfig` / `deserializeVehicleConfig`: the full `VehicleConfig`.
+- `serializeEnvironment` / `deserializeEnvironment`: serialize only the
+  `earth` block; on load the terrain/wind `std::function` callbacks reset to
+  the default flat-terrain/zero-wind environment.
+- `serializeScenario` / `deserializeScenario`, plus
+  `ScenarioConfig::save(path)` (returns false if the file cannot be opened)
+  and static `ScenarioConfig::load(path)` (throws `std::runtime_error` if the
+  file is missing or the JSON is malformed).
+- Design interchange: `serializeDesign(name, geometryJson, physics)` writes a
+  `{"name", "geometry", "physics"}` document; `loadDesignPhysics(path)` reads
+  the `physics` block back into a `VehicleConfig`. A non-empty
+  `ScenarioEntityConfig::designRef` is resolved on scenario load and
+  OVERRIDES any inline `vehicleConfig`.
+
+`VehicleInitState` fields are optional in JSON with safe defaults (zero pose,
+identity quaternion, mass 0, allegiance `friendly`). Deserializers throw
+`std::runtime_error` on malformed JSON or unknown enum strings.
 
 ## 6. Truth dynamics
 
@@ -258,6 +306,24 @@ integrator is also selectable at kernel construction via `IntegratorType`
 (default RK4) for the CPU backend, in addition to the standalone availability
 of each integrator.
 
+### 6.5 Multi-stage propulsion (staging)
+
+`PropulsionConfig::stages` is an ordered list of `StageConfig`. Every stage
+with a non-empty thrust curve is registered with the backend propulsion pool
+and the first such stage is wired as active at launch. The initial `massDry`
+equals the final dry mass plus the sum of the separable dry masses of all
+stages except the last.
+
+After each physics step the kernel's staging pass detects the active stage's
+burnout — the last time in its thrust curve that still produces positive
+thrust. On burnout it drops the spent stage's `dryMassKg` from both current
+mass and `massDry`, rescales `Ixx/Iyy/Izz` by the current-to-new mass ratio,
+advances to the next stage, resets the stage ignition time, and dispatches a
+timestamped `StageSeparation` event.
+
+Per-stage `propellantMassKg` is carried and serialized but is not yet consumed
+by the mass-flow model; per-stage propellant drawdown is future work.
+
 ## 7. Sensors, navigation, seekers, and guidance
 
 ### 7.1 Sensors
@@ -276,6 +342,12 @@ propagation sees the earth-fixed body rate with no spurious drift. The flag is
 ignored in local flat-earth mode. GPS produces noisy position and velocity at
 the configured internal update cadence. GPS values use the selected kernel
 world frame, including ECEF truth mode.
+
+Sensor enablement is per entity. `imuEnabled=false` freezes the IMU output:
+the last accel/gyro sample is held and the streaming random-walk bias drift
+stops, while GPS continues to update and aid the EKF. This is a stale-sample
+degradation, not a full GPS-only positioning mode. `gpsEnabled=false` stops
+GPS updates entirely, and `gpsUpdateRateHz` sets the per-entity GPS cadence.
 
 ### 7.2 Navigation
 
@@ -301,7 +373,7 @@ RF seekers use an RCS profile and the monostatic radar range equation. SARH
 configured off-board illuminator (`SeekerConfig::illuminator*`; the target RCS
 lookup approximates the bistatic cross section). PassiveRF seekers home on a
 target's own emission using its effective radiated power
-(`VehicleInitState::emitterEirpW`); targets with `emitterEirpW = 0` are not
+(`VehicleConfig::emitterEirpW`); targets with `emitterEirpW = 0` are not
 passively detectable. IR seekers use an IR radiant-intensity profile,
 inverse-square irradiance, and Beer-Lambert atmospheric transmittance
 `exp(-k·r)` with `SeekerConfig::irExtinctionPerM` (default `1e-4` m^-1, i.e.
@@ -324,6 +396,13 @@ uses target position/velocity and kernel APN uses filtered seeker LOS rates on
 lock. Seeker-locked APN clamps commanded acceleration to the per-entity
 `maxAccel` magnitude limit, matching PN and Waypoint. The autopilot translates
 commanded world acceleration into bounded body fin demands.
+
+Guidance and autopilot constants are per entity and read from the config at
+vehicle creation: `navigationConstant` and `waypointGain` drive seeker APN and
+waypoint guidance, and the autopilot gains (`kAccelP/kRateP/kAlphaP/kRollP/
+kRollD`) plus `maxDeflectionRad` (the fin clamp, default 0.43 rad) drive fin
+command generation. Guidance and autopilot systems read these from the per-
+entity guidance and control blocks rather than from class constants.
 
 Trajectory management, pursuit, LQR/MPC, blended guidance handoff, imaging IR,
 multi-target tracking, and dynamic SARH illuminator tracking are planned, not
@@ -351,6 +430,19 @@ failure zeroes the commanded acceleration (fly ballistic, guidance and seeker
 handoff ignored). The model is deliberately bounded: flags are deterministic
 and not probabilistic, partial health has no effect beyond deactivation, and
 repair is not modeled.
+
+Multi-stage vehicles dispatch a `StageSeparation` event when a spent stage
+separates (§6.5). Warhead fusing is evaluated each step after ground-impact
+detection. The fuse triggers as follows:
+
+- `Impact` detonates when the carrying entity is deactivated (ground impact);
+- `Proximity` detonates when an alive entity is within `proximityTriggerM`;
+- `Timed` detonates `timedDelaySec` after launch.
+
+Detonation dispatches a timestamped `Detonation` event and destroys (health
+set to zero) every other alive entity within `lethalRadiusM`. A warhead with
+`lethalRadiusM <= 0` is inert. The lethality model is a flat radius cut; there
+is no fragmentation or overpressure falloff curve yet.
 
 Available wrappers:
 
@@ -388,11 +480,14 @@ terrain/wind callbacks, impact events, deterministic failure/damage models
 navigation EKF, RF/IR/SARH/PassiveRF seekers with chaff/flare decoys,
 PN/APN/waypoint guidance, autopilot, WGS84/ECEF/local-earth models,
 optional ECEF kernel truth, batch/sweep/Monte Carlo/optimizer tooling, and
-installable CMake packaging.
+installable CMake packaging. The flattened per-vehicle subsystem `VehicleConfig`
+surface, snake_case JSON/design/scenario serialization, per-entity sensor
+enablement, multi-stage propulsion with stage separation, and warhead fusing
+(impact/proximity/timed) are also implemented (MVP).
 
-Planned or partial: coefficient tables and higher-fidelity aero, fuel/staging
-models, probabilistic failure degradation, partial health effects and repair,
-advanced atmosphere, full global
+Planned or partial: coefficient tables and higher-fidelity aero,
+per-stage propellant drawdown, probabilistic failure degradation, partial
+health effects and repair, advanced atmosphere, full global
 terrain/DEM ingestion, geoid models, imaging IR, multi-target seeker
 tracking, dynamic SARH illuminator tracking, band-resolved extinction,
 sensor fusion, trajectory/energy management, pursuit, LQR/MPC,
