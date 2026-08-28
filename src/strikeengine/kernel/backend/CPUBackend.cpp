@@ -151,8 +151,14 @@ namespace StrikeEngine::Kernel
                 thrustBodyX = prop.thrustBodyX;
                 massFlow   = prop.massFlowRate_kg_s;
                 constexpr double kFuelDepletionGuardWindowSec = 0.01; // depletion guard window (s); mass floor is enforced by applyStateUpdate
-                if (massFlow * kFuelDepletionGuardWindowSec > fuel)  // never burn more fuel than remains
-                    massFlow = fuel / kFuelDepletionGuardWindowSec;
+                if (massFlow * kFuelDepletionGuardWindowSec > fuel) {  // never burn more fuel than remains
+                    const double cappedMassFlow = fuel / kFuelDepletionGuardWindowSec;
+                    // Scale thrust with the capped flow so T = mdot*Isp*g0
+                    // holds at every instant: no free-thrust tail on the last
+                    // few grams of propellant (full thrust on ~0 flow).
+                    thrustBodyX *= cappedMassFlow / massFlow;
+                    massFlow = cappedMassFlow;
+                }
             }
 
             // Motor failure zeroes thrust; mass flow stops with it.

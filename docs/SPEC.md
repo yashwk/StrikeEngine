@@ -57,7 +57,7 @@ Every feature in this specification has one of these statuses:
 | Planned | A desired capability is recorded here but is not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on the capability; no silent fallback is promised. |
 
-The current validated checkpoint is **31/31 CTest tests passing** in Release.
+The current validated checkpoint is **32/32 CTest tests passing** in Release.
 The test count is evidence for the current checkout, not a promise that every
 future model or integration is complete.
 
@@ -301,7 +301,7 @@ Earth-radius offsets.
 `intercept_test_01` is a deterministically tuned data set (sensor seed
 `0xDEADBEEF`) used to demonstrate the designer→engine pipeline end-to-end; it
 is not a guidance-performance claim. Its assertions — a real guided intercept
-(min miss 33.57 m < 50 m at t≈19.7 s) and a proximity-warhead kill via the
+(min miss 16.77 m < 50 m at t≈19.7 s) and a proximity-warhead kill via the
 event system — are pipeline evidence, not a general accuracy guarantee.
 
 `VehicleInitState` fields are optional in JSON with safe defaults (zero pose,
@@ -370,6 +370,12 @@ mass-flow floor becomes `massDry` plus the propellant reserved for later
 stages, and the stage separates on propellant exhaustion (or curve end,
 whichever comes first). A stage with `propellantMassKg <= 0` keeps the
 curve-end behavior. Leftover propellant in a spent stage is not dumped (MVP).
+
+The propulsion law `T = ṁ·Isp·g0` is enforced at every instant, including fuel
+exhaustion: the fuel-depletion guard caps mass flow to the propellant remaining
+in the depletion window and scales thrust with the capped flow, so thrust
+self-terminates when propellant is exhausted. There is no free-thrust tail of
+full thrust on the final grams of fuel.
 
 ## 7. Sensors, navigation, seekers, and guidance
 
@@ -534,6 +540,11 @@ enablement, multi-stage propulsion with stage separation, and warhead fusing
 manifests (`data/profiles`) and scenarios (`data/scenarios`) are engine-
 consumable and exercised end-to-end via `designer_pipeline_test`; the profile-id
 database layer (aero/motor/seeker/sensor/RCS) resolves the manifest's parts.
+A first-principles WGS84 rocket-launch verification (`rocket_mvp_test`) cross-
+checks the propulsion and ballistic truth against hand-computed expectations:
+initial acceleration against `T/m − g_lat`, burnout time against the pressure-
+interpolated-Isp band, and burnout velocity against the ideal rocket equation
+`Δv = Isp·g0·ln(m0/mdry)`, confirming the `T = ṁ·Isp·g0` motor law.
 
 Planned or partial: coefficient tables and higher-fidelity aero,
 probabilistic failure degradation, partial

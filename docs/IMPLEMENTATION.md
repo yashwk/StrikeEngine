@@ -16,7 +16,7 @@ it is not an alternative authority.
 - Default build: static `strikeengine` library with CPU backend.
 - Optional companion: `strikeengine_vulkan`, enabled with
   `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **31/31 CTest tests pass**.
+- Release validation: **32/32 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - The requested `.idea` project metadata change is included in this next
   documentation checkpoint; it is not runtime behavior.
@@ -161,7 +161,11 @@ CPU-side only. The `PhysicsBlock` truth SoA also carries the per-entity
   quaternion propagation, and servo dynamics. Reads the physical truth mirror
   of the motor/actuator failure flags (`PhysicsBlock::motorFailed` /
   `actuatorFailed`). Each non-empty-thrust-curve propulsion stage is registered
-  in the pool by `SimulationKernel::createVehicle`.
+  in the pool by `SimulationKernel::createVehicle`. The fuel-depletion guard
+  caps mass flow to the propellant remaining in the depletion window and scales
+  thrust with the capped flow, so `T = ṁ·Isp·g0` holds at every instant and
+  thrust self-terminates at fuel exhaustion (no free-thrust tail of full thrust
+  on the final grams of fuel).
 - `EarthModel.hpp`: WGS84 conversion, normal gravity, Coriolis, curvature, and
   transport APIs.
 - `EarthFrames.hpp`: ECEF/ENU/NED transforms, local gravity, and centrifugal
@@ -269,7 +273,8 @@ remains future work.
 | `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
 | `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`), the round-trip of the four profile-id keys, and a legacy-compat case (a pre-feature `VehicleConfig` without the profile-id keys still deserializes with empty ids) |
 | `profile_database` | per-subsystem profile DB parsing (aero/motor/seek/sensor) with defaults for omitted keys; `loadProfile` returning `false` on any failure (missing file, malformed JSON, wrong-typed field, missing required seeker `type`/motor `stages`); `createVehicle` profile-wins resolution into the SoA blocks; empty-id regression (inline config untouched); missing/schema-broken profile → `std::runtime_error` naming the file; shipped `data/aero|motors|seekers|sensors` examples parse |
-| `designer_pipeline` | end-to-end designer→engine chain: loads `data/scenarios/intercept_test_01.json`, resolves both `design_ref` manifests into `VehicleConfig` (opposing allegiances, ProNav mode), verifies the four missile subsystem profile ids and the drone `rcsProfileId` reach the SoA blocks (motor stage count 2, seeker FOV 6°/gimbal 65° vs the inline 60° placeholder, drone RCS id in the status block), runs the intercept, and asserts a real guided intercept (min miss 33.57 m < 50 m at t≈19.7 s) plus a proximity-warhead kill via the event system |
+| `designer_pipeline` | end-to-end designer→engine chain: loads `data/scenarios/intercept_test_01.json`, resolves both `design_ref` manifests into `VehicleConfig` (opposing allegiances, ProNav mode), verifies the four missile subsystem profile ids and the drone `rcsProfileId` reach the SoA blocks (motor stage count 2, seeker FOV 6°/gimbal 65° vs the inline 60° placeholder, drone RCS id in the status block), runs the intercept, and asserts a real guided intercept (min miss 16.77 m < 50 m at t≈19.7 s) plus a proximity-warhead kill via the event system |
+| `rocket_mvp` | first-principles WGS84 single-stage rocket-launch verification (local ENU, Somigliana normal gravity at 28.5°N, ISA-1976, pressure-interpolated Isp, fuel-limited burnout, RK4 dt=0.01 s, ballistic): T0 thrust (60000 N), T0 mass flow (27.81 kg/s at sea-level Isp), initial acceleration (T/m − g_lat ≈ 110.2 m/s²), burnout time within the pressure-interpolated-Isp band [5.39, 6.13] s, mass at cutoff ≈ 350 kg, cutoff velocity vs the ideal rocket equation Δv = Isp·g0·ln(m0/mdry), apogee band and no-drag bound, max dynamic pressure (~242 kPa), ISA-1976 sea-level density 1.225 kg/m³, WGS84 geodetic↔ECEF round trip, Somigliana gravity monotone and altitude-accurate (<0.1%), lateral drift ~0, and a 70°-elevation arcing case; discriminates the free-thrust-tail propulsion bug |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -293,6 +298,7 @@ Every runtime increment MUST add or update a deterministic regression, run
 | W23 | multi-stage propulsion staging and warhead fusing (`staging_warhead_test`) | current |
 | W24 | profile-id database layer (`profile_database_test`): aero/motor/seek/sensor single-profile loaders, `createVehicle` profile-wins resolution, shared snake_case profile schema | current |
 | W25 | designer→engine pipeline (`designer_pipeline_test`): engine-consumable `data/profiles` design manifests, flat `data/rcs/target_drone_rcs.json` table, rewritten `data/scenarios/intercept_test_01.json` in the ScenarioConfig schema, `SeekerTypeStrings.hpp` dedup, end-to-end guided intercept + proximity-warhead kill | current |
+| W26 | first-principles rocket-launch verification (`rocket_mvp_test`) + propulsion-law fix: WGS84 single-stage launch cross-checked by hand (T0 thrust/mass flow, initial accel, ideal rocket-equation cutoff velocity, apogee/max-Q), and the fuel-depletion guard now scales thrust with the capped mass flow so `T = ṁ·Isp·g0` holds at fuel exhaustion (no free-thrust tail) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

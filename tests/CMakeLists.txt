@@ -20,6 +20,9 @@ target_link_libraries(vehicleconfig_test PRIVATE strikeengine)
 add_executable(intercept_test validation/intercept_test.cpp)
 target_link_libraries(intercept_test PRIVATE strikeengine)
 
+add_executable(rocket_mvp_test validation/rocket_mvp_test.cpp)
+target_link_libraries(rocket_mvp_test PRIVATE strikeengine)
+
 add_executable(integrator_test validation/integrator_test.cpp)
 target_link_libraries(integrator_test PRIVATE strikeengine)
 
@@ -122,6 +125,9 @@ set_tests_properties(vehicleconfig PROPERTIES TIMEOUT 120)
 
 add_test(NAME intercept COMMAND intercept_test)
 set_tests_properties(intercept PROPERTIES TIMEOUT 120)
+
+add_test(NAME rocket_mvp COMMAND rocket_mvp_test)
+set_tests_properties(rocket_mvp PROPERTIES TIMEOUT 120)
 
 add_test(NAME integrator COMMAND integrator_test)
 set_tests_properties(integrator PROPERTIES TIMEOUT 120)
