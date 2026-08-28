@@ -1,32 +1,32 @@
-    # CMake build files and cache
-    cmake-build-*/
-    CMakeCache.txt
-    CMakeFiles/
-    Makefile
-    install_manifest.txt
-    compile_commands.json
-    structure.txt
+# CMake build files and cache
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+install_manifest.txt
+compile_commands.json
+structure.txt
 
-    # CLion IDE files
-    .idea/
+# CLion IDE files
+.idea/
 
-    # Visual Studio files
-    *.sln
-    *.vcxproj*
-    .vs/
+# Visual Studio files
+*.sln
+*.vcxproj*
+.vs/
 
-    # Compiled output
-    *.exe
-    *.dll
-    *.so
-    *.a
-    *.lib
-    *.obj
-    *.pdb
+# Compiled output
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.obj
+*.pdb
 
-    # Generated data files
-    *.bin
-    /data/atmosphere_table.bin
+# Generated data files
+*.bin
+/data/atmosphere_table.bin
 
 # Build outputs and scratch
 build/

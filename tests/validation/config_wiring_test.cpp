@@ -78,6 +78,8 @@ int main() {
               "waypointGain propagates into GuidanceBlock");
         check(kernel.getControl().maxDeflectionRad[id] == 0.1,
               "maxDeflectionRad propagates into ControlBlock");
+        check(kernel.getPhysics().maxDeflectionRad[id] == 0.1,
+              "maxDeflectionRad propagates into PhysicsBlock (achieved clamp)");
         check(kernel.getControl().kAccelP[id] == 0.045,
               "kAccelP propagates into ControlBlock");
 
@@ -92,6 +94,7 @@ int main() {
         kernel.queueCommand(cmd);
 
         double maxPitch = 0.0, maxYaw = 0.0, maxRoll = 0.0;
+        double maxFinPitch = 0.0, maxFinYaw = 0.0, maxFinRoll = 0.0;
         constexpr double dt = 0.01;
         for (int step = 0; step < 200; ++step) {   // 2 s
             kernel.step(dt);
@@ -102,11 +105,17 @@ int main() {
             maxPitch = std::max(maxPitch, std::abs(c.pitchCommand[id]));
             maxYaw   = std::max(maxYaw,   std::abs(c.yawCommand[id]));
             maxRoll  = std::max(maxRoll,  std::abs(c.rollCommand[id]));
+            maxFinPitch = std::max(maxFinPitch, std::abs(p.finPitch[id]));
+            maxFinYaw   = std::max(maxFinYaw,   std::abs(p.finYaw[id]));
+            maxFinRoll  = std::max(maxFinRoll,  std::abs(p.finRoll[id]));
         }
 
         check(maxPitch <= 0.1 + 1e-9, "pitch command respects configurable maxDeflectionRad");
         check(maxYaw   <= 0.1 + 1e-9, "yaw command respects configurable maxDeflectionRad");
         check(maxRoll  <= 0.1 + 1e-9, "roll command respects configurable maxDeflectionRad");
+        check(maxFinPitch <= 0.1 + 1e-9, "achieved finPitch respects the configurable achieved clamp");
+        check(maxFinYaw   <= 0.1 + 1e-9, "achieved finYaw respects the configurable achieved clamp");
+        check(maxFinRoll  <= 0.1 + 1e-9, "achieved finRoll respects the configurable achieved clamp");
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

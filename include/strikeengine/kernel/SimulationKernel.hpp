@@ -42,6 +42,8 @@ namespace StrikeEngine::Kernel {
         std::vector<int>    poolIds;       // backend propulsion pool id per stage
         std::vector<double> burnDurations; // thrust-curve end time per stage (s)
         std::vector<double> dropMasses;    // structure dropped after each stage (kg)
+        std::vector<double> propellantCaps; // raw StageConfig::propellantMassKg per stage
+        std::vector<double> reservedAfter;  // sum of later stages' positive propellant caps (kg)
     };
 
     // Per-entity warhead state (see SimulationKernel::processWarheads).

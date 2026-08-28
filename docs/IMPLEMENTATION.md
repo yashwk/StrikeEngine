@@ -216,7 +216,7 @@ remains future work.
 | `reporting` | versioned local/ECEF wrapper output, field selection, and binary recording/reading |
 | `config_wiring` | per-entity sensor enablement (IMU freeze, GPS scheduling/disable) and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp |
 | `staging_warhead` | two-stage separation (stage drop, inertia rescale, `StageSeparation` event) and impact/proximity/timed warhead fusing (`Detonation` event, flat lethal-radius kill) |
-| `serialization` | JSON round-trip of all config structs, scenario/design load-save, and malformed-input errors. The `designRef` override is implemented in `ScenarioEntityConfig::from_json` but is not separately exercised by this test |
+| `serialization` | JSON round-trip of all config structs, scenario/design load-save, malformed-input errors, and the `designRef` override (a design file's `physics` supersedes inline `vehicleConfig`) |
 
 Every runtime increment MUST add or update a deterministic regression, run
 `git diff --check`, build Release, and run complete CTest.
@@ -270,7 +270,7 @@ tracked here so they are not mistaken for missing documentation or current
 runtime guarantees:
 
 - **Physics and environment:** validated aerodynamic coefficient tables and
-  `AeroForces` data, per-stage propellant drawdown, advanced atmosphere and
+  `AeroForces` data, advanced atmosphere and
   weather, DEM/DTED loading and query services, global terrain tile streaming,
   datum/geoid handling, and polar/dateline policy.
 - **Navigation and sensing:** sensor-fusion services, magnetometer, barometer,

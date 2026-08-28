@@ -110,6 +110,10 @@ namespace StrikeEngine::Kernel {
             physicsBlock.stageIndex.push_back(-1);
             physicsBlock.stageCount.push_back(0);
             physicsBlock.finPitch.push_back(0.0); physicsBlock.finYaw.push_back(0.0); physicsBlock.finRoll.push_back(0.0);
+            physicsBlock.maxDeflectionRad.push_back(0.43);
+            physicsBlock.servoTimeConstantSec.push_back(0.02);
+            physicsBlock.maxServoRateRadPerSec.push_back(5.24);
+            physicsBlock.stageMinMass.push_back(0.0);
             physicsBlock.active.push_back(true);
             physicsBlock.motorFailed.push_back(false);
             physicsBlock.actuatorFailed.push_back(false);
@@ -208,6 +212,9 @@ namespace StrikeEngine::Kernel {
         controlBlock.kRollP[id] = config.guidanceAutopilot.kRollP;
         controlBlock.kRollD[id] = config.guidanceAutopilot.kRollD;
         controlBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
+        physicsBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
+        physicsBlock.servoTimeConstantSec[id] = config.guidanceAutopilot.servoTimeConstantSec;
+        physicsBlock.maxServoRateRadPerSec[id] = config.guidanceAutopilot.maxServoRateRadPerSec;
 
         guidanceBlock.mode[id] = GuidanceMode::None;
         guidanceBlock.targetX[id] = 0; guidanceBlock.targetY[id] = 0; guidanceBlock.targetZ[id] = 0;
@@ -256,26 +263,40 @@ namespace StrikeEngine::Kernel {
             }
             plan.burnDurations.push_back(burnDuration);
             plan.dropMasses.push_back(stage.dryMassKg);
+            plan.propellantCaps.push_back(stage.propellantMassKg);
+        }
+        // reservedAfter[i] = sum of later stages' positive propellant caps
+        // (fuel kept off-limits for the current stage).
+        plan.reservedAfter.assign(plan.poolIds.size(), 0.0);
+        double reserved = 0.0;
+        for (std::size_t k = plan.poolIds.size(); k-- > 0;) {
+            plan.reservedAfter[k] = reserved;
+            reserved += std::max(0.0, plan.propellantCaps[k]);
         }
         double separableDry = 0.0;
         for (std::size_t s = 0; s + 1 < plan.dropMasses.size(); ++s) {
             separableDry += plan.dropMasses[s];
         }
-        if (plan.poolIds.empty()) {
-            physicsBlock.propulsionId[id] = -1;
-            physicsBlock.stageIndex[id] = -1;
-            physicsBlock.stageCount[id] = 0;
-            stagePlans[id] = StagePlan{};
-        } else {
+        const bool hasStages = !plan.poolIds.empty();
+        const double reservedAfter0 = plan.reservedAfter.empty() ? 0.0 : plan.reservedAfter[0];
+        if (hasStages) {
             physicsBlock.propulsionId[id] = plan.poolIds.front();
             physicsBlock.stageIndex[id] = 0;
             physicsBlock.stageCount[id] = static_cast<int>(plan.poolIds.size());
             stagePlans[id] = std::move(plan);
+        } else {
+            physicsBlock.propulsionId[id] = -1;
+            physicsBlock.stageIndex[id] = -1;
+            physicsBlock.stageCount[id] = 0;
+            stagePlans[id] = StagePlan{};
         }
 
         physicsBlock.mass[id] = (config.initialMass >= 0.0) ? config.initialMass : init.mass;
         const double finalDry = (config.massDry < 0.0) ? physicsBlock.mass[id] : config.massDry;
         physicsBlock.massDry[id] = finalDry + separableDry;
+        // The stage floor reserves later stages' propellant: the active stage
+        // may burn only down to dry mass + reserved fuel.
+        physicsBlock.stageMinMass[id] = hasStages ? physicsBlock.massDry[id] + reservedAfter0 : 0.0;
 
         physicsBlock.referenceArea[id] = config.aero.referenceArea;
         physicsBlock.referenceLength[id] = config.aero.referenceLength;
@@ -427,8 +448,16 @@ namespace StrikeEngine::Kernel {
             const StagePlan& plan = stagePlans[i];
             if (si + 1 >= static_cast<int>(plan.poolIds.size())) continue;
 
-            // Burnout: the active stage's thrust curve has fully elapsed.
-            if (time.currentTime() - physicsBlock.ignitionTime[i] < plan.burnDurations[si]) {
+            // Burnout: the active stage's thrust curve has fully elapsed, or
+            // the stage's propellant cap has been drawn down to its
+            // stage-aware floor (mass can no longer decrease).
+            const bool curveElapsed =
+                time.currentTime() - physicsBlock.ignitionTime[i] >= plan.burnDurations[si];
+            const bool propellantExhausted =
+                si < static_cast<int>(plan.propellantCaps.size()) &&
+                plan.propellantCaps[si] > 0.0 &&
+                physicsBlock.mass[i] <= physicsBlock.stageMinMass[i] + 1e-9;
+            if (!curveElapsed && !propellantExhausted) {
                 continue;
             }
 
@@ -447,6 +476,15 @@ namespace StrikeEngine::Kernel {
             ++physicsBlock.stageIndex[i];
             physicsBlock.propulsionId[i] = plan.poolIds[physicsBlock.stageIndex[i]];
             physicsBlock.ignitionTime[i] = time.currentTime();
+
+            // Raise the floor for the new active stage (reserve later stages'
+            // propellant again). Leftover propellant in the spent stage is not
+            // dumped; it carries into the remaining fuel pool (MVP
+            // simplification).
+            const int nextSi = physicsBlock.stageIndex[i];
+            if (nextSi >= 0 && nextSi < static_cast<int>(plan.reservedAfter.size())) {
+                physicsBlock.stageMinMass[i] = physicsBlock.massDry[i] + plan.reservedAfter[nextSi];
+            }
 
             SimulationEvent evt;
             evt.type = EventType::StageSeparation;

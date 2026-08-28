@@ -305,6 +305,47 @@ int main()
         std::remove(path.c_str());
     }
 
+    // ---- 4.5 designRef overrides the inline vehicle config ----
+    {
+        VehicleConfig cfg;
+        cfg.aero.cd = 0.77;
+        const std::string design = serializeDesign("demo", R"({"nose":"cone"})", cfg);
+        const std::string path = "serialization_test_tmp_design.json";
+        {
+            std::ofstream f(path);
+            f << design;
+        }
+
+        ScenarioConfig scenario;
+        scenario.name = "designref-scenario";
+        ScenarioEntityConfig entity;
+        entity.initState.px = 0.0;
+        entity.initState.py = 0.0;
+        entity.initState.pz = 1000.0;
+        entity.initState.qw = 1.0;
+        entity.initState.mass = 100.0;
+        entity.designRef = path;
+        entity.vehicleConfig.aero.cd = 0.123;   // inline config, weaker than the design file
+        scenario.entities.push_back(entity);
+
+        bool loadedOk = true;
+        ScenarioConfig loaded;
+        try {
+            loaded = deserializeScenario(serializeScenario(scenario));
+        } catch (const std::exception& e) {
+            check(false, "designRef scenario round-trip did not throw");
+            std::printf("  unexpected exception: %s\n", e.what());
+            loadedOk = false;
+        }
+        if (loadedOk) {
+            check(loaded.entities[0].vehicleConfig.aero.cd == 0.77,
+                  "designRef overrides the inline vehicle config (cd = 0.77)");
+            check(loaded.entities[0].designRef == path,
+                  "designRef is preserved through the scenario round-trip");
+        }
+        std::remove(path.c_str());
+    }
+
     // ---- 5. Malformed JSON and unknown enums throw std::runtime_error ----
     {
         bool threw = false;

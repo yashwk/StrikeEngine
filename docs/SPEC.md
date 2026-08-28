@@ -93,8 +93,8 @@ For every active entity:
 - all per-entity arrays have an entry at the entity index;
 - the attitude quaternion is normalized after integration;
 - mass is never below `massDry`;
-- achieved fin deflections are limited to ±0.43 rad (the integrator clamp; the
-  configurable `maxDeflectionRad` limits the commanded deflection, §7.4);
+- achieved fin deflections are limited to the per-entity `maxDeflectionRad`
+  (the integrator clamp, §7.4);
 - accelerations in `ax/ay/az` are refreshed after each step;
 - an entity deactivated by ground impact is not advanced by later systems.
 
@@ -321,8 +321,11 @@ mass and `massDry`, rescales `Ixx/Iyy/Izz` by the current-to-new mass ratio,
 advances to the next stage, resets the stage ignition time, and dispatches a
 timestamped `StageSeparation` event.
 
-Per-stage `propellantMassKg` is carried and serialized but is not yet consumed
-by the mass-flow model; per-stage propellant drawdown is future work.
+A stage with `propellantMassKg > 0` burns only its declared propellant: the
+mass-flow floor becomes `massDry` plus the propellant reserved for later
+stages, and the stage separates on propellant exhaustion (or curve end,
+whichever comes first). A stage with `propellantMassKg <= 0` keeps the
+curve-end behavior. Leftover propellant in a spent stage is not dumped (MVP).
 
 ## 7. Sensors, navigation, seekers, and guidance
 
@@ -486,7 +489,7 @@ enablement, multi-stage propulsion with stage separation, and warhead fusing
 (impact/proximity/timed) are also implemented (MVP).
 
 Planned or partial: coefficient tables and higher-fidelity aero,
-per-stage propellant drawdown, probabilistic failure degradation, partial
+probabilistic failure degradation, partial
 health effects and repair, advanced atmosphere, full global
 terrain/DEM ingestion, geoid models, imaging IR, multi-target seeker
 tracking, dynamic SARH illuminator tracking, band-resolved extinction,

@@ -53,16 +53,19 @@ namespace StrikeEngine::Kernel
 			state.qy[i] *= qinv;
 			state.qz[i] *= qinv;
 
-			// Mass: burns down to dry mass, never below
+			// Mass: burns down to the stage-aware floor (structural dry mass or
+			// the current stage's propellant-exhaustion floor), never below.
+			const double floor = std::max(state.massDry[i],
+			                              (i < state.stageMinMass.size()) ? state.stageMinMass[i] : 0.0);
 			state.mass[i] += scale * d.mass[i];
-			if (state.mass[i] < state.massDry[i])
-				state.mass[i] = state.massDry[i];
+			if (state.mass[i] < floor)
+				state.mass[i] = floor;
 
-			// Servo deflections clamped to physical limits
-			constexpr double kMaxDeflection = 0.43;
-			state.finPitch[i] = std::clamp(state.finPitch[i] + scale * d.finPitch[i], -kMaxDeflection, kMaxDeflection);
-			state.finYaw[i]   = std::clamp(state.finYaw[i]   + scale * d.finYaw[i],   -kMaxDeflection, kMaxDeflection);
-			state.finRoll[i]  = std::clamp(state.finRoll[i]  + scale * d.finRoll[i],  -kMaxDeflection, kMaxDeflection);
+			// Servo deflections clamped to the per-entity physical limit
+			const double defl = (i < state.maxDeflectionRad.size()) ? state.maxDeflectionRad[i] : 0.43;
+			state.finPitch[i] = std::clamp(state.finPitch[i] + scale * d.finPitch[i], -defl, defl);
+			state.finYaw[i]   = std::clamp(state.finYaw[i]   + scale * d.finYaw[i],   -defl, defl);
+			state.finRoll[i]  = std::clamp(state.finRoll[i]  + scale * d.finRoll[i],  -defl, defl);
 		}
 	}
 

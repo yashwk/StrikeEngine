@@ -46,9 +46,19 @@ struct PhysicsBlock {
 	std::vector<double> ignitionTime;      // s (thrust curve evaluated at t - ignitionTime)
 	std::vector<int>    stageIndex;        // active stage; -1 = coasting/finished
 	std::vector<int>    stageCount;        // number of registered stages
+	std::vector<double> stageMinMass;      // minimum mass for the current active stage; below
+	                                       // it the stage's propellant is exhausted. For a
+	                                       // coasting entity or uncapped stage it equals/falls
+	                                       // below massDry; for a capped stage it is
+	                                       // massDry + (propellant reserved for later stages).
 
 	// Actuator truth (achieved deflections, rad)
 	std::vector<double> finPitch, finYaw, finRoll;
+
+	// Per-entity actuator/config parameters (W1)
+	std::vector<double> maxDeflectionRad;      // achieved fin clamp (rad)
+	std::vector<double> servoTimeConstantSec;  // first-order actuator lag (s)
+	std::vector<double> maxServoRateRadPerSec; // servo rate limit (rad/s)
 
 	std::vector<bool> active;
 

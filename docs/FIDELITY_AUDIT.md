@@ -50,7 +50,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | W14 — Kernel ECEF truth mode | MVP / partial | `ecef_kernel_test`; ECEF truth, geodetic atmosphere/ground handling, ECEF GPS/INS flow, and ellipsoid-clamped impact are covered. |
 | W15 — Frame-aware study reporting | MVP / partial | `reporting_test`; versioned local/ECEF CSV metadata, geodetic coordinates, normalized altitude, and explicit primary-entity selection are covered. |
 | W16 — Structured study output | MVP / partial | `reporting_test`; configurable fields, status/entity metadata, versioned CSV output, binary recording, and the binary reader are covered. Richer telemetry and streaming remain open. |
-| W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; flattened per-vehicle `VehicleConfig`, snake_case JSON round-trip of all config structs, and scenario/design load-save are covered. The `designRef` override is implemented (overrides inline `vehicleConfig` on scenario load) but is not yet separately regression-covered. Profile-id database lookups are a future layer. |
+| W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; flattened per-vehicle `VehicleConfig`, snake_case JSON round-trip of all config structs, and scenario/design load-save are covered. The `designRef` override (overrides inline `vehicleConfig` on scenario load) is regression-covered. Profile-id database lookups are a future layer. |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; per-entity IMU freeze, GPS scheduling/disable, and guidance/autopilot gain propagation with the configurable `maxDeflectionRad` clamp are covered. |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation (dry-mass drop, inertia rescale, `StageSeparation`) and impact/proximity/timed fusing (`Detonation`, flat lethal-radius kill) are covered. |
 
@@ -62,7 +62,7 @@ and each limitation is listed once in the subsystem assessment or backlog.
 | Rotational truth | Diagonal body inertia, gyroscopic coupling, body angular rates, quaternion attitude, and bounded fin moments. | **MVP / partial:** no full inertia-tensor or flexible-body model. |
 | Atmosphere | Layered ISA1976 atmosphere through 86 km, with density, pressure, temperature, and sound speed. | **Implemented for the stated envelope:** no weather or high-fidelity atmospheric model. |
 | Aerodynamics | Air-relative drag, angle-of-attack lift, fin pitch lift, yaw-fin side force, stability, rate damping, and bounded moments. | **MVP / partial:** coefficients are simplified and not validated against tables, CFD, or wind-tunnel data. |
-| Propulsion | Per-entity thrust curves, vacuum/sea-level Isp interpolation, mass flow, dry-mass limiting, axial body +X thrust, and ordered multi-stage staging (dry-mass drop, inertia rescale, stage separation). | **MVP / partial:** per-stage `propellantMassKg` is serialized but not yet consumed by the mass-flow model; no thrust vectoring or fuel-tank/engine failure model. |
+| Propulsion | Per-entity thrust curves, vacuum/sea-level Isp interpolation, mass flow, dry-mass limiting, axial body +X thrust, and ordered multi-stage staging (dry-mass drop, inertia rescale, stage separation). | **MVP / partial:** per-stage `propellantMassKg` caps stage drawdown (later-stage propellant reserved via a stage mass floor); no thrust vectoring or fuel-tank/engine failure model. |
 | Actuators and control | World-to-body acceleration demand, bounded fin commands, first-order servo lag, rate limiting, pitch/yaw sign conventions, and per-entity configurable gains/clamp. | **MVP / partial:** fixed per-entity engineering gains; no gain scheduling, actuator failure, or advanced controller. |
 | Integration | Derivative callbacks with true stage re-evaluation for RK4/RK45; bounded adaptive substeps; interpolated impact crossing; kernel integrator selection exposed via `IntegratorType` at construction (CPU-side). | **MVP / partial:** no multirate solver or complete event-aware adaptive policy. |
 | Earth and frames | WGS84 conversion, normal and spherical gravity, ECEF/ENU/NED transforms, Coriolis, centrifugal, transport terms, standalone ECEF propagation, and opt-in kernel ECEF truth. | **MVP / partial:** no geoid, global terrain streaming, polar/dateline scenario policy, or complete earth-rate treatment across every subsystem. |
@@ -135,9 +135,9 @@ to reliable downstream use:
 5. **Staging and warhead fidelity:** multi-stage staging (dry-mass drop, inertia
    rescale, `StageSeparation`) and impact/proximity/timed fusing (flat lethal-
    radius kill, `Detonation`) are implemented (MVP, `staging_warhead_test`).
-   Remaining: per-stage propellant drawdown (serialized but not consumed), a
-   fragmentation/overpressure falloff curve, and arbitrary stage-count
-   validation.
+   Remaining: a fragmentation/overpressure falloff curve and arbitrary
+   stage-count validation. (Per-stage propellant drawdown is implemented;
+   leftover propellant in a spent stage is not dumped.)
 6. **Guidance and aero depth:** add validated coefficient tables, trajectory
    management, pursuit, LQR/MPC, and blended guidance handoff.
 7. **Backend parity:** validate Vulkan against CPU truth, add GPU ECEF support,

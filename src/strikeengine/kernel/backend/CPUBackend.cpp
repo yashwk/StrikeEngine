@@ -81,7 +81,6 @@ namespace StrikeEngine::Kernel
         PhysicsBlock& d)
     {
         const std::size_t n = s.size;
-        constexpr double servoTimeConstant = 0.02; // first-order actuator lag (s)
 
         for (std::size_t i = 0; i < n; ++i)
         {
@@ -144,7 +143,7 @@ namespace StrikeEngine::Kernel
             double thrustBodyX = 0.0;
             double massFlow = 0.0;
             const int pid = s.propulsionId[i];
-            const double fuel = s.mass[i] - s.massDry[i];
+            const double fuel = s.mass[i] - std::max(s.massDry[i], s.stageMinMass[i]);
             if (pid >= 0 && fuel > 1e-9 && pid < static_cast<int>(propulsionPool.size()))
             {
                 const auto prop = propulsionPool[static_cast<std::size_t>(pid)]->evaluate(
@@ -271,8 +270,9 @@ namespace StrikeEngine::Kernel
             d.mass[i] = -massFlow;
 
             // 9. Actuator dynamics: first-order lag toward commanded
-            // deflection with a physical rate limit (~300 deg/s).
-            constexpr double maxServoRate = 5.24;  // rad/s
+            // deflection with a per-entity physical rate limit.
+            const double servoTimeConstant = s.servoTimeConstantSec[i];
+            const double maxServoRate = s.maxServoRateRadPerSec[i];
             auto servo = [maxServoRate](double cmd, double fin, double tau) {
                 const double target = std::clamp((cmd - fin) / tau, -maxServoRate, maxServoRate);
                 return target;

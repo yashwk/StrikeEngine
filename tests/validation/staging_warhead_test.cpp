@@ -69,6 +69,51 @@ int main() {
         check(detonations == 0, "no warhead detonation on a motor-only vehicle");
     }
 
+    // ---- Part A2: propellant-drawdown burnout (stage cap < fuel pool) ----
+    {
+        SimulationKernel kernel;
+        kernel.setRandomSeed(0xABADu);
+        int separations = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::StageSeparation) ++separations;
+        });
+
+        VehicleConfig cfg;
+        cfg.initialMass = 200.0;
+        cfg.massDry = 100.0;
+        cfg.Ixx = 10.0; cfg.Iyy = 20.0; cfg.Izz = 20.0;
+
+        StageConfig s0;
+        // Long thrust curve: positive thrust well past the step window
+        // (t = 100 s); burnout must come from propellant drawdown instead.
+        s0.thrustCurve = {{0.0, 80000.0}, {100.0, 80000.0}, {100.001, 0.0}};
+        s0.vacuumIsp = 250.0;
+        s0.seaLevelIsp = 220.0;
+        s0.propellantMassKg = 10.0;
+        s0.dryMassKg = 50.0;
+        StageConfig s1;
+        s1.thrustCurve = {{0.0, 20000.0}, {1.0, 20000.0}, {1.001, 0.0}, {100.0, 0.0}};
+        s1.dryMassKg = 0.0;
+        cfg.propulsion.stages = {s0, s1};
+
+        const auto id = kernel.createVehicle(makeInit(0, 0, 1000.0), cfg);
+        const auto& phys = kernel.getPhysics();
+
+        // Fuel pool = initial mass - (final dry + separable dry) = 50 kg,
+        // comfortably above the 10 kg stage cap.
+        check(std::abs(phys.massDry[id] - 150.0) < 1e-9,
+              "drawdown case: initial massDry is final dry + separable dry (100 + 50)");
+        check(std::abs(phys.stageMinMass[id] - 150.0) < 1e-9,
+              "drawdown case: stage-0 floor is dry mass + reserved (150)");
+
+        for (int step = 0; step < 200; ++step) kernel.step(0.01);  // 2 s (curve would burn to t=100)
+
+        check(separations == 1,
+              "drawdown case: propellant exhaustion fires StageSeparation");
+        check(phys.stageIndex[id] == 1,
+              "drawdown case: stage 1 active (separation from exhaustion, not the t=100 curve end)");
+    }
+
     // ---- Part B: proximity fuse ----
     {
         SimulationKernel kernel;
