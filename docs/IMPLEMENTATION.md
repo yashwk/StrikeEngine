@@ -3,7 +3,7 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-26
-**Runtime checkpoint:** `1ff6d1e`
+**Runtime checkpoint:** `0fd4570`
 
 This document maps the normative behavior in [`SPEC.md`](SPEC.md) to source
 files, build targets, execution order, validation, packaging, and remaining
