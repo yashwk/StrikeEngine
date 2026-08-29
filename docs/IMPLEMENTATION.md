@@ -2,8 +2,8 @@
 
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
-**Verified:** 2026-08-26
-**Runtime checkpoint:** `74fb567`
+**Verified:** 2026-08-29
+**Runtime checkpoint:** `working tree after 74fb567`
 
 [`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
 measured evidence. This record maps behavior to files, build, execution order,
@@ -123,10 +123,12 @@ carries per-entity `stageIndex`/`stageCount`.
 
 - `ISA1976.hpp`: layered atmosphere through 86 km.
 - `AeroModel.hpp`/`CoefficientTable.hpp`: drag, bounded lift, fin side force,
-  stability, damping, bounded moments. `AeroParams::tables` = optional cd(M,α)/
-  cl(M,α) grid (`AeroTables`), bilinear `interpolateCoefficient`, clamped; valid
-  table authoritative for cd/cl, else flat scalars byte-identical fallback; gated
-  so a degenerate grid never zeroes drag/lift; moments/side-force linear.
+  stability, damping, bounded moments. `AeroParams::tables` = optional static
+  cd(M,α)/cl(M,α)/cm(M,α)/cy(M,β)/cn(M,β)/cl(M,β) grids (`AeroTables`), with
+  bilinear `interpolateCoefficient`, clamping, finite/strict-grid validation,
+  and optional moment/lateral dimensions. Valid supplied tables replace the
+  corresponding static coefficient; fin control and rate damping remain active.
+  With no optional table, the established scalar fallback is byte-identical.
 - `FinsModel.hpp`: `FinShape` (`Trapezoidal`/`Elliptical`/`FreeForm`), `FinsGeometry`
   (precomputed geometry + Mach-dependent `clAlpha`/`rollForcingPerRad`/
   `rollDampingCoeff`), `buildFinsGeometry` (RocketPy port: Diederich + Prandtl–Glauert
@@ -260,9 +262,10 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W24 | profile-id DB layer (`profile_database_test`) | current |
 | W25 | designer→engine pipeline (`designer_pipeline_test`): manifests, flat RCS table, scenario, `SeekerTypeStrings` dedup, guided intercept + kill | current |
 | W26 | rocket verification (`rocket_mvp_test`) + propulsion-law fix (`T = ṁ·Isp·g0`) | current |
-| W27 | data-driven aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (45.4 m miss after W28, 15 km/8 km) | current |
+| W27 | data-driven cd/cl aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (45.4 m miss after W28, 15 km/8 km) | current |
 | W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 45.4 m miss | current |
 | W29 | geometric fins (RocketPy trapezoidal/elliptical/free-form) (`fins_test`) | current |
+| W30 | static moment/lateral aero tables (`coefficient_table_test`, `serialization_test`, `profile_database_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -283,9 +286,11 @@ git tag `legacy/pre-restructure-v1` (rollback history, not active source).
 
 Tracked so these are not mistaken for missing docs or current guarantees:
 
-- **Physics/environment:** moment + lateral/β tables, `AeroForces`, advanced
+- **Physics/environment:** CFD-validated coefficient data, `AeroForces`,
+  Reynolds-dependent/nonlinear stall and post-stall behavior, advanced
   atmosphere/weather, DEM/DTED loading + streaming, datum/geoid, polar/dateline.
-  (cd/cl tables implemented — §5; geometric fins implemented — W29.)
+  (static cd/cl/cm/cy/cn/cl tables implemented — W27/W30; geometric fins
+  implemented — W29.)
 - **Navigation/sensing:** sensor fusion, magnetometer, barometer, radar altimeter,
   richer timing/calibration. (Lever arms, coning/sculling, earth-rate gyro done —
   MVP; SPEC §7.1–7.2.)
@@ -307,7 +312,8 @@ datum/geoid, dateline/polar); probabilistic failure degradation/partial
 health/repair (deterministic flags done, MVP); GNC depth (imaging IR, multi-target,
 dynamic illuminator, band-resolved extinction, multi-rate timestamp
 interpolation); guidance/aero depth (trajectory management, pursuit, LQR/MPC,
-blended handoff, moment/lateral tables — cd/cl done); GPU parity (validate Vulkan
+blended handoff, CFD validation, Reynolds/nonlinear aero — static coefficient
+tables done); GPU parity (validate Vulkan
 vs CPU, GPU ECEF, CUDA if required); explicit versioned StrikeSim/StrikeDesigner/
 StrikeCEM/StrikeCFD handoffs and provenance.
 

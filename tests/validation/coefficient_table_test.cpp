@@ -3,7 +3,9 @@
 //   - bilinear interior values on a linear grid (e.g. midpoints average)
 //   - clamps below/above the grid bounds (no off-by-one at the first breakpoint)
 //   - AeroTables::isValid rejects malformed grids and accepts valid ones
+//   - optional Cm/Cy/Cn/Cl tables interpolate into the aerodynamic wrench
 #include <strikeengine/models/physics/aerodynamics/CoefficientTable.hpp>
+#include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -114,6 +116,64 @@ int main() {
         t.machBreakpoints = {};
         std::string err;
         check(!t.isValid(&err), "empty grid rejected");
+    }
+
+    // Optional moment/lateral tables use the same Mach axis, with alpha for
+    // Cm and beta for Cy/Cn/Cl. Their dimensions and runtime signs are part
+    // of the aerodynamic data contract.
+    {
+        AeroTables t = validTables();
+        t.aoaBreakpointsRad = {-1.0, 1.0};
+        t.clTable = std::vector<std::vector<double>>(3, std::vector<double>(2, 0.0));
+        t.cdTable = std::vector<std::vector<double>>(3, std::vector<double>(2, 0.0));
+        t.betaBreakpointsRad = {-1.0, 1.0};
+        t.cmTable = {{0.2, 0.2}, {0.2, 0.2}, {0.2, 0.2}};
+        t.cyTable = {{-0.6, 0.0}, {-0.6, 0.0}, {-0.6, 0.0}};
+        t.cnTable = {{0.4, 0.4}, {0.4, 0.4}, {0.4, 0.4}};
+        t.clRollTable = {{0.1, 0.1}, {0.1, 0.1}, {0.1, 0.1}};
+        std::string err;
+        check(t.isValid(&err), "optional moment and lateral tables are accepted");
+
+        StrikeEngine::Models::BasicAeroModel model;
+        StrikeEngine::Models::AeroParams p;
+        p.referenceArea = 1.0;
+        p.referenceLength = 1.0;
+        p.cd = 0.0;
+        p.clAlpha = 0.0;
+        p.clFin = 0.0;
+        p.clMax = 10.0;
+        p.tables = std::make_shared<const AeroTables>(t);
+
+        // V=10 m/s and a=10 m/s make Mach=1 at the supplied sound speed;
+        // q=50 Pa. At alpha=beta=0, Cy is the average of its four corners
+        // (-0.3), while the other tables are constant.
+        const auto wrench = model.computeWrench(
+            10.0, 0.0, 0.0,
+            0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0,
+            1.0, 10.0, p);
+        checkClose(wrench.force_y, -15.0, 1e-12,
+                   "Cy table produces the expected body-Y side force");
+        checkClose(wrench.torque_x, 5.0, 1e-12,
+                   "Cl roll table produces the expected body-X moment");
+        checkClose(wrench.torque_y, 10.0, 1e-12,
+                   "Cm table produces the expected body-Y moment");
+        checkClose(wrench.torque_z, 20.0, 1e-12,
+                   "Cn table produces the expected body-Z moment");
+    }
+    {
+        AeroTables t = validTables();
+        t.betaBreakpointsRad = {-1.0, 1.0};
+        t.cyTable = {{0.0, 0.0}, {0.0, 0.0}};
+        t.cmTable = {{0.0, 0.0}}; // wrong Mach row count
+        std::string err;
+        check(!t.isValid(&err), "optional moment table row mismatch rejected");
+    }
+    {
+        AeroTables t = validTables();
+        t.cyTable = {{0.0, 0.0}, {0.0, 0.0}};
+        std::string err;
+        check(!t.isValid(&err), "lateral table without beta breakpoints rejected");
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

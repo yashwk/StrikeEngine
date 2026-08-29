@@ -1,7 +1,7 @@
 # StrikeEngine — Fidelity Audit
 
-**Audit date:** 2026-08-26<br>
-**Runtime checkpoint:** `74fb567`<br>
+**Audit date:** 2026-08-29<br>
+**Runtime checkpoint:** `working tree after 74fb567`<br>
 **Validation result:** Release build, **36/36 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
@@ -54,15 +54,16 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test`, `rocket_mvp_tables_test`; table run higher/faster (apogee 24.79 vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa); fallback byte-identical; awaiting StrikeCFD |
 | W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 45.4 m miss |
 | W29 — Geometric fins (RocketPy port) | Implemented / MVP | `fins_test`; three shapes (trapezoidal/elliptical/free-form); Diederich planform lift slope + Prandtl–Glauert Mach correction; fin-number + interference corrections; per-shape CP; tail lever-arm sign convention (restoring); positive-cant roll forcing; ballistic flight on rocket_mvp with 4 tail fins — apogee 17.2 km, drift ~0 m; byte-identical fallback when `fins` absent |
+| W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
 
 ## 3. Subsystem fidelity assessment
 
 | Area | Current implementation | Assessment and limit |
 | --- | --- | --- |
-| Translational truth | World-frame force rotation ÷ mass + gravity/earth terms | **MVP:** cd/cl data-driven when present; moments/side-force linear, no CFD-backed model |
+| Translational truth | World-frame force rotation ÷ mass + gravity/earth terms | **MVP:** cd/cl/cy data-driven when present; no CFD-backed or nonlinear aero model |
 | Rotational truth | Diagonal inertia, gyroscopic coupling, quaternion, bounded fins | **MVP:** no inertia-tensor or flexible-body model |
 | Atmosphere | Layered ISA1976 through 86 km | **Implemented for stated envelope:** no weather model |
-| Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl tables; geometric fins (trapezoidal/elliptical/free-form) | **MVP:** tables authoritative for cd/cl with fallback; fins implement Mach-scaled fin effectiveness + lateral (β) side-force/stability for angled fins; moment (cm) and lateral/β coefficient tables still not CFD-validated |
+| Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl/cm/cy/cn/rolling-cl tables; geometric fins (trapezoidal/elliptical/free-form) | **MVP:** static tables authoritative with scalar fallback; fins implement Mach-scaled fin effectiveness + lateral (β) side-force/stability for angled fins; tables are not yet CFD-validated and omit Reynolds/nonlinear stall/post-stall effects |
 | Propulsion | Thrust curves, Isp, mass flow, dry-mass limit; ordered staging + leftover dump | **MVP:** `propellantMassKg` caps drawdown; no thrust vectoring or tank/engine failure |
 | Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
@@ -113,16 +114,17 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
    `warhead_falloff_test`), `T = ṁ·Isp·g0` enforced at exhaustion
    (`rocket_mvp_test`); arbitrary stage-count validation and a physics-based
    blast/debris model remain.
-6. **Guidance/aero:** data-driven cd/cl done (`coefficient_table_test`,
-   `rocket_mvp_tables_test`), awaiting StrikeCFD for CFD-validated tables;
-   trajectory management, pursuit, LQR/MPC, blended handoff remain.
+6. **Guidance/aero:** static cd/cl/cm/cy/cn/rolling-cl table plumbing is done
+   (`coefficient_table_test`, `serialization_test`, `profile_database_test`);
+   CFD validation, Reynolds/nonlinear aero, trajectory management, pursuit,
+   LQR/MPC, and blended handoff remain.
 7. **Backend parity:** validate Vulkan vs CPU, GPU ECEF, CUDA if required.
 8. **Application handoffs:** designer→engine contract exercised end-to-end
    (`designer_pipeline_test`); explicit versioned StrikeSim/StrikeDesigner/
    StrikeCEM integration + provenance contracts remain.
 
 Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling (and
-moment (cm)/lateral (β) coefficient tables from StrikeCFD/StrikeCEM), a full
+CFD validation of the moment (cm)/lateral (β) coefficient tables), a full
 GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
 (trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and full global terrain. The
 falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin

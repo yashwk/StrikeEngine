@@ -31,6 +31,26 @@ namespace StrikeEngine::Kernel {
                     t.at("cl_table").get<std::vector<std::vector<double>>>();
                 cfg.tables.cdTable =
                     t.at("cd_table").get<std::vector<std::vector<double>>>();
+                if (t.contains("cm_table")) {
+                    cfg.tables.cmTable =
+                        t.at("cm_table").get<std::vector<std::vector<double>>>();
+                }
+                if (t.contains("beta_breakpoints_rad")) {
+                    cfg.tables.betaBreakpointsRad =
+                        t.at("beta_breakpoints_rad").get<std::vector<double>>();
+                }
+                if (t.contains("cy_table")) {
+                    cfg.tables.cyTable =
+                        t.at("cy_table").get<std::vector<std::vector<double>>>();
+                }
+                if (t.contains("cn_table")) {
+                    cfg.tables.cnTable =
+                        t.at("cn_table").get<std::vector<std::vector<double>>>();
+                }
+                if (t.contains("cl_roll_table")) {
+                    cfg.tables.clRollTable =
+                        t.at("cl_roll_table").get<std::vector<std::vector<double>>>();
+                }
                 if (!cfg.tables.isValid()) {
                     return false;
                 }

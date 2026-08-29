@@ -47,6 +47,31 @@ VehicleConfig makeRichConfig()
         {0.05, 0.06, 0.08},
         {0.06, 0.07, 0.10}
     };
+    cfg.aero.tables.cmTable = {
+        {-0.10, -0.20, -0.30},
+        {-0.11, -0.21, -0.31},
+        {-0.12, -0.22, -0.32},
+        {-0.13, -0.23, -0.33}
+    };
+    cfg.aero.tables.betaBreakpointsRad = {-0.2, 0.0, 0.2};
+    cfg.aero.tables.cyTable = {
+        {-0.20, 0.0, 0.20},
+        {-0.21, 0.0, 0.21},
+        {-0.22, 0.0, 0.22},
+        {-0.23, 0.0, 0.23}
+    };
+    cfg.aero.tables.cnTable = {
+        {0.10, 0.0, -0.10},
+        {0.11, 0.0, -0.11},
+        {0.12, 0.0, -0.12},
+        {0.13, 0.0, -0.13}
+    };
+    cfg.aero.tables.clRollTable = {
+        {0.01, 0.0, -0.01},
+        {0.02, 0.0, -0.02},
+        {0.03, 0.0, -0.03},
+        {0.04, 0.0, -0.04}
+    };
 
     StageConfig stage;
     stage.thrustCurve = { {0.0, 60000.0}, {3.0, 70000.0}, {5.0, 0.0} };
@@ -150,8 +175,13 @@ int main()
         check(cfg2.aero.tables.machBreakpoints == cfg.aero.tables.machBreakpoints &&
                   cfg2.aero.tables.aoaBreakpointsRad == cfg.aero.tables.aoaBreakpointsRad &&
                   cfg2.aero.tables.clTable == cfg.aero.tables.clTable &&
-                  cfg2.aero.tables.cdTable == cfg.aero.tables.cdTable,
-              "aero cd(M,a)/cl(M,a) tables survive the round-trip");
+                  cfg2.aero.tables.cdTable == cfg.aero.tables.cdTable &&
+                  cfg2.aero.tables.cmTable == cfg.aero.tables.cmTable &&
+                  cfg2.aero.tables.betaBreakpointsRad == cfg.aero.tables.betaBreakpointsRad &&
+                  cfg2.aero.tables.cyTable == cfg.aero.tables.cyTable &&
+                  cfg2.aero.tables.cnTable == cfg.aero.tables.cnTable &&
+                  cfg2.aero.tables.clRollTable == cfg.aero.tables.clRollTable,
+              "aero force, moment, and lateral tables survive the round-trip");
         check(cfg2.aero.referenceArea == 1.4 && cfg2.aero.referenceLength == 1.2,
               "aero geometry survives");
         check(cfg2.propulsion.stages.size() == 1 &&

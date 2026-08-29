@@ -3,6 +3,7 @@
 #include <string>
 #include <cstddef>
 #include <algorithm>
+#include <cmath>
 
 namespace StrikeEngine::Models {
 
@@ -10,10 +11,14 @@ namespace StrikeEngine::Models {
      * @brief Data-driven aerodynamic coefficient tables over a Mach x AoA grid.
      *
      * This mirrors the approach taken by RocketPy / OpenRocket: the
-     * (Mach, AoA)-dependent lift and drag coefficients are reduced to lookup
-     * tables that are interpolated (bilinearly) at runtime. When present they
-     * are authoritative for cd/cl; the flat scalar AeroConfig coefficients
-     * remain as the guaranteed fallback when no tables are supplied.
+     * Mach/angle-dependent aerodynamic coefficients are reduced to lookup
+     * tables that are interpolated (bilinearly) at runtime. The lift/drag and
+     * pitch-moment tables use the Mach x AoA grid. The lateral-force, yawing-
+     * moment, and rolling-moment tables use the Mach x beta grid.
+     *
+     * The cd/cl tables are the required base pair for a populated AeroTables
+     * object. The moment and lateral tables are optional so existing cd/cl
+     * profiles remain valid and keep their scalar moment/side-force fallback.
      *
      * clTable/cdTable are indexed [mach][aoa] and must have dimensions
      * [machBreakpoints.size()][aoaBreakpointsRad.size()].
@@ -24,9 +29,25 @@ namespace StrikeEngine::Models {
         std::vector<std::vector<double>> clTable;   // [mach][aoa]
         std::vector<std::vector<double>> cdTable;   // [mach][aoa]
 
+        // Optional static pitch moment coefficient Cm(M, alpha).
+        std::vector<std::vector<double>> cmTable;   // [mach][aoa]
+
+        // Optional lateral coefficients on the Mach x beta grid. Cy is the
+        // body +Y force coefficient, Cn is the body +Z yawing-moment
+        // coefficient, and Cl is the body +X rolling-moment coefficient.
+        std::vector<double> betaBreakpointsRad;     // strictly ascending
+        std::vector<std::vector<double>> cyTable;   // [mach][beta]
+        std::vector<std::vector<double>> cnTable;   // [mach][beta]
+        std::vector<std::vector<double>> clRollTable; // [mach][beta]
+
         bool empty() const {
             return machBreakpoints.empty() || aoaBreakpointsRad.empty();
         }
+
+        bool hasCmTable() const { return !cmTable.empty(); }
+        bool hasCyTable() const { return !cyTable.empty(); }
+        bool hasCnTable() const { return !cnTable.empty(); }
+        bool hasClRollTable() const { return !clRollTable.empty(); }
 
         /**
          * @brief Validates the grid structure.
@@ -48,6 +69,21 @@ namespace StrikeEngine::Models {
             const std::size_t nm = machBreakpoints.size();
             const std::size_t na = aoaBreakpointsRad.size();
 
+            auto finiteAndAscending = [](const std::vector<double>& values) {
+                for (std::size_t i = 0; i < values.size(); ++i) {
+                    if (!std::isfinite(values[i])) return false;
+                    if (i > 0 && !(values[i] > values[i - 1])) return false;
+                }
+                return true;
+            };
+
+            if (!finiteAndAscending(machBreakpoints)) {
+                return fail("mach_breakpoints must be finite and strictly ascending");
+            }
+            if (!finiteAndAscending(aoaBreakpointsRad)) {
+                return fail("aoa_breakpoints_rad must be finite and strictly ascending");
+            }
+
             for (std::size_t i = 1; i < nm; ++i) {
                 if (!(machBreakpoints[i] > machBreakpoints[i - 1])) {
                     return fail("mach_breakpoints not strictly ascending");
@@ -59,16 +95,39 @@ namespace StrikeEngine::Models {
                 }
             }
 
-            auto dimOk = [nm, na](const std::vector<std::vector<double>>& table) {
+            auto dimOk = [nm](std::size_t nAngle,
+                              const std::vector<std::vector<double>>& table) {
+                if (table.empty()) return true;
+                if (nAngle < 2) return false;
                 if (table.size() != nm) return false;
                 for (const auto& row : table) {
-                    if (row.size() != na) return false;
+                    if (row.size() != nAngle) return false;
+                    for (double value : row) {
+                        if (!std::isfinite(value)) return false;
+                    }
                 }
                 return true;
             };
 
-            if (!dimOk(clTable)) return fail("cl_table dims != [mach][aoa]");
-            if (!dimOk(cdTable)) return fail("cd_table dims != [mach][aoa]");
+            if (!dimOk(na, clTable)) return fail("cl_table dims != [mach][aoa]");
+            if (!dimOk(na, cdTable)) return fail("cd_table dims != [mach][aoa]");
+            if (clTable.empty()) return fail("cl_table is empty");
+            if (cdTable.empty()) return fail("cd_table is empty");
+            if (!dimOk(na, cmTable)) return fail("cm_table dims != [mach][aoa]");
+
+            const bool hasLateral = hasCyTable() || hasCnTable() || hasClRollTable();
+            if (hasLateral) {
+                if (betaBreakpointsRad.size() < 2 ||
+                    !finiteAndAscending(betaBreakpointsRad)) {
+                    return fail("beta_breakpoints_rad must be finite and strictly ascending");
+                }
+                const std::size_t nb = betaBreakpointsRad.size();
+                if (!dimOk(nb, cyTable)) return fail("cy_table dims != [mach][beta]");
+                if (!dimOk(nb, cnTable)) return fail("cn_table dims != [mach][beta]");
+                if (!dimOk(nb, clRollTable)) return fail("cl_roll_table dims != [mach][beta]");
+            } else if (!betaBreakpointsRad.empty()) {
+                return fail("beta_breakpoints_rad requires a lateral coefficient table");
+            }
             return true;
         }
     };

@@ -49,6 +49,12 @@ int main() {
                   aero.aero().clFin == 2.2 &&
                   aero.aero().clMax == 1.7,
               "AeroProfileDatabase parses all AeroConfig fields");
+        check(aero.aero().tables.hasCmTable() &&
+                  aero.aero().tables.hasCyTable() &&
+                  aero.aero().tables.hasCnTable() &&
+                  aero.aero().tables.hasClRollTable() &&
+                  aero.aero().tables.betaBreakpointsRad.size() == 2,
+              "AeroProfileDatabase parses optional moment/lateral tables");
 
         MotorProfileDatabase motor;
         check(motor.loadProfile(kFixtures + "motor_mk1.json"),

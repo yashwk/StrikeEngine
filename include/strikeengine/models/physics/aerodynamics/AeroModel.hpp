@@ -112,6 +112,20 @@ namespace StrikeEngine::Models {
             double fy = -dragMag * (v / V);
             double fz = -dragMag * (w / V);
 
+            const bool hasCmTable = tables && tables->hasCmTable();
+            const bool hasCyTable = tables && tables->hasCyTable();
+            const bool hasCnTable = tables && tables->hasCnTable();
+            const bool hasClRollTable = tables && tables->hasClRollTable();
+
+            const auto tableAtAlpha = [&](const std::vector<std::vector<double>>& table) {
+                return interpolateCoefficient(mach, alpha,
+                    tables->machBreakpoints, tables->aoaBreakpointsRad, table);
+            };
+            const auto tableAtBeta = [&](const std::vector<std::vector<double>>& table) {
+                return interpolateCoefficient(mach, beta,
+                    tables->machBreakpoints, tables->betaBreakpointsRad, table);
+            };
+
             // Lift (pitch plane): positive alpha => force -Z (up), saturated at
             // CL_max (stall / control limit). With geometric fins the fin lift
             // slope clAlpha(mach) acts on the fin's local AoA (alpha +
@@ -138,9 +152,13 @@ namespace StrikeEngine::Models {
             cl = std::clamp(cl, -p.clMax, p.clMax);
             fz -= q * S * cl;
 
-            // Side force (yaw plane). With geometric fins the sideslip/beta
-            // term is now modeled (restoring); without them it stays deferred
-            // (cyBody = 0) so the flat path is byte-identical.
+            // Side force (yaw plane). Cy is a body +Y force coefficient. An
+            // optional table supplies the body contribution; geometric or
+            // abstract fin control terms are then added as before. With no
+            // table and no fins, the legacy path remains byte-identical.
+            if (hasCyTable) {
+                fy += q * S * tableAtBeta(tables->cyTable);
+            }
             if (p.fins) {
                 const double clFin = p.fins->clAlpha(mach);
                 const double cy = clFin * (beta + finYaw);
@@ -151,6 +169,21 @@ namespace StrikeEngine::Models {
                 fy -= q * S * cyBody;
                 fy += q * S * cyFin;
             }
+
+            // Static aerodynamic coefficients. Cm is pitch moment about +Y,
+            // Cn is yaw moment about +Z, and Cl is roll moment about +X.
+            // The scalar values below are the established fallback. Tables
+            // replace only the corresponding static coefficient and do not
+            // replace fin-control or rate-damping terms.
+            const double cmStatic = hasCmTable
+                ? tableAtAlpha(tables->cmTable)
+                : -0.5 * alpha;
+            const double cnStatic = hasCnTable
+                ? tableAtBeta(tables->cnTable)
+                : 0.0 * beta;
+            const double clRollStatic = hasClRollTable
+                ? tableAtBeta(tables->clRollTable)
+                : 0.0;
 
             // --- Moments (body frame) ---
             // Fin control authority and the validated pitch restoring term.
@@ -182,6 +215,14 @@ namespace StrikeEngine::Models {
                 tz = std::clamp(-qS * xcp * clFin * (beta + finYaw),
                                 -maxControlMoment, maxControlMoment);
 
+                // A supplied table adds validated body static coefficients to
+                // the geometry-derived fin contribution. Without a table the
+                // geometric-fin path retains its existing behavior and does
+                // not reintroduce the abstract body stability term.
+                if (hasCmTable) ty += qS * l * cmStatic;
+                if (hasCnTable) tz += qS * l * cnStatic;
+                if (hasClRollTable) tx += qS * l * clRollStatic;
+
                 // Static stability is now supplied by the fins (via xcp); the
                 // bare body term is dropped so it is not double-counted.
                 ty -= q * S * l * Cq  * (l / V) * wy;
@@ -194,12 +235,11 @@ namespace StrikeEngine::Models {
                 tz = std::clamp(qS * l * (CM_delta * finYaw),
                                 -maxControlMoment, maxControlMoment);
 
-                // Static pitch stability is retained. Lateral beta stability is
-                // disabled until its force/moment signs are covered by validation.
-                constexpr double CM_alpha = -0.5;
-                constexpr double CN_beta  = 0.0; // avoid unmodeled yaw/side-force coupling in MVP
-                ty += q * S * l * CM_alpha * alpha;
-                tz += q * S * l * CN_beta  * beta;
+                // Static body coefficients use tables when supplied and the
+                // established scalar fallback otherwise.
+                tx += qS * l * clRollStatic;
+                ty += qS * l * cmStatic;
+                tz += qS * l * cnStatic;
 
                 // Rotational damping (dimensionless rate q_bar*l/V)
                 const double lOverV = l / V;

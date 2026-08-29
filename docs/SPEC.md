@@ -248,14 +248,22 @@ velocity), AoA/fin lift, bounded lift coefficient, yaw-fin side force, static pi
 stability, rate damping, bounded moments. Coefficients/geometry per entity.
 
 Optional tables (`aero_tables` on `AeroConfig`; `data/aero/*.json`) give
-cd(M, α)/cl(M, α) as a rectilinear grid (`mach_breakpoints`, `aoa_breakpoints_rad`,
-`cl_table`, `cd_table`, dimensioned `[mach][aoa]`), bilinearly interpolated and
-clamped to grid bounds. A valid table block is authoritative for cd/cl; otherwise
-the flat scalars (`cd`, `clAlpha`, `clFin`, `clMax`) are a byte-identical
-fallback. A structurally invalid grid (missing/non-ascending breakpoints, wrong
-dimensions, <2 per axis) is rejected at parse and profile load. Moments/side-force
-stay linear; moment (cm) and lateral/β coefficient tables are future. cd/cl tables
-come from StrikeCFD; RCS tables from StrikeCEM.
+static aerodynamic coefficients on rectilinear grids. `cd(M, α)`, `cl(M, α)`,
+and `cm(M, α)` use `mach_breakpoints` × `aoa_breakpoints_rad`; `cy(M, β)`,
+`cn(M, β)`, and rolling `cl(M, β)` use `mach_breakpoints` ×
+`beta_breakpoints_rad`. The JSON fields are `cl_table`, `cd_table`, `cm_table`,
+`cy_table`, `cn_table`, and `cl_roll_table`, each dimensioned `[mach][angle]`.
+The `cl`/`cd` pair is required in a populated table block; moment and lateral
+tables are optional. All supplied tables are bilinearly interpolated and
+clamped to grid bounds. A valid supplied table replaces the corresponding
+static scalar coefficient while fin-control and rate-damping terms remain
+active. Without a supplied table, the established scalar/static fallback is
+used byte-for-byte. A structurally invalid grid (missing/non-ascending/invalid
+breakpoints, non-finite values, wrong dimensions, or fewer than two points per
+axis) is rejected at parse and profile load. `Cy` is body +Y force, `Cm` is
+body +Y pitch moment, `Cn` is body +Z yaw moment, and rolling `Cl` is body +X
+moment. cd/cl tables come from StrikeCFD; moment/lateral tables are expected
+from validated StrikeCFD data.
 
 Optional geometric fins (`fins` on `AeroConfig`) port RocketPy's fin aerodynamic
 model. `FinShape` selects `Trapezoidal`, `Elliptical`, or `FreeForm`; `count` 0
@@ -442,14 +450,16 @@ scenario serialization; per-entity sensor enablement; multi-stage staging +
 separation; warhead fusing (impact/proximity/timed); designer manifests
 (`data/profiles`) and scenarios (`data/scenarios`) consumed end-to-end via
 `designer_pipeline_test`; profile-id database layer (aero/motor/seeker/sensor/
-RCS); data-driven cd(M,α)/cl(M,α) tables (`aero_tables`, bilinear + clamped,
-constant fallback); geometric fins (trapezoidal/elliptical/free-form, RocketPy
-port, Mach-dependent lift/stability/roll). `rocket_mvp_test` cross-checks propulsion/ballistic truth
+RCS); data-driven static cd(M,α)/cl(M,α)/cm(M,α)/cy(M,β)/cn(M,β)/cl(M,β)
+tables (`aero_tables`, bilinear + clamped, scalar fallback); geometric fins
+(trapezoidal/elliptical/free-form, RocketPy port, Mach-dependent lift/stability/
+roll). `rocket_mvp_test` cross-checks propulsion/ballistic truth
 (initial accel vs `T/m − g_lat`, burnout time vs pressure-interpolated Isp band,
 burnout velocity vs `Δv = Isp·g0·ln(m0/mdry)`), confirming `T = ṁ·Isp·g0`.
 
-Planned or partial: higher-fidelity aero (moment and lateral/β coefficient
-tables); probabilistic failure degradation; partial health/repair;
+Planned or partial: CFD validation and higher-order aero (Reynolds dependence,
+nonlinear stall/post-stall, body/fin interference, flexible-body effects);
+probabilistic failure degradation; partial health/repair;
 advanced atmosphere; global terrain/DEM; geoid models; imaging IR; multi-target
 tracking; dynamic SARH illuminator tracking; band-resolved extinction; sensor
 fusion; trajectory/energy management; pursuit; LQR/MPC; richer telemetry; parallel

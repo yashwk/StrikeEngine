@@ -156,6 +156,21 @@ void to_json(nlohmann::json& j, const AeroTables& t) {
         {"cl_table", t.clTable},
         {"cd_table", t.cdTable}
     };
+    if (!t.cmTable.empty()) {
+        j["cm_table"] = t.cmTable;
+    }
+    if (!t.betaBreakpointsRad.empty()) {
+        j["beta_breakpoints_rad"] = t.betaBreakpointsRad;
+    }
+    if (!t.cyTable.empty()) {
+        j["cy_table"] = t.cyTable;
+    }
+    if (!t.cnTable.empty()) {
+        j["cn_table"] = t.cnTable;
+    }
+    if (!t.clRollTable.empty()) {
+        j["cl_roll_table"] = t.clRollTable;
+    }
 }
 
 void from_json(const nlohmann::json& j, AeroTables& t) {
@@ -163,6 +178,21 @@ void from_json(const nlohmann::json& j, AeroTables& t) {
     t.aoaBreakpointsRad = j.at("aoa_breakpoints_rad").get<std::vector<double>>();
     t.clTable = j.at("cl_table").get<std::vector<std::vector<double>>>();
     t.cdTable = j.at("cd_table").get<std::vector<std::vector<double>>>();
+    if (j.contains("cm_table")) {
+        t.cmTable = j.at("cm_table").get<std::vector<std::vector<double>>>();
+    }
+    if (j.contains("beta_breakpoints_rad")) {
+        t.betaBreakpointsRad = j.at("beta_breakpoints_rad").get<std::vector<double>>();
+    }
+    if (j.contains("cy_table")) {
+        t.cyTable = j.at("cy_table").get<std::vector<std::vector<double>>>();
+    }
+    if (j.contains("cn_table")) {
+        t.cnTable = j.at("cn_table").get<std::vector<std::vector<double>>>();
+    }
+    if (j.contains("cl_roll_table")) {
+        t.clRollTable = j.at("cl_roll_table").get<std::vector<std::vector<double>>>();
+    }
     std::string err;
     if (!t.isValid(&err)) {
         throw std::runtime_error("AeroTables invalid: " + err);

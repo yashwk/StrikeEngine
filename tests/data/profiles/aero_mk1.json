@@ -4,5 +4,16 @@
   "cd": 0.456,
   "cl_alpha": 5.5,
   "cl_fin": 2.2,
-  "cl_max": 1.7
+  "cl_max": 1.7,
+  "aero_tables": {
+    "mach_breakpoints": [0.0, 1.0],
+    "aoa_breakpoints_rad": [-1.0, 1.0],
+    "cl_table": [[0.0, 0.0], [0.0, 0.0]],
+    "cd_table": [[0.2, 0.2], [0.2, 0.2]],
+    "cm_table": [[-0.1, 0.1], [-0.2, 0.2]],
+    "beta_breakpoints_rad": [-1.0, 1.0],
+    "cy_table": [[0.1, -0.1], [0.2, -0.2]],
+    "cn_table": [[-0.1, 0.1], [-0.2, 0.2]],
+    "cl_roll_table": [[0.01, -0.01], [0.02, -0.02]]
+  }
 }
