@@ -49,10 +49,10 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; fail-fast loaders, profile-wins resolution |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; IMU freeze, GPS schedule, gain wiring |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation + fusing |
-| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; 49.1 m miss < 50 m at t≈11.5 s + kill after configured-PN rebaseline; seed `0xDEADBEEF`, pipeline demo not a performance claim |
+| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; 9.7 m miss < 50 m at t≈11.5 s + kill after terminal APN frame correction; seed `0xDEADBEEF`, pipeline demo not a performance claim |
 | W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; T0 60000 N, flow 27.81 kg/s, init accel 110.275 vs 110.208 m/s², cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee 17.19 km, max-Q ~242 kPa; `T = ṁ·Isp·g0`, no free-thrust tail |
 | W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test`, `rocket_mvp_tables_test`; table run higher/faster (apogee 24.79 vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa); fallback byte-identical; awaiting StrikeCFD |
-| W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 49.1 m miss |
+| W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 9.7 m miss |
 | W29 — Geometric fins (RocketPy port) | Implemented / MVP | `fins_test`; three shapes (trapezoidal/elliptical/free-form); Diederich planform lift slope + Prandtl–Glauert Mach correction; fin-number + interference corrections; per-shape CP; tail lever-arm sign convention (restoring); positive-cant roll forcing; ballistic flight on rocket_mvp with 4 tail fins — apogee 17.2 km, drift ~0 m; byte-identical fallback when `fins` absent |
 | W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
 | W31 — ECEF/geodetic states + J2 gravity | Implemented / MVP | `earth_test`, `earth_fixed_test`, `ecef_kernel_test`, `serialization_test`; explicit ENU/ECEF velocity conversion, pole/dateline round-trip, WGS84 J2 gravity, standalone propagator and truth/sensor/navigation consistency |
@@ -60,7 +60,8 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W33 — Geodetic global terrain raster | Implemented / MVP | `global_terrain_test`; in-memory raster, ESRI ASCII Grid loading, NODATA handling, dateline normalization, local ENU and ECEF terrain impact/clamping |
 | W34 — Extended terrain sources and surfaces | Implemented / MVP | `global_terrain_test`; nearest/bilinear sampling, explicit coverage status, WGS84-scaled normals/slope, optional GDAL GeoTIFF/DTED/VRT loading, bounded LRU reuse, impact-event surface payload |
 | W35 — GPS fusion robustness | Implemented / MVP | `navigation_test`, `serialization_test`; configurable scalar normalized-innovation gate rejects gross/non-finite fixes while preserving valid channels |
-| W36 — Configured PN authority | Implemented / MVP | `guidance_test`; kernel PN now applies each entity's configured navigation constant rather than the model default |
+| W36 — Configured PN authority | Implemented / MVP | `guidance_test`; kernel PN applies each entity's configured navigation constant rather than the model default |
+| W37 — Seeker APN frame mapping | Implemented / MVP | `guidance_test`, `designer_pipeline_test`; azimuth/elevation LOS rates map to the X-forward/Y-right/Z-down body frame, restoring the original 120 m/s² scenario and reducing miss from 52.5 m to 9.7 m |
 
 ## 3. Subsystem fidelity assessment
 
@@ -89,7 +90,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 - Release CTest suite green: **34/34 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
-- Designer→engine pipeline: **49.1 m minimum miss** at t≈11.5 s with a
+- Designer→engine pipeline: **9.7 m minimum miss** at t≈11.5 s with a
   proximity-warhead kill (`designer_pipeline_test`), flying on data-driven aero
   tables; seed `0xDEADBEEF`, a data-contract demonstration, not a
   guidance-performance claim.

@@ -42,7 +42,7 @@
       "initial_target_vx": -250.0,
       "initial_target_vy": 0.0,
       "initial_target_vz": -60.0,
-      "initial_max_accel": 80.0
+      "initial_max_accel": 120.0
     },
     {
       "design_ref": "data/profiles/target_drone.json",

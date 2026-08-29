@@ -260,7 +260,7 @@ Frame note: designers MUST emit local ENU coordinates, not ECEF Earth-radius
 offsets. `intercept_test_01` runs in local ENU (§4.2), re-baselined to 15 km/8 km
 (the table-aero missile is faster/lower-drag; 20 km/10 km no longer fits the
 seeker's ~3 km acquisition range) — a deterministically tuned set (seed
-`0xDEADBEEF`, 80 m/s² initial guidance cap), pipeline evidence (min miss 49.1 m
+`0xDEADBEEF`, 120 m/s² initial guidance cap), pipeline evidence (min miss 9.7 m
 at t≈11.5 s; proximity kill),
 not a performance claim.
 
@@ -446,8 +446,10 @@ illuminator is a STATIC configured position; dynamic illuminator tracking future
 ### 7.4 Guidance and autopilot
 
 Stateless PN/APN helpers in `models/guidance`. Kernel PN uses target
-position/velocity; kernel APN uses filtered seeker LOS rates on lock. Seeker-locked
-APN clamps commanded accel to per-entity `maxAccel`, matching PN/Waypoint.
+position/velocity; kernel APN uses filtered seeker LOS rates on lock. Seeker
+azimuth/elevation rates are mapped into the airframe's X-forward/Y-right/Z-down
+body frame before rotating the command to world coordinates. Seeker-locked APN
+clamps commanded accel to per-entity `maxAccel`, matching PN/Waypoint.
 Autopilot translates world accel into bounded body fin demands.
 
 Constants per entity, read from config at creation: `navigationConstant`,

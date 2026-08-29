@@ -92,9 +92,14 @@ namespace StrikeEngine::Kernel {
         const double dAz_dt = seeker.targetAzimuthRate[id];
         const double dEl_dt = seeker.targetElevationRate[id];
 
-        // Commanded acceleration in Body Frame
-        double a_cmd_y_body = N * vc * dEl_dt; // Pitch
-        double a_cmd_z_body = N * vc * dAz_dt; // Yaw
+        // Commanded acceleration in body frame.  The seeker uses the same
+        // aerospace convention as the airframe (X forward, Y right, Z down):
+        // azimuth rate produces rightward (+Y) acceleration, while positive
+        // elevation rate is upward and therefore produces downward (-Z)
+        // acceleration.  Keep these axes/signs aligned with the autopilot's
+        // pitch/yaw mapping.
+        double a_cmd_y_body = N * vc * dAz_dt;       // yaw / right
+        double a_cmd_z_body = -N * vc * dEl_dt;      // pitch / up
         double a_cmd_x_body = 0.0;             // Roll
 
         // Rotate body frame commands to world frame

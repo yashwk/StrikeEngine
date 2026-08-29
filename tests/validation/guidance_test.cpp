@@ -71,9 +71,16 @@ int main()
     seeker.targetAzimuthRate[0] = 0.02;
     seeker.targetElevationRate[0] = 0.0;
     system.update(status, nav, seeker, guidance, control, 0.01);
-    check(guidance.commandedAccelZ[0] > 0.0 &&
-              std::abs(guidance.commandedAccelZ[0] - 7.0) < 1e-12,
-          "locked seeker hands guidance to filtered-rate APN");
+    check(std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12 &&
+              std::abs(guidance.commandedAccelZ[0]) < 1e-12,
+          "seeker azimuth rate maps to rightward body-Y APN acceleration");
+
+    seeker.targetAzimuthRate[0] = 0.0;
+    seeker.targetElevationRate[0] = 0.02;
+    system.update(status, nav, seeker, guidance, control, 0.01);
+    check(std::abs(guidance.commandedAccelY[0]) < 1e-12 &&
+              std::abs(guidance.commandedAccelZ[0] + 7.0) < 1e-12,
+          "seeker elevation rate maps to upward body-Z APN acceleration");
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

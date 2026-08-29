@@ -174,8 +174,9 @@ carries per-entity `stageIndex`/`stageCount`.
 - `NavigationSystem.cpp`: alignment, strapdown INS, coupled 15-state EKF with
   configurable scalar GPS innovation gating and rejection diagnostics.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, latency.
-- `GuidanceSystem.cpp`: PN, waypoint, seeker APN handoff; reads
-  `navigationConstant`/`waypointGain`; comms-failure zeroes accel.
+- `GuidanceSystem.cpp`: PN, waypoint, seeker APN handoff; maps seeker rates to
+  the X-forward/Y-right/Z-down body frame; reads `navigationConstant`/
+  `waypointGain`; comms-failure zeroes accel.
 - `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
   + `maxDeflectionRad`.
 - `EntityStatusBlock.hpp`: health, alive state, deterministic failure flags;
@@ -248,7 +249,7 @@ binary reader implemented; richer telemetry future.
 | `warhead_falloff` | falloff law (1/linear/0), fixed-seed in-band outcome, flat-law RNG exclusion, round-trip + reject |
 | `serialization` | config round-trip, scenario/design load-save, `designRef` override, four profile-id keys, legacy-compat |
 | `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
-| `designer_pipeline` | manifest→`designRef`→profile-id→intercept (49.1 m miss) + kill |
+| `designer_pipeline` | manifest→`designRef`→profile-id→intercept (9.7 m miss) + kill |
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
@@ -278,8 +279,8 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W24 | profile-id DB layer (`profile_database_test`) | current |
 | W25 | designer→engine pipeline (`designer_pipeline_test`): manifests, flat RCS table, scenario, `SeekerTypeStrings` dedup, guided intercept + kill | current |
 | W26 | rocket verification (`rocket_mvp_test`) + propulsion-law fix (`T = ṁ·Isp·g0`) | current |
-| W27 | data-driven cd/cl aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (49.1 m miss after W36, 15 km/8 km) | current |
-| W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 49.1 m miss | current |
+| W27 | data-driven cd/cl aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline remains at 9.7 m miss after terminal APN frame correction, 15 km/8 km | current |
+| W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 9.7 m miss | current |
 | W29 | geometric fins (RocketPy trapezoidal/elliptical/free-form) (`fins_test`) | current |
 | W30 | static moment/lateral aero tables (`coefficient_table_test`, `serialization_test`, `profile_database_test`) | current |
 | W32 | strict propulsion validation, ignition/shutdown transients, two-axis TVC + engine torque, engine/tank failures (`propulsion_test`) | current |
@@ -287,6 +288,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W34 | terrain source contract, nearest/bilinear + coverage/surface data, optional GDAL GeoTIFF/DTED/VRT loading, bounded LRU cache, impact surface payload (`global_terrain_test`) | current |
 | W35 | configurable scalar GPS innovation gating and navigation rejection diagnostics (`navigation_test`, `serialization_test`) | current |
 | W36 | configured navigation constant applied by kernel PN (`guidance_test`) | current |
+| W37 | seeker APN azimuth/elevation rate mapping corrected for the X-forward/Y-right/Z-down body frame (`guidance_test`); original 120 m/s² pipeline scenario restored, 9.7 m miss | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
