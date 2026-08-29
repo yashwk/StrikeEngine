@@ -20,7 +20,10 @@ namespace StrikeEngine::Kernel {
         Neutral
     };
 
-    enum class FailureMode : uint8_t { None, MotorFailure, ActuatorFailure, SensorFailure, StructuralFailure, CommunicationFailure };
+    enum class FailureMode : uint8_t {
+        None, MotorFailure, EngineFailure, TankFailure, ActuatorFailure,
+        SensorFailure, StructuralFailure, CommunicationFailure
+    };
 
     struct EntityStatusBlock {
         std::vector<EntityType> type;
@@ -31,6 +34,8 @@ namespace StrikeEngine::Kernel {
         // Deterministic failure flags (set/cleared by the kernel; NOT part of
         // numerical integration).
         std::vector<bool> motorFailed;
+        std::vector<bool> engineFailed;
+        std::vector<bool> tankFailed;
         std::vector<bool> actuatorFailed;
         std::vector<bool> sensorFailed;
         std::vector<bool> commsFailed;

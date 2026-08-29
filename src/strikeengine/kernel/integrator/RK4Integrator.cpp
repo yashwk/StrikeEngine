@@ -65,6 +65,12 @@ double RK4Integrator::integrate(
         acc.finPitch[i]   = (k1.finPitch[i] + 2.0 * k2.finPitch[i] + 2.0 * k3.finPitch[i] + k4.finPitch[i]) / 6.0;
         acc.finYaw[i]     = (k1.finYaw[i] + 2.0 * k2.finYaw[i] + 2.0 * k3.finYaw[i] + k4.finYaw[i]) / 6.0;
         acc.finRoll[i]    = (k1.finRoll[i] + 2.0 * k2.finRoll[i] + 2.0 * k3.finRoll[i] + k4.finRoll[i]) / 6.0;
+        if (i < acc.gimbalPitch.size() && i < acc.gimbalYaw.size()) {
+            acc.gimbalPitch[i] = (k1.gimbalPitch[i] + 2.0 * k2.gimbalPitch[i] +
+                                  2.0 * k3.gimbalPitch[i] + k4.gimbalPitch[i]) / 6.0;
+            acc.gimbalYaw[i] = (k1.gimbalYaw[i] + 2.0 * k2.gimbalYaw[i] +
+                                2.0 * k3.gimbalYaw[i] + k4.gimbalYaw[i]) / 6.0;
+        }
     }
 
     applyStateUpdate(state, acc, h);

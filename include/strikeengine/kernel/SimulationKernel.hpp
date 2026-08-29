@@ -44,6 +44,13 @@ namespace StrikeEngine::Kernel {
         std::vector<double> dropMasses;    // structure dropped after each stage (kg)
         std::vector<double> propellantCaps; // raw StageConfig::propellantMassKg per stage
         std::vector<double> reservedAfter;  // sum of later stages' positive propellant caps (kg)
+        std::vector<double> maxGimbalPitchRad;
+        std::vector<double> maxGimbalYawRad;
+        std::vector<double> gimbalTimeConstantSec;
+        std::vector<double> maxGimbalRateRadPerSec;
+        std::vector<double> enginePositionX;
+        std::vector<double> enginePositionY;
+        std::vector<double> enginePositionZ;
     };
 
     // Per-entity warhead state (see SimulationKernel::processWarheads).
@@ -89,6 +96,7 @@ namespace StrikeEngine::Kernel {
 
         // Simulation control
         void queueCommand(const SimulationCommand& cmd);
+        void setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad);
         void step(double dt);
         void runSteps(std::size_t steps, double dt);
 

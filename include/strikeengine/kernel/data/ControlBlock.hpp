@@ -6,9 +6,11 @@ namespace StrikeEngine::Kernel {
 
 struct ControlBlock {
 	std::vector<double> thrustCommand;
-	std::vector<double> pitchCommand;
-	std::vector<double> yawCommand;
-	std::vector<double> rollCommand;
+    std::vector<double> pitchCommand;
+    std::vector<double> yawCommand;
+    std::vector<double> rollCommand;
+    std::vector<double> thrustVectorPitchCommand;
+    std::vector<double> thrustVectorYawCommand;
 
 	// Per-entity autopilot gains + fin clamp (design-time configurable).
 	std::vector<double> kAccelP;          // rad fin deflection per (m/s^2)

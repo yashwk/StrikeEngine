@@ -71,6 +71,7 @@ namespace StrikeEngine::Kernel
         derivBuffer.fins.assign(n, nullptr);
         derivBuffer.propulsionId.assign(n, -1);
         derivBuffer.ignitionTime.assign(n, 0.0);
+        derivBuffer.gimbalPitch.assign(n, 0.0); derivBuffer.gimbalYaw.assign(n, 0.0);
         derivBuffer.finPitch.assign(n, 0.0); derivBuffer.finYaw.assign(n, 0.0); derivBuffer.finRoll.assign(n, 0.0);
         derivBuffer.active.assign(n, false);
         derivBuffer.size = n;
@@ -93,6 +94,7 @@ namespace StrikeEngine::Kernel
             d.wx[i] = 0.0; d.wy[i] = 0.0; d.wz[i] = 0.0;
             d.alphax[i] = 0.0; d.alphay[i] = 0.0; d.alphaz[i] = 0.0;
             d.mass[i] = 0.0;
+            d.gimbalPitch[i] = 0.0; d.gimbalYaw[i] = 0.0;
             d.finPitch[i] = 0.0; d.finYaw[i] = 0.0; d.finRoll[i] = 0.0;
 
             if (!s.active[i])
@@ -145,14 +147,19 @@ namespace StrikeEngine::Kernel
 
             // 4. Propulsion (per-entity motor, fuel-limited)
             double thrustBodyX = 0.0;
+            double thrustBodyY = 0.0;
+            double thrustBodyZ = 0.0;
             double massFlow = 0.0;
             const int pid = s.propulsionId[i];
             const double fuel = s.mass[i] - std::max(s.massDry[i], s.stageMinMass[i]);
             if (pid >= 0 && fuel > 1e-9 && pid < static_cast<int>(propulsionPool.size()))
             {
                 const auto prop = propulsionPool[static_cast<std::size_t>(pid)]->evaluate(
-                    t - s.ignitionTime[i], atm.pressure);
+                    t - s.ignitionTime[i], atm.pressure,
+                    s.gimbalPitch[i], s.gimbalYaw[i]);
                 thrustBodyX = prop.thrustBodyX;
+                thrustBodyY = prop.thrustBodyY;
+                thrustBodyZ = prop.thrustBodyZ;
                 massFlow   = prop.massFlowRate_kg_s;
                 constexpr double kFuelDepletionGuardWindowSec = 0.01; // depletion guard window (s); mass floor is enforced by applyStateUpdate
                 if (massFlow * kFuelDepletionGuardWindowSec > fuel) {  // never burn more fuel than remains
@@ -161,21 +168,29 @@ namespace StrikeEngine::Kernel
                     // holds at every instant: no free-thrust tail on the last
                     // few grams of propellant (full thrust on ~0 flow).
                     thrustBodyX *= cappedMassFlow / massFlow;
+                    thrustBodyY *= cappedMassFlow / massFlow;
+                    thrustBodyZ *= cappedMassFlow / massFlow;
                     massFlow = cappedMassFlow;
                 }
             }
 
-            // Motor failure zeroes thrust; mass flow stops with it.
-            if (i < s.motorFailed.size() && s.motorFailed[i]) {
+            // Motor/engine failure disables the engine. Tank failure disables
+            // feed as a deterministic no-leak failure mode: residual fuel is
+            // retained, but it cannot reach the engine.
+            if ((i < s.motorFailed.size() && s.motorFailed[i]) ||
+                (i < s.engineFailed.size() && s.engineFailed[i]) ||
+                (i < s.tankFailed.size() && s.tankFailed[i])) {
                 thrustBodyX = 0.0;
+                thrustBodyY = 0.0;
+                thrustBodyZ = 0.0;
                 massFlow = 0.0;
             }
 
             // 5. Total body force -> world acceleration
             const double invMass = 1.0 / s.mass[i];
             const double fbx = aeroWrench.force_x + thrustBodyX;
-            const double fby = aeroWrench.force_y;
-            const double fbz = aeroWrench.force_z;
+            const double fby = aeroWrench.force_y + thrustBodyY;
+            const double fbz = aeroWrench.force_z + thrustBodyZ;
 
             double afx, afy, afz;
             quatRotateToWorld(s.qw[i], s.qx[i], s.qy[i], s.qz[i], fbx, fby, fbz, afx, afy, afz);
@@ -270,9 +285,18 @@ namespace StrikeEngine::Kernel
             // 6. Body-frame rotational dynamics (W2): I*w_dot + w x (I w) = tau
             const double Ixx = s.Ixx[i], Iyy = s.Iyy[i], Izz = s.Izz[i];
             const double wx = s.wx[i], wy = s.wy[i], wz = s.wz[i];
-            const double alphaX = (aeroWrench.torque_x - (Izz - Iyy) * wy * wz) / Ixx;
-            const double alphaY = (aeroWrench.torque_y - (Ixx - Izz) * wz * wx) / Iyy;
-            const double alphaZ = (aeroWrench.torque_z - (Iyy - Ixx) * wx * wy) / Izz;
+            const double propulsionTorqueX = s.enginePositionY[i] * thrustBodyZ -
+                s.enginePositionZ[i] * thrustBodyY;
+            const double propulsionTorqueY = s.enginePositionZ[i] * thrustBodyX -
+                s.enginePositionX[i] * thrustBodyZ;
+            const double propulsionTorqueZ = s.enginePositionX[i] * thrustBodyY -
+                s.enginePositionY[i] * thrustBodyX;
+            const double alphaX = (aeroWrench.torque_x + propulsionTorqueX -
+                (Izz - Iyy) * wy * wz) / Ixx;
+            const double alphaY = (aeroWrench.torque_y + propulsionTorqueY -
+                (Ixx - Izz) * wz * wx) / Iyy;
+            const double alphaZ = (aeroWrench.torque_z + propulsionTorqueZ -
+                (Iyy - Ixx) * wx * wy) / Izz;
 
             d.wx[i] = alphaX;
             d.wy[i] = alphaY;
@@ -289,6 +313,34 @@ namespace StrikeEngine::Kernel
 
             // 8. Mass flow (fuel-limited; clamped at massDry by integrator)
             d.mass[i] = -massFlow;
+
+            // TVC actuator dynamics. Commands are clamped to the configured
+            // gimbal envelope; achieved angles are integrated and clamped by
+            // applyStateUpdate, just like fin servos.
+            auto gimbalServo = [](double command, double achieved, double limit,
+                                  double tau, double maxRate) {
+                if (limit <= 0.0) return 0.0;
+                const double target = std::clamp(command, -limit, limit);
+                const double effectiveTau = tau > 0.0 ? tau : 1e-6;
+                double rate = (target - achieved) / effectiveTau;
+                if (maxRate > 0.0) rate = std::clamp(rate, -maxRate, maxRate);
+                return rate;
+            };
+            if ((i < s.motorFailed.size() && s.motorFailed[i]) ||
+                (i < s.engineFailed.size() && s.engineFailed[i]) ||
+                (i < s.tankFailed.size() && s.tankFailed[i])) {
+                d.gimbalPitch[i] = 0.0;
+                d.gimbalYaw[i] = 0.0;
+            } else {
+                d.gimbalPitch[i] = gimbalServo(
+                    c.thrustVectorPitchCommand[i], s.gimbalPitch[i],
+                    s.maxGimbalPitchRad[i], s.gimbalTimeConstantSec[i],
+                    s.maxGimbalRateRadPerSec[i]);
+                d.gimbalYaw[i] = gimbalServo(
+                    c.thrustVectorYawCommand[i], s.gimbalYaw[i],
+                    s.maxGimbalYawRad[i], s.gimbalTimeConstantSec[i],
+                    s.maxGimbalRateRadPerSec[i]);
+            }
 
             // 9. Actuator dynamics: first-order lag toward commanded
             // deflection with a per-entity physical rate limit.

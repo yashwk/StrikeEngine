@@ -67,8 +67,12 @@ int main() {
                   prop.stages[0].vacuumIsp == 300.0 &&
                   prop.stages[0].seaLevelIsp == 265.0 &&
                   prop.stages[0].propellantMassKg == 500.0 &&
-                  prop.stages[0].dryMassKg == 80.0,
-              "MotorProfileDatabase parses stage-0 fields");
+                  prop.stages[0].dryMassKg == 80.0 &&
+                  prop.stages[0].ignitionDelaySec == 0.25 &&
+                  prop.stages[0].ignitionRampSec == 0.5 &&
+                  prop.stages[0].maxGimbalPitchRad == 0.1 &&
+                  prop.stages[0].enginePositionZ == 0.8,
+              "MotorProfileDatabase parses stage-0 propulsion/transient/TVC fields");
         check(prop.stages[1].vacuumIsp == 290.0 &&
                   prop.stages[1].propellantMassKg == 200.0 &&
                   prop.stages[1].thrustCurve[1].time_s == 10.0,

@@ -16,7 +16,8 @@ namespace StrikeEngine::Kernel
 	 * The PhysicsBlock also carries derived caches (ax/ay/az, alphax..) and
 	 * constants (Ixx.., referenceArea, ...). Only the true ODE state is
 	 * advanced here:
-	 *   px,py,pz , vx,vy,vz , qw,qx,qy,qz , wx,wy,wz , mass , finPitch/finYaw/finRoll
+	 *   px,py,pz , vx,vy,vz , qw,qx,qy,qz , wx,wy,wz , mass , finPitch/finYaw/finRoll,
+	 *   gimbalPitch/gimbalYaw
 	 * The quaternion is renormalized and mass is floored at massDry.
 	 */
 	inline void applyStateUpdate(PhysicsBlock& state, const PhysicsBlock& d, double scale)
@@ -66,6 +67,18 @@ namespace StrikeEngine::Kernel
 			state.finPitch[i] = std::clamp(state.finPitch[i] + scale * d.finPitch[i], -defl, defl);
 			state.finYaw[i]   = std::clamp(state.finYaw[i]   + scale * d.finYaw[i],   -defl, defl);
 			state.finRoll[i]  = std::clamp(state.finRoll[i]  + scale * d.finRoll[i],  -defl, defl);
+
+			if (i < state.gimbalPitch.size() && i < state.gimbalYaw.size() &&
+				i < d.gimbalPitch.size() && i < d.gimbalYaw.size()) {
+				const double pitchLimit = (i < state.maxGimbalPitchRad.size())
+					? state.maxGimbalPitchRad[i] : 0.0;
+				const double yawLimit = (i < state.maxGimbalYawRad.size())
+					? state.maxGimbalYawRad[i] : 0.0;
+				state.gimbalPitch[i] = std::clamp(state.gimbalPitch[i] + scale * d.gimbalPitch[i],
+				                                 -pitchLimit, pitchLimit);
+				state.gimbalYaw[i] = std::clamp(state.gimbalYaw[i] + scale * d.gimbalYaw[i],
+				                               -yawLimit, yawLimit);
+			}
 		}
 	}
 

@@ -135,6 +135,12 @@ double RK45Integrator::integrate(
                 acc5.finYaw[i]   = b51 * k1.finYaw[i] + b53 * k3.finYaw[i] + b54 * k4.finYaw[i] + b55 * k5.finYaw[i] + b56 * k6.finYaw[i];
                 acc4.finRoll[i]  = b41 * k1.finRoll[i] + b43 * k3.finRoll[i] + b44 * k4.finRoll[i] + b45 * k5.finRoll[i];
                 acc5.finRoll[i]  = b51 * k1.finRoll[i] + b53 * k3.finRoll[i] + b54 * k4.finRoll[i] + b55 * k5.finRoll[i] + b56 * k6.finRoll[i];
+                if (i < acc4.gimbalPitch.size() && i < acc4.gimbalYaw.size()) {
+                    acc4.gimbalPitch[i] = b41 * k1.gimbalPitch[i] + b43 * k3.gimbalPitch[i] + b44 * k4.gimbalPitch[i] + b45 * k5.gimbalPitch[i];
+                    acc5.gimbalPitch[i] = b51 * k1.gimbalPitch[i] + b53 * k3.gimbalPitch[i] + b54 * k4.gimbalPitch[i] + b55 * k5.gimbalPitch[i] + b56 * k6.gimbalPitch[i];
+                    acc4.gimbalYaw[i] = b41 * k1.gimbalYaw[i] + b43 * k3.gimbalYaw[i] + b44 * k4.gimbalYaw[i] + b45 * k5.gimbalYaw[i];
+                    acc5.gimbalYaw[i] = b51 * k1.gimbalYaw[i] + b53 * k3.gimbalYaw[i] + b54 * k4.gimbalYaw[i] + b55 * k5.gimbalYaw[i] + b56 * k6.gimbalYaw[i];
+                }
 
                 // Error estimate: |h*(y4 - y5)| relative to each component's
                 // state scale. Include every integrated state group so the
@@ -158,6 +164,10 @@ double RK45Integrator::integrate(
                 errMax = std::max(errMax, std::abs(h * (acc4.finPitch[i] - acc5.finPitch[i])) / (1.0 + 0.43));
                 errMax = std::max(errMax, std::abs(h * (acc4.finYaw[i] - acc5.finYaw[i])) / (1.0 + 0.43));
                 errMax = std::max(errMax, std::abs(h * (acc4.finRoll[i] - acc5.finRoll[i])) / (1.0 + 0.43));
+                if (i < acc4.gimbalPitch.size() && i < acc4.gimbalYaw.size()) {
+                    errMax = std::max(errMax, std::abs(h * (acc4.gimbalPitch[i] - acc5.gimbalPitch[i])) / (1.0 + 0.43));
+                    errMax = std::max(errMax, std::abs(h * (acc4.gimbalYaw[i] - acc5.gimbalYaw[i])) / (1.0 + 0.43));
+                }
             }
 
             if (errMax <= tolerance || h <= 1e-6)

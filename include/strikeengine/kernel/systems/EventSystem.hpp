@@ -16,6 +16,8 @@ namespace StrikeEngine::Kernel {
         Detonation,
         Custom,
         MotorFailure,
+        EngineFailure,
+        TankFailure,
         ActuatorFailure,
         SensorFailure,
         StructuralFailure,

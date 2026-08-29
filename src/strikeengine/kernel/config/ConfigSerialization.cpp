@@ -324,6 +324,17 @@ void to_json(json& j, const StageConfig& s) {
     j["sea_level_isp"] = s.seaLevelIsp;
     j["propellant_mass_kg"] = s.propellantMassKg;
     j["dry_mass_kg"] = s.dryMassKg;
+    j["ignition_delay_sec"] = s.ignitionDelaySec;
+    j["ignition_ramp_sec"] = s.ignitionRampSec;
+    j["shutdown_time_sec"] = s.shutdownTimeSec;
+    j["shutdown_ramp_sec"] = s.shutdownRampSec;
+    j["max_gimbal_pitch_rad"] = s.maxGimbalPitchRad;
+    j["max_gimbal_yaw_rad"] = s.maxGimbalYawRad;
+    j["gimbal_time_constant_sec"] = s.gimbalTimeConstantSec;
+    j["max_gimbal_rate_rad_per_sec"] = s.maxGimbalRateRadPerSec;
+    j["engine_position_x"] = s.enginePositionX;
+    j["engine_position_y"] = s.enginePositionY;
+    j["engine_position_z"] = s.enginePositionZ;
 }
 
 void from_json(const json& j, StageConfig& s) {
@@ -332,6 +343,17 @@ void from_json(const json& j, StageConfig& s) {
     s.seaLevelIsp = j.at("sea_level_isp").get<double>();
     s.propellantMassKg = j.at("propellant_mass_kg").get<double>();
     s.dryMassKg = j.at("dry_mass_kg").get<double>();
+    s.ignitionDelaySec = j.value("ignition_delay_sec", s.ignitionDelaySec);
+    s.ignitionRampSec = j.value("ignition_ramp_sec", s.ignitionRampSec);
+    s.shutdownTimeSec = j.value("shutdown_time_sec", s.shutdownTimeSec);
+    s.shutdownRampSec = j.value("shutdown_ramp_sec", s.shutdownRampSec);
+    s.maxGimbalPitchRad = j.value("max_gimbal_pitch_rad", s.maxGimbalPitchRad);
+    s.maxGimbalYawRad = j.value("max_gimbal_yaw_rad", s.maxGimbalYawRad);
+    s.gimbalTimeConstantSec = j.value("gimbal_time_constant_sec", s.gimbalTimeConstantSec);
+    s.maxGimbalRateRadPerSec = j.value("max_gimbal_rate_rad_per_sec", s.maxGimbalRateRadPerSec);
+    s.enginePositionX = j.value("engine_position_x", s.enginePositionX);
+    s.enginePositionY = j.value("engine_position_y", s.enginePositionY);
+    s.enginePositionZ = j.value("engine_position_z", s.enginePositionZ);
 }
 
 void to_json(json& j, const PropulsionConfig& p) {
@@ -341,6 +363,10 @@ void to_json(json& j, const PropulsionConfig& p) {
 
 void from_json(const json& j, PropulsionConfig& p) {
     p.stages = j.at("stages").get<std::vector<StageConfig>>();
+    std::string error;
+    if (!validatePropulsionConfig(p, &error)) {
+        throw std::runtime_error("Invalid propulsion configuration: " + error);
+    }
 }
 
 // --- SeekerConfig -----------------------------------------------------------

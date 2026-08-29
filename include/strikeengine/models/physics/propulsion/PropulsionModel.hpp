@@ -1,6 +1,7 @@
 #pragma once
 #include <strikeengine/models/physics/propulsion/ThrustCurve.hpp>
 #include <algorithm>
+#include <cmath>
 
 namespace StrikeEngine::Models {
 
@@ -12,8 +13,17 @@ namespace StrikeEngine::Models {
      * to the world frame via the vehicle quaternion.
      */
     struct PropulsionState {
-        double thrustBodyX, thrustBodyY, thrustBodyZ;  // N (body frame)
-        double massFlowRate_kg_s;
+        double thrustBodyX = 0.0, thrustBodyY = 0.0, thrustBodyZ = 0.0;  // N
+        double massFlowRate_kg_s = 0.0;
+    };
+
+    struct PropulsionModelOptions {
+        double ignitionDelaySec = 0.0;
+        double ignitionRampSec = 0.0;
+        double shutdownTimeSec = -1.0;
+        double shutdownRampSec = 0.0;
+        double maxGimbalPitchRad = 0.0;
+        double maxGimbalYawRad = 0.0;
     };
 
     class PropulsionModel {
@@ -21,14 +31,35 @@ namespace StrikeEngine::Models {
         PropulsionModel(const ThrustCurve& curve, double vacuumIsp, double slIsp)
             : thrustCurve(curve), isp_vacuum_s(vacuumIsp), isp_sl_s(slIsp) {}
 
+        PropulsionModel(const ThrustCurve& curve, double vacuumIsp, double slIsp,
+                        PropulsionModelOptions options)
+            : thrustCurve(curve), isp_vacuum_s(vacuumIsp), isp_sl_s(slIsp),
+              options_(options) {}
+
         /**
          * @brief Evaluates propulsion forces and mass flow rate.
          * @param timeSinceIgnition_s Time since motor ignition.
          * @param ambientPressure_pa Local atmospheric pressure.
          * @return Evaluated body-frame thrust vector and mass flow rate.
          */
-        PropulsionState evaluate(double timeSinceIgnition_s, double ambientPressure_pa) const {
-            const double currentThrust = thrustCurve.evaluate(timeSinceIgnition_s);
+        PropulsionState evaluate(double timeSinceIgnition_s, double ambientPressure_pa,
+                                 double gimbalPitchRad = 0.0,
+                                 double gimbalYawRad = 0.0) const {
+            const double activeTime = timeSinceIgnition_s - options_.ignitionDelaySec;
+            if (activeTime < 0.0) return {};
+
+            double multiplier = 1.0;
+            if (options_.ignitionRampSec > 0.0) {
+                multiplier *= std::clamp(activeTime / options_.ignitionRampSec, 0.0, 1.0);
+            }
+            if (options_.shutdownTimeSec >= 0.0 && activeTime >= options_.shutdownTimeSec) {
+                if (options_.shutdownRampSec <= 0.0) return {};
+                multiplier *= std::clamp(
+                    1.0 - (activeTime - options_.shutdownTimeSec) / options_.shutdownRampSec,
+                    0.0, 1.0);
+            }
+
+            const double currentThrust = thrustCurve.evaluate(activeTime) * multiplier;
 
             if (currentThrust <= 0.0) {
                 return {0.0, 0.0, 0.0, 0.0};
@@ -44,14 +75,35 @@ namespace StrikeEngine::Models {
                 massFlowRate = currentThrust / (current_isp * g0);
             }
 
-            // Thrust along +X body axis
-            return {currentThrust, 0.0, 0.0, massFlowRate};
+            const double pitch = std::clamp(gimbalPitchRad,
+                                            -options_.maxGimbalPitchRad,
+                                            options_.maxGimbalPitchRad);
+            const double yaw = std::clamp(gimbalYawRad,
+                                          -options_.maxGimbalYawRad,
+                                          options_.maxGimbalYawRad);
+            const double cp = std::cos(pitch);
+            const double cy = std::cos(yaw);
+            // Positive pitch is nose-up thrust (-Z); positive yaw is +Y.
+            return {currentThrust * cp * cy,
+                    currentThrust * std::sin(yaw),
+                    -currentThrust * std::sin(pitch) * cy,
+                    massFlowRate};
+        }
+
+        double burnDuration() const {
+            double duration = thrustCurve.lastPositiveTime();
+            if (options_.shutdownTimeSec >= 0.0) {
+                duration = std::min(duration,
+                    options_.shutdownTimeSec + options_.shutdownRampSec);
+            }
+            return options_.ignitionDelaySec + std::max(0.0, duration);
         }
 
     private:
         ThrustCurve thrustCurve;
         double isp_vacuum_s;
         double isp_sl_s;
+        PropulsionModelOptions options_;
     };
 
 } // namespace StrikeEngine::Models

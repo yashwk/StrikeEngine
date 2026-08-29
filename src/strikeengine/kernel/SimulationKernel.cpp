@@ -118,6 +118,11 @@ namespace StrikeEngine::Kernel {
             resolved.sensor = sensorDb.sensor();
         }
 
+        std::string propulsionError;
+        if (!validatePropulsionConfig(resolved.propulsion, &propulsionError)) {
+            throw std::invalid_argument("Invalid propulsion configuration: " + propulsionError);
+        }
+
         PhysicsId id;
 
         if (!freeList.empty()) {
@@ -160,8 +165,17 @@ namespace StrikeEngine::Kernel {
             physicsBlock.servoTimeConstantSec.push_back(0.02);
             physicsBlock.maxServoRateRadPerSec.push_back(5.24);
             physicsBlock.stageMinMass.push_back(0.0);
+            physicsBlock.gimbalPitch.push_back(0.0); physicsBlock.gimbalYaw.push_back(0.0);
+            physicsBlock.maxGimbalPitchRad.push_back(0.0); physicsBlock.maxGimbalYawRad.push_back(0.0);
+            physicsBlock.gimbalTimeConstantSec.push_back(0.02);
+            physicsBlock.maxGimbalRateRadPerSec.push_back(0.0);
+            physicsBlock.enginePositionX.push_back(0.0);
+            physicsBlock.enginePositionY.push_back(0.0);
+            physicsBlock.enginePositionZ.push_back(0.0);
             physicsBlock.active.push_back(true);
             physicsBlock.motorFailed.push_back(false);
+            physicsBlock.engineFailed.push_back(false);
+            physicsBlock.tankFailed.push_back(false);
             physicsBlock.actuatorFailed.push_back(false);
 
             stagePlans.push_back(StagePlan{});
@@ -171,6 +185,8 @@ namespace StrikeEngine::Kernel {
             controlBlock.pitchCommand.push_back(0);
             controlBlock.yawCommand.push_back(0);
             controlBlock.rollCommand.push_back(0);
+            controlBlock.thrustVectorPitchCommand.push_back(0);
+            controlBlock.thrustVectorYawCommand.push_back(0);
             controlBlock.kAccelP.push_back(0.030);
             controlBlock.kRateP.push_back(1.000);
             controlBlock.kAlphaP.push_back(0.200);
@@ -191,6 +207,8 @@ namespace StrikeEngine::Kernel {
             statusBlock.health.push_back(100.0);
             statusBlock.isAlive.push_back(true);
             statusBlock.motorFailed.push_back(false);
+            statusBlock.engineFailed.push_back(false);
+            statusBlock.tankFailed.push_back(false);
             statusBlock.actuatorFailed.push_back(false);
             statusBlock.sensorFailed.push_back(false);
             statusBlock.commsFailed.push_back(false);
@@ -252,6 +270,8 @@ namespace StrikeEngine::Kernel {
         controlBlock.pitchCommand[id] = 0;
         controlBlock.yawCommand[id] = 0;
         controlBlock.rollCommand[id] = 0;
+        controlBlock.thrustVectorPitchCommand[id] = 0;
+        controlBlock.thrustVectorYawCommand[id] = 0;
         controlBlock.kAccelP[id] = config.guidanceAutopilot.kAccelP;
         controlBlock.kRateP[id] = config.guidanceAutopilot.kRateP;
         controlBlock.kAlphaP[id] = config.guidanceAutopilot.kAlphaP;
@@ -299,17 +319,23 @@ namespace StrikeEngine::Kernel {
             if (stage.thrustCurve.empty()) continue;
             auto prop = std::make_shared<Models::PropulsionModel>(
                 Models::ThrustCurve(stage.thrustCurve),
-                stage.vacuumIsp, stage.seaLevelIsp);
+                stage.vacuumIsp, stage.seaLevelIsp,
+                Models::PropulsionModelOptions{
+                    stage.ignitionDelaySec, stage.ignitionRampSec,
+                    stage.shutdownTimeSec, stage.shutdownRampSec,
+                    stage.maxGimbalPitchRad, stage.maxGimbalYawRad});
+            const double burnDuration = prop->burnDuration();
             plan.poolIds.push_back(backend->registerPropulsion(std::move(prop)));
-            // Burnout time = last time the curve still produces positive thrust
-            // (the trailing zero-thrust sentinel marks the end of the burn).
-            double burnDuration = 0.0;
-            for (const auto& p : stage.thrustCurve) {
-                if (p.thrust_n > 0.0) burnDuration = p.time_s;
-            }
             plan.burnDurations.push_back(burnDuration);
             plan.dropMasses.push_back(stage.dryMassKg);
             plan.propellantCaps.push_back(stage.propellantMassKg);
+            plan.maxGimbalPitchRad.push_back(stage.maxGimbalPitchRad);
+            plan.maxGimbalYawRad.push_back(stage.maxGimbalYawRad);
+            plan.gimbalTimeConstantSec.push_back(stage.gimbalTimeConstantSec);
+            plan.maxGimbalRateRadPerSec.push_back(stage.maxGimbalRateRadPerSec);
+            plan.enginePositionX.push_back(stage.enginePositionX);
+            plan.enginePositionY.push_back(stage.enginePositionY);
+            plan.enginePositionZ.push_back(stage.enginePositionZ);
         }
         // reservedAfter[i] = sum of later stages' positive propellant caps
         // (fuel kept off-limits for the current stage).
@@ -343,6 +369,25 @@ namespace StrikeEngine::Kernel {
         // The stage floor reserves later stages' propellant: the active stage
         // may burn only down to dry mass + reserved fuel.
         physicsBlock.stageMinMass[id] = hasStages ? physicsBlock.massDry[id] + reservedAfter0 : 0.0;
+        physicsBlock.gimbalPitch[id] = 0.0;
+        physicsBlock.gimbalYaw[id] = 0.0;
+        if (hasStages) {
+            physicsBlock.maxGimbalPitchRad[id] = stagePlans[id].maxGimbalPitchRad.front();
+            physicsBlock.maxGimbalYawRad[id] = stagePlans[id].maxGimbalYawRad.front();
+            physicsBlock.gimbalTimeConstantSec[id] = stagePlans[id].gimbalTimeConstantSec.front();
+            physicsBlock.maxGimbalRateRadPerSec[id] = stagePlans[id].maxGimbalRateRadPerSec.front();
+            physicsBlock.enginePositionX[id] = stagePlans[id].enginePositionX.front();
+            physicsBlock.enginePositionY[id] = stagePlans[id].enginePositionY.front();
+            physicsBlock.enginePositionZ[id] = stagePlans[id].enginePositionZ.front();
+        } else {
+            physicsBlock.maxGimbalPitchRad[id] = 0.0;
+            physicsBlock.maxGimbalYawRad[id] = 0.0;
+            physicsBlock.gimbalTimeConstantSec[id] = 0.02;
+            physicsBlock.maxGimbalRateRadPerSec[id] = 0.0;
+            physicsBlock.enginePositionX[id] = 0.0;
+            physicsBlock.enginePositionY[id] = 0.0;
+            physicsBlock.enginePositionZ[id] = 0.0;
+        }
 
         physicsBlock.referenceArea[id] = resolved.aero.referenceArea;
         physicsBlock.referenceLength[id] = resolved.aero.referenceLength;
@@ -372,6 +417,8 @@ namespace StrikeEngine::Kernel {
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;
         physicsBlock.motorFailed[id] = false;
+        physicsBlock.engineFailed[id] = false;
+        physicsBlock.tankFailed[id] = false;
         physicsBlock.actuatorFailed[id] = false;
 
         statusBlock.type[id] = config.type;
@@ -379,6 +426,8 @@ namespace StrikeEngine::Kernel {
         statusBlock.health[id] = 100.0;
         statusBlock.isAlive[id] = true;
         statusBlock.motorFailed[id] = false;
+        statusBlock.engineFailed[id] = false;
+        statusBlock.tankFailed[id] = false;
         statusBlock.actuatorFailed[id] = false;
         statusBlock.sensorFailed[id] = false;
         statusBlock.commsFailed[id] = false;
@@ -461,8 +510,22 @@ namespace StrikeEngine::Kernel {
         switch (mode) {
             case FailureMode::MotorFailure:
                 statusBlock.motorFailed[id] = true;
+                statusBlock.engineFailed[id] = true;
                 physicsBlock.motorFailed[id] = true;
+                physicsBlock.engineFailed[id] = true;
                 evt.type = EventType::MotorFailure;
+                break;
+            case FailureMode::EngineFailure:
+                statusBlock.motorFailed[id] = true;
+                statusBlock.engineFailed[id] = true;
+                physicsBlock.motorFailed[id] = true;
+                physicsBlock.engineFailed[id] = true;
+                evt.type = EventType::EngineFailure;
+                break;
+            case FailureMode::TankFailure:
+                statusBlock.tankFailed[id] = true;
+                physicsBlock.tankFailed[id] = true;
+                evt.type = EventType::TankFailure;
                 break;
             case FailureMode::ActuatorFailure:
                 statusBlock.actuatorFailed[id] = true;
@@ -562,6 +625,15 @@ namespace StrikeEngine::Kernel {
             if (nextSi >= 0 && nextSi < static_cast<int>(plan.reservedAfter.size())) {
                 physicsBlock.stageMinMass[i] = physicsBlock.massDry[i] + plan.reservedAfter[nextSi];
             }
+            physicsBlock.gimbalPitch[i] = 0.0;
+            physicsBlock.gimbalYaw[i] = 0.0;
+            physicsBlock.maxGimbalPitchRad[i] = plan.maxGimbalPitchRad[nextSi];
+            physicsBlock.maxGimbalYawRad[i] = plan.maxGimbalYawRad[nextSi];
+            physicsBlock.gimbalTimeConstantSec[i] = plan.gimbalTimeConstantSec[nextSi];
+            physicsBlock.maxGimbalRateRadPerSec[i] = plan.maxGimbalRateRadPerSec[nextSi];
+            physicsBlock.enginePositionX[i] = plan.enginePositionX[nextSi];
+            physicsBlock.enginePositionY[i] = plan.enginePositionY[nextSi];
+            physicsBlock.enginePositionZ[i] = plan.enginePositionZ[nextSi];
 
             SimulationEvent evt;
             evt.type = EventType::StageSeparation;
@@ -634,6 +706,17 @@ namespace StrikeEngine::Kernel {
 
     void SimulationKernel::queueCommand(const SimulationCommand& cmd) {
         commandProcessor.enqueueCommand(cmd);
+    }
+
+    void SimulationKernel::setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad) {
+        if (id >= physicsBlock.size) {
+            throw std::out_of_range("SimulationKernel::setThrustVectorCommand: entity id out of range");
+        }
+        if (!std::isfinite(pitchRad) || !std::isfinite(yawRad)) {
+            throw std::invalid_argument("SimulationKernel::setThrustVectorCommand: angles must be finite");
+        }
+        controlBlock.thrustVectorPitchCommand[id] = pitchRad;
+        controlBlock.thrustVectorYawCommand[id] = yawRad;
     }
 
     void SimulationKernel::step(double dt) {

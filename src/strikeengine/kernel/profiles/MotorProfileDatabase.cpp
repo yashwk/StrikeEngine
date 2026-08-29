@@ -28,8 +28,21 @@ namespace StrikeEngine::Kernel {
                 stage.seaLevelIsp     = stageJson.value("sea_level_isp", stage.seaLevelIsp);
                 stage.propellantMassKg = stageJson.value("propellant_mass_kg", stage.propellantMassKg);
                 stage.dryMassKg       = stageJson.value("dry_mass_kg", stage.dryMassKg);
+                stage.ignitionDelaySec = stageJson.value("ignition_delay_sec", stage.ignitionDelaySec);
+                stage.ignitionRampSec = stageJson.value("ignition_ramp_sec", stage.ignitionRampSec);
+                stage.shutdownTimeSec = stageJson.value("shutdown_time_sec", stage.shutdownTimeSec);
+                stage.shutdownRampSec = stageJson.value("shutdown_ramp_sec", stage.shutdownRampSec);
+                stage.maxGimbalPitchRad = stageJson.value("max_gimbal_pitch_rad", stage.maxGimbalPitchRad);
+                stage.maxGimbalYawRad = stageJson.value("max_gimbal_yaw_rad", stage.maxGimbalYawRad);
+                stage.gimbalTimeConstantSec = stageJson.value("gimbal_time_constant_sec", stage.gimbalTimeConstantSec);
+                stage.maxGimbalRateRadPerSec = stageJson.value("max_gimbal_rate_rad_per_sec", stage.maxGimbalRateRadPerSec);
+                stage.enginePositionX = stageJson.value("engine_position_x", stage.enginePositionX);
+                stage.enginePositionY = stageJson.value("engine_position_y", stage.enginePositionY);
+                stage.enginePositionZ = stageJson.value("engine_position_z", stage.enginePositionZ);
                 cfg.stages.push_back(stage);
             }
+            std::string error;
+            if (!validatePropulsionConfig(cfg, &error)) return false;
             _propulsion = cfg;
         } catch (const std::exception&) {
             // Any load failure (syntax, missing required key, wrong type)

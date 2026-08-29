@@ -57,6 +57,12 @@ struct PhysicsBlock {
 	                                       // below massDry; for a capped stage it is
 	                                       // massDry + (propellant reserved for later stages).
 
+	// Propulsion truth (achieved TVC gimbal angles, rad)
+	std::vector<double> gimbalPitch, gimbalYaw;
+	std::vector<double> maxGimbalPitchRad, maxGimbalYawRad;
+	std::vector<double> gimbalTimeConstantSec, maxGimbalRateRadPerSec;
+	std::vector<double> enginePositionX, enginePositionY, enginePositionZ;
+
 	// Actuator truth (achieved deflections, rad)
 	std::vector<double> finPitch, finYaw, finRoll;
 
@@ -71,6 +77,8 @@ struct PhysicsBlock {
 	// failure flags without a signature change. Canonical flags live in
 	// EntityStatusBlock; these are kept in sync by the kernel.
 	std::vector<bool> motorFailed;
+	std::vector<bool> engineFailed;
+	std::vector<bool> tankFailed;
 	std::vector<bool> actuatorFailed;
 
 	size_t size = 0;
