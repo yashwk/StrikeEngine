@@ -21,6 +21,9 @@ namespace StrikeEngine::Kernel {
             control.yawCommand.resize(nav.size, 0.0);
             control.rollCommand.resize(nav.size, 0.0);
             control.thrustCommand.resize(nav.size, 0.0);
+            control.pitchSaturated.assign(nav.size, false);
+            control.yawSaturated.assign(nav.size, false);
+            control.rollSaturated.assign(nav.size, false);
         }
 
         for (std::size_t i = 0; i < nav.size; ++i) {
@@ -121,8 +124,11 @@ namespace StrikeEngine::Kernel {
         const double maxDeflection = control.maxDeflectionRad[id];
         const double pitchClamped = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
         const double yawClamped   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
+        control.pitchSaturated[id] = std::abs(pitchDeflection) > maxDeflection;
+        control.yawSaturated[id]   = std::abs(yawDeflection)   > maxDeflection;
         control.pitchCommand[id] = pitchClamped;
         control.yawCommand[id]   = yawClamped;
+        control.rollSaturated[id] = std::abs(rollDeflection) > maxDeflection;
         control.rollCommand[id]  = std::clamp(rollDeflection,  -maxDeflection, maxDeflection);
     }
 

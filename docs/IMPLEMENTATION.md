@@ -14,7 +14,7 @@ validation, and remaining work.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **34/34 CTest tests pass**.
+- Release validation: **35/35 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -174,11 +174,19 @@ carries per-entity `stageIndex`/`stageCount`.
 - `NavigationSystem.cpp`: alignment, strapdown INS, coupled 15-state EKF with
   configurable scalar GPS innovation gating and rejection diagnostics.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, latency.
-- `GuidanceSystem.cpp`: PN, waypoint, seeker APN handoff; maps seeker rates to
-  the X-forward/Y-right/Z-down body frame; reads `navigationConstant`/
-  `waypointGain`; comms-failure zeroes accel.
+- `GuidanceSystem.cpp`: phase selection separated from law computation; explicit
+  `GuidancePhase` (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and
+  `GuidanceLaw` (`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`); acquisition→
+  terminal blend (`handoffBlendTimeSec`, 0 = legacy instant override), bounded
+  lock-loss retention (`lockLossRetentionSec`, 0 = none) with `LostTrack`
+  recovery via midcourse PN; APN target-accel feed-forward only when
+  `apnFeedforwardEnabled && targetAccelAvailable` (never reads uninitialized
+  values); publishes raw/limited demands + invalid/non-closing diagnostics; maps
+  seeker rates to the X-forward/Y-right/Z-down body frame; reads
+  `navigationConstant`/`waypointGain`; comms-failure zeroes accel.
 - `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
-  + `maxDeflectionRad`.
+  + `maxDeflectionRad`; publishes `pitchSaturated`/`yawSaturated`/
+  `rollSaturated` fin-clamp diagnostics.
 - `EntityStatusBlock.hpp`: health, alive state, deterministic failure flags;
   structural failure = `isAlive=false` + `health=0`.
 - Study wrappers (`SingleRun`, `ParamSweep`, `MonteCarlo`, `Optimizer`,
@@ -198,6 +206,8 @@ carries per-entity `stageIndex`/`stageCount`.
   `rcsProfileId` to the flat RCS table.
 - `data/rcs/target_drone_rcs.json`: flat 1.5 m² (1.7609 dBsm) RCS table (two
   breakpoints per axis, uniform `rcs_table_dbsm`).
+- `data/rcs/target_missile_rcs.json`: flat 0.25 m² (−6.0206 dBsm) RCS table for
+  the hostile coasting missile in `seeker_intercept_test`.
 - `data/scenarios/intercept_test_01.json`: ScenarioConfig schema (`environment`,
   `primary_entity_index`, entities with `design_ref` + `init_state` +
   `initial_guidance_mode` + `initial_target_*` + `initial_max_accel`); local ENU,
@@ -226,7 +236,7 @@ binary reader implemented; richer telemetry future.
 
 ## 7. Validation inventory
 
-34 deterministic CTest programs:
+35 deterministic CTest programs:
 
 | Test | Coverage |
 | --- | --- |
@@ -237,7 +247,7 @@ binary reader implemented; richer telemetry future.
 | `earth`, `earth_frames`, `earth_transport` | WGS84 conversion/state helpers and local frames |
 | `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation, including J2 |
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation, including J2 |
-| `guidance`, `scenario` | guidance and scenario contracts, configured PN gain wiring |
+| `guidance`, `scenario` | guidance phase/law state machine (head-on/crossing/non-closing, APN feed-forward availability, acquisition blend ramp, body-frame signs, tgo), non-finite input flag, configured PN gain wiring, scenario contracts |
 | `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics and events |
 | `propulsion` | strict profile validation, ignition/shutdown transients, TVC gimbal limits/servo, engine torque, engine/tank failures, serialization |
@@ -250,6 +260,7 @@ binary reader implemented; richer telemetry future.
 | `serialization` | config round-trip, scenario/design load-save, `designRef` override, four profile-id keys, legacy-compat |
 | `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
 | `designer_pipeline` | manifest→`designRef`→profile-id→intercept (9.7 m miss) + kill |
+| `seeker_intercept` | two explicit missiles: friendly RF-seeker interceptor (sa_missile_mk1 aero/motor profiles + 12 kW radar, 20° FOV half-angle, 65° gimbal, 0.5 s acquisition blend, proximity warhead 20/15/25 m) vs hostile coasting target missile (target_missile_rcs.json, 0.25 m² flat RCS); midcourse PN on explicit state, RF acquisition via radar equation + RCS + allegiance (no fake lock), terminal APN, detonation + kill; seed `0x5EEDF1A5u` |
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
@@ -289,6 +300,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W35 | configurable scalar GPS innovation gating and navigation rejection diagnostics (`navigation_test`, `serialization_test`) | current |
 | W36 | configured navigation constant applied by kernel PN (`guidance_test`) | current |
 | W37 | seeker APN azimuth/elevation rate mapping corrected for the X-forward/Y-right/Z-down body frame (`guidance_test`); original 120 m/s² pipeline scenario restored, 9.7 m miss | current |
+| W38 | traceable mode-aware guidance stack (phases, blend, retention, diagnostics, APN feed-forward availability) + seeker intercept regression (`seeker_intercept_test`, `guidance_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

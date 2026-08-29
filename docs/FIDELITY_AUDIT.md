@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-29<br>
 **Runtime checkpoint:** `93b24ab`<br>
-**Validation result:** Release build, **34/34 CTest tests passed**
+**Validation result:** Release build, **35/35 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -62,6 +62,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W35 — GPS fusion robustness | Implemented / MVP | `navigation_test`, `serialization_test`; configurable scalar normalized-innovation gate rejects gross/non-finite fixes while preserving valid channels |
 | W36 — Configured PN authority | Implemented / MVP | `guidance_test`; kernel PN applies each entity's configured navigation constant rather than the model default |
 | W37 — Seeker APN frame mapping | Implemented / MVP | `guidance_test`, `designer_pipeline_test`; azimuth/elevation LOS rates map to the X-forward/Y-right/Z-down body frame, restoring the original 120 m/s² scenario and reducing miss from 52.5 m to 9.7 m |
+| W38 — Mode-aware guidance stack + seeker intercept | Implemented | `guidance_test` (head-on/crossing/non-closing/feed-forward-availability/blend ramp/body-signs), `seeker_intercept_test` (two explicit missiles, RF acquisition 3.6 km, blend 0.5 s, miss 3.70 m < 15 m lethal, detonation t=7.04 s vs closest approach 7.05 s, target kill, 1 post-pass lock loss reported, deterministic seed `0x5EEDF1A5u`); byte-identical legacy when blend=0 |
 
 ## 3. Subsystem fidelity assessment
 
@@ -78,7 +79,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF, scalar GPS innovation gating and diagnostics | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation or broader sensor fusion |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
-| Guidance | Stateless PN/APN, waypoint, seeker handoff, per-entity gains | **MVP:** no trajectory manager, pursuit, LQR/MPC, blended handoff |
+| Guidance | Stateless PN/APN, waypoint, phase/law state machine (Midcourse→Acquisition blend→Terminal, LostTrack recovery), lock-loss retention, APN feed-forward availability, per-entity gains; publishes phase/law/track/limit/invalid/non-closing/tgo diagnostics | **MVP:** no trajectory manager, pursuit, LQR/MPC; blended handoff beyond the seeker acquisition blend remains |
 | Events and terrain | Local callbacks plus geodetic raster sources, nearest/bilinear status-aware sampling, terrain normals/slope, real local/ECEF impact deactivation and clamping, enriched impact events | **MVP:** GDAL source loading is eager and single-source; no automatic spatial tile discovery/streaming, prefetch, datum/geoid, or probabilistic failure |
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
 | Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
@@ -87,7 +88,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **34/34 tests passed** at the checkpoint above.
+- Release CTest suite green: **35/35 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **9.7 m minimum miss** at t≈11.5 s with a
@@ -126,8 +127,11 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
    arbitrary stage-count validation and a physics-based blast/debris model remain.
 6. **Guidance/aero:** static cd/cl/cm/cy/cn/rolling-cl table plumbing is done
    (`coefficient_table_test`, `serialization_test`, `profile_database_test`);
-   CFD validation, Reynolds/nonlinear aero, trajectory management, pursuit,
-   LQR/MPC, and blended handoff remain.
+   the mode-aware guidance stack (phases, acquisition→terminal blend,
+   lock-loss retention, APN feed-forward availability, per-entity diagnostics)
+   and seeker intercept are W36 (`guidance_test`, `seeker_intercept_test`);
+   CFD validation, Reynolds/nonlinear aero, trajectory/energy management,
+   pursuit, LQR/MPC, and seeker-management blended handoff remain.
 7. **Backend parity:** validate Vulkan vs CPU, GPU ECEF, CUDA if required.
 8. **Application handoffs:** designer→engine contract exercised end-to-end
    (`designer_pipeline_test`); explicit versioned StrikeSim/StrikeDesigner/
@@ -136,11 +140,13 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
 Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling (and
 CFD validation of the moment (cm)/lateral (β) coefficient tables), a full
  GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
-(trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and automatic multi-tile global
+(trajectory/energy/pursuit/LQR/MPC), Vulkan/CPU parity, and automatic multi-tile global
 terrain discovery/streaming. The
 falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin
 effectiveness, lateral β side-force/stability for angled fins) are implemented
-and no longer deferred.
+and no longer deferred. The mode-aware guidance stack (phase/law state machine,
+acquisition→terminal blend, lock-loss retention, APN feed-forward availability,
+per-entity diagnostics) is W36 and no longer deferred.
 Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 `data/rcs`, `data/profiles`, `data/scenarios/intercept_test_01`,
 `data/schemas/seeker_schema.json`) are part of this layer.
@@ -149,7 +155,7 @@ Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 
 The 2026-08-25 pre-restart audit recorded 5/7 workstreams with failures in control
 signs, aero authority, integration, events, seeker fidelity, and navigation; it is
-superseded by W1–W36 above. Historical measurements/commits remain in repository
+superseded by W1–W38 above. Historical measurements/commits remain in repository
 history and are not repeated here.
 
 ## 7. Conclusion

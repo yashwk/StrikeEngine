@@ -193,14 +193,33 @@ namespace StrikeEngine::Kernel {
             controlBlock.kRollP.push_back(0.10);
             controlBlock.kRollD.push_back(0.05);
             controlBlock.maxDeflectionRad.push_back(0.43);
+            controlBlock.pitchSaturated.push_back(false);
+            controlBlock.yawSaturated.push_back(false);
+            controlBlock.rollSaturated.push_back(false);
 
             guidanceBlock.mode.push_back(GuidanceMode::None);
             guidanceBlock.targetX.push_back(0); guidanceBlock.targetY.push_back(0); guidanceBlock.targetZ.push_back(0);
             guidanceBlock.targetVx.push_back(0); guidanceBlock.targetVy.push_back(0); guidanceBlock.targetVz.push_back(0);
+            guidanceBlock.targetAccelX.push_back(0); guidanceBlock.targetAccelY.push_back(0); guidanceBlock.targetAccelZ.push_back(0);
+            guidanceBlock.targetAccelAvailable.push_back(false);
             guidanceBlock.commandedAccelX.push_back(0); guidanceBlock.commandedAccelY.push_back(0); guidanceBlock.commandedAccelZ.push_back(0);
             guidanceBlock.maxAccel.push_back(0.0);
             guidanceBlock.navigationConstant.push_back(3.5);
             guidanceBlock.waypointGain.push_back(20.0);
+            guidanceBlock.handoffBlendTimeSec.push_back(0.0);
+            guidanceBlock.lockLossRetentionSec.push_back(0.0);
+            guidanceBlock.apnFeedforwardEnabled.push_back(false);
+            guidanceBlock.phase.push_back(GuidancePhase::None);
+            guidanceBlock.law.push_back(GuidanceLaw::None);
+            guidanceBlock.trackId.push_back(-1);
+            guidanceBlock.trackAgeSec.push_back(0.0);
+            guidanceBlock.handoffWeight.push_back(0.0);
+            guidanceBlock.lockLossCount.push_back(0);
+            guidanceBlock.rawAccelX.push_back(0); guidanceBlock.rawAccelY.push_back(0); guidanceBlock.rawAccelZ.push_back(0);
+            guidanceBlock.limitedByMaxAccel.push_back(false);
+            guidanceBlock.lawInvalid.push_back(false);
+            guidanceBlock.nonClosing.push_back(false);
+            guidanceBlock.tgoSec.push_back(0.0);
 
             statusBlock.type.push_back(EntityType::Missile);
             statusBlock.allegiance.push_back(Allegiance::Friendly);
@@ -286,10 +305,32 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.mode[id] = GuidanceMode::None;
         guidanceBlock.targetX[id] = 0; guidanceBlock.targetY[id] = 0; guidanceBlock.targetZ[id] = 0;
         guidanceBlock.targetVx[id] = 0; guidanceBlock.targetVy[id] = 0; guidanceBlock.targetVz[id] = 0;
+        guidanceBlock.targetAccelX[id] = 0; guidanceBlock.targetAccelY[id] = 0; guidanceBlock.targetAccelZ[id] = 0;
+        guidanceBlock.targetAccelAvailable[id] = false;
         guidanceBlock.commandedAccelX[id] = 0; guidanceBlock.commandedAccelY[id] = 0; guidanceBlock.commandedAccelZ[id] = 0;
         guidanceBlock.maxAccel[id] = 0.0;
         guidanceBlock.navigationConstant[id] = config.guidanceAutopilot.navigationConstant;
         guidanceBlock.waypointGain[id] = config.guidanceAutopilot.waypointGain;
+        // W36 phase-manager config (defaults preserve the legacy path).
+        guidanceBlock.handoffBlendTimeSec[id] = config.guidanceAutopilot.handoffBlendTimeSec;
+        guidanceBlock.lockLossRetentionSec[id] = config.guidanceAutopilot.lockLossRetentionSec;
+        guidanceBlock.apnFeedforwardEnabled[id] = config.guidanceAutopilot.apnFeedforwardEnabled;
+        // W36 state/diagnostics reset (fresh and reused slots).
+        guidanceBlock.phase[id] = GuidancePhase::None;
+        guidanceBlock.law[id] = GuidanceLaw::None;
+        guidanceBlock.trackId[id] = -1;
+        guidanceBlock.trackAgeSec[id] = 0.0;
+        guidanceBlock.handoffWeight[id] = 0.0;
+        guidanceBlock.lockLossCount[id] = 0;
+        guidanceBlock.rawAccelX[id] = 0; guidanceBlock.rawAccelY[id] = 0; guidanceBlock.rawAccelZ[id] = 0;
+        guidanceBlock.limitedByMaxAccel[id] = false;
+        guidanceBlock.lawInvalid[id] = false;
+        guidanceBlock.nonClosing[id] = false;
+        guidanceBlock.tgoSec[id] = 0.0;
+
+        controlBlock.pitchSaturated[id] = false;
+        controlBlock.yawSaturated[id] = false;
+        controlBlock.rollSaturated[id] = false;
 
         sensorBlock.accelNoiseStdDev[id] = resolved.sensor.accelNoiseStdDev;
         sensorBlock.accelBiasStdDev[id] = resolved.sensor.accelBiasStdDev;

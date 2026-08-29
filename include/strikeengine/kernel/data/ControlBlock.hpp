@@ -19,6 +19,11 @@ struct ControlBlock {
 	std::vector<double> kRollP;           // rad per rad roll
 	std::vector<double> kRollD;           // rad per (rad/s)
 	std::vector<double> maxDeflectionRad; // fin clamp (rad)
+
+	// W36 diagnostics: true when the commanded deflection hit the fin clamp.
+	std::vector<bool> pitchSaturated;
+	std::vector<bool> yawSaturated;
+	std::vector<bool> rollSaturated;
 };
 
 } // namespace StrikeEngine::Kernel

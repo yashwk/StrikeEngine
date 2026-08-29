@@ -1,0 +1,6 @@
+{
+  "name": "Target Missile Flat RCS (0.25 m^2)",
+  "azimuth_breakpoints_deg": [-90.0, 90.0],
+  "elevation_breakpoints_deg": [-90.0, 90.0],
+  "rcs_table_dbsm": [[-6.0206, -6.0206], [-6.0206, -6.0206]]
+}

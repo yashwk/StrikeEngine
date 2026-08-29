@@ -7,24 +7,150 @@
 
 namespace StrikeEngine::Kernel {
 
-    // Clamp the commanded acceleration magnitude to the per-entity guidance
-    // limit (GuidanceBlock::maxAccel; 0 = unlimited). Real guidance laws
-    // shape commanded g before the autopilot sees it: an unbounded
-    // ProNav/Waypoint demand over-drives the fins into permanent saturation.
-    static void clampCommandMagnitude(
-        std::size_t id, GuidanceBlock& guidance)
-    {
-        const double lim = guidance.maxAccel[id];
-        if (lim <= 0.0) return;
-        const double ax = guidance.commandedAccelX[id];
-        const double ay = guidance.commandedAccelY[id];
-        const double az = guidance.commandedAccelZ[id];
-        const double mag = std::sqrt(ax * ax + ay * ay + az * az);
-        if (mag > lim && mag > 1e-9) {
-            const double s = lim / mag;
-            guidance.commandedAccelX[id] = ax * s;
-            guidance.commandedAccelY[id] = ay * s;
-            guidance.commandedAccelZ[id] = az * s;
+    namespace {
+
+        // Result of one guidance-law evaluation; all outputs are finite.
+        struct LawResult {
+            double ax = 0.0, ay = 0.0, az = 0.0;
+            bool valid = true;      // law could be evaluated (geometry OK)
+            bool lawInvalid = false; // non-finite input / bad configuration
+            bool nonClosing = false; // range > 0 but closing speed <= 0
+            double tgoSec = 0.0;    // estimated time to go (diagnostic)
+        };
+
+        bool isFinite3(double x, double y, double z)
+        {
+            return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+        }
+
+        // Clamp the commanded acceleration magnitude to the per-entity guidance
+        // limit (GuidanceBlock::maxAccel; 0 = unlimited). Sets the limit flag.
+        void clampCommandMagnitude(std::size_t id, GuidanceBlock& guidance)
+        {
+            guidance.limitedByMaxAccel[id] = false;
+            const double lim = guidance.maxAccel[id];
+            if (lim <= 0.0) return;
+            const double ax = guidance.commandedAccelX[id];
+            const double ay = guidance.commandedAccelY[id];
+            const double az = guidance.commandedAccelZ[id];
+            const double mag = std::sqrt(ax * ax + ay * ay + az * az);
+            if (mag > lim && mag > 1e-9) {
+                const double s = lim / mag;
+                guidance.commandedAccelX[id] = ax * s;
+                guidance.commandedAccelY[id] = ay * s;
+                guidance.commandedAccelZ[id] = az * s;
+                guidance.limitedByMaxAccel[id] = true;
+            }
+        }
+
+        // Publish a law result as the entity's guidance demand (raw + clamped)
+        // with diagnostics; zero demand marks invalid results.
+        void applyDemand(std::size_t id, const LawResult& r, GuidanceBlock& g)
+        {
+            g.rawAccelX[id] = r.ax;
+            g.rawAccelY[id] = r.ay;
+            g.rawAccelZ[id] = r.az;
+            g.commandedAccelX[id] = r.valid ? r.ax : 0.0;
+            g.commandedAccelY[id] = r.valid ? r.ay : 0.0;
+            g.commandedAccelZ[id] = r.valid ? r.az : 0.0;
+            g.lawInvalid[id] = r.lawInvalid;
+            g.nonClosing[id] = r.nonClosing;
+            g.tgoSec[id] = r.tgoSec;
+            clampCommandMagnitude(id, g);
+        }
+
+        void zeroDemand(std::size_t id, GuidanceBlock& g)
+        {
+            g.rawAccelX[id] = g.rawAccelY[id] = g.rawAccelZ[id] = 0.0;
+            g.commandedAccelX[id] = g.commandedAccelY[id] = g.commandedAccelZ[id] = 0.0;
+            g.limitedByMaxAccel[id] = false;
+            g.lawInvalid[id] = false;
+            g.nonClosing[id] = false;
+            g.tgoSec[id] = 0.0;
+        }
+
+        // Midcourse PN / APN on the commanded target track (world frame).
+        LawResult computeMidcourse(
+            std::size_t id, const NavigationBlock& nav, GuidanceBlock& guidance)
+        {
+            LawResult out;
+            const double N = guidance.navigationConstant[id];
+            if (!std::isfinite(N) || N <= 0.0) {
+                out.lawInvalid = true;
+                out.valid = false;
+                return out;
+            }
+            const double rx = guidance.targetX[id] - nav.estPx[id];
+            const double ry = guidance.targetY[id] - nav.estPy[id];
+            const double rz = guidance.targetZ[id] - nav.estPz[id];
+            const double vx = guidance.targetVx[id] - nav.estVx[id];
+            const double vy = guidance.targetVy[id] - nav.estVy[id];
+            const double vz = guidance.targetVz[id] - nav.estVz[id];
+            if (!isFinite3(rx, ry, rz) || !isFinite3(vx, vy, vz)) {
+                out.lawInvalid = true;
+                out.valid = false;
+                return out;
+            }
+
+            const Models::Vec3 r{rx, ry, rz};
+            const Models::Vec3 v{vx, vy, vz};
+            const double range = std::sqrt(rx * rx + ry * ry + rz * rz);
+            const double closingSpeed = (range > 1e-9)
+                ? -(rx * vx + ry * vy + rz * vz) / range : 0.0;
+
+            const bool feedforward = guidance.apnFeedforwardEnabled[id] &&
+                guidance.targetAccelAvailable[id] && isFinite3(
+                    guidance.targetAccelX[id], guidance.targetAccelY[id],
+                    guidance.targetAccelZ[id]);
+            const Models::GuidanceSolution sol = feedforward
+                ? Models::augmentedProportionalNavigation(r, v,
+                      {guidance.targetAccelX[id], guidance.targetAccelY[id],
+                       guidance.targetAccelZ[id]}, N)
+                : Models::proportionalNavigation(r, v, N);
+
+            if (!sol.valid) {
+                out.valid = false;
+                out.nonClosing = range > 1e-9 && closingSpeed <= 0.0;
+                return out;
+            }
+            out.ax = sol.acceleration[0];
+            out.ay = sol.acceleration[1];
+            out.az = sol.acceleration[2];
+            out.tgoSec = range / std::max(sol.closingSpeed, 1e-6);
+            return out;
+        }
+
+        // Seeker-rate APN: N * Vc * LOS rate, body-frame mapping per the frame
+        // contract (azimuth -> +body-Y, elevation -> -body-Z), rotated to the
+        // world frame with the navigation attitude.
+        LawResult computeSeekerAPN(
+            std::size_t id, const NavigationBlock& nav,
+            const SeekerBlock& seeker, GuidanceBlock& guidance)
+        {
+            LawResult out;
+            const double N = guidance.navigationConstant[id];
+            double vc = std::abs(seeker.targetRangeRate[id]);
+            if (vc < 1.0) vc = 1.0;
+            const double dAz = seeker.targetAzimuthRate[id];
+            const double dEl = seeker.targetElevationRate[id];
+            out.nonClosing = seeker.targetRangeRate[id] > 0.0;
+            out.tgoSec = seeker.targetRange[id] / std::max(
+                std::abs(seeker.targetRangeRate[id]), 1.0);
+            if (!std::isfinite(N) || N <= 0.0 ||
+                !std::isfinite(vc) || !std::isfinite(dAz) || !std::isfinite(dEl))
+            {
+                out.lawInvalid = true;
+                out.valid = false;
+                return out;
+            }
+            const double ayBody = N * vc * dAz;
+            const double azBody = -N * vc * dEl;
+            glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
+            const glm::dvec3 aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
+            out.ax = aWorld.x;
+            out.ay = aWorld.y;
+            out.az = aWorld.z;
+            return out;
         }
     }
 
@@ -34,132 +160,137 @@ namespace StrikeEngine::Kernel {
         const SeekerBlock& seeker,
         GuidanceBlock& guidance,
         ControlBlock& control,
-        double dt) 
+        double dt)
     {
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
 
+            auto& phase = guidance.phase[i];
+            auto& law = guidance.law[i];
+
             // Communication failure: ignore guidance and seeker handoff;
             // the entity flies ballistic with zero commanded acceleration.
             if (i < status.commsFailed.size() && status.commsFailed[i]) {
-                guidance.commandedAccelX[i] = 0.0;
-                guidance.commandedAccelY[i] = 0.0;
-                guidance.commandedAccelZ[i] = 0.0;
+                zeroDemand(i, guidance);
+                phase = GuidancePhase::None;
+                law = GuidanceLaw::None;
                 continue;
             }
 
-            // Terminal Homing override!
-            if (seeker.type[i] != SeekerType::None && seeker.isLocked[i]) {
-                updateSeekerAPN(i, nav, seeker, guidance);
+            const bool seekerPresent = seeker.type[i] != SeekerType::None;
+            const bool locked = seekerPresent && seeker.isLocked[i];
+
+            // Track bookkeeping. trackAgeSec counts time since the last valid
+            // seeker track (diagnostic + retention window).
+            if (locked) {
+                guidance.trackAgeSec[i] = 0.0;
+                guidance.trackId[i] = static_cast<std::int64_t>(seeker.lockedTargetId[i]);
+            } else if (seekerPresent) {
+                guidance.trackAgeSec[i] += dt;
+            }
+
+            // --- Terminal homing path (seeker lock; overrides the configured
+            // --- mode, matching the legacy lock-override contract) --------
+            if (locked) {
+                const double ramp = guidance.handoffBlendTimeSec[i];
+                const bool freshLock =
+                    phase != GuidancePhase::Acquisition &&
+                    phase != GuidancePhase::Terminal;
+                if (freshLock) {
+                    // New lock: either instant handoff (legacy) or start the
+                    // acquisition blend at zero APN weight.
+                    if (ramp <= 0.0) {
+                        guidance.handoffWeight[i] = 1.0;
+                        phase = GuidancePhase::Terminal;
+                    } else {
+                        guidance.handoffWeight[i] = 0.0;
+                        phase = GuidancePhase::Acquisition;
+                    }
+                }
+                // Advance the blend weight every locked step (including the
+                // fresh-lock step). Deterministic ramp over blend time.
+                double w = guidance.handoffWeight[i];
+                if (w < 1.0 && ramp > 0.0) {
+                    w = std::min(1.0, w + dt / ramp);
+                    guidance.handoffWeight[i] = w;
+                }
+                if (w >= 1.0) phase = GuidancePhase::Terminal;
+
+                law = GuidanceLaw::SeekerRateAPN;
+                LawResult apn = computeSeekerAPN(i, nav, seeker, guidance);
+                LawResult out = apn;
+                if (phase == GuidancePhase::Acquisition) {
+                    // Blend midcourse PN -> terminal APN (deterministic ramp).
+                    const LawResult pn = computeMidcourse(i, nav, guidance);
+                    const double w = guidance.handoffWeight[i];
+                    out.ax = (1.0 - w) * (pn.valid ? pn.ax : 0.0) + w * apn.ax;
+                    out.ay = (1.0 - w) * (pn.valid ? pn.ay : 0.0) + w * apn.ay;
+                    out.az = (1.0 - w) * (pn.valid ? pn.az : 0.0) + w * apn.az;
+                    out.valid = apn.valid;
+                    out.lawInvalid = apn.lawInvalid && pn.lawInvalid;
+                    out.nonClosing = pn.nonClosing || apn.nonClosing;
+                }
+                applyDemand(i, out, guidance);
                 continue;
+            }
+
+            // --- Not locked / no seeker: midcourse or recovery -------------
+            if (seekerPresent &&
+                (phase == GuidancePhase::Acquisition || phase == GuidancePhase::Terminal))
+            {
+                // Terminal track just lost: count it once, then either retain
+                // (bounded, by configuration) or fall to LostTrack.
+                if (guidance.trackAgeSec[i] <= dt * 1.5) {
+                    ++guidance.lockLossCount[i];
+                }
+                const double retain = guidance.lockLossRetentionSec[i];
+                if (retain > 0.0 && guidance.trackAgeSec[i] <= retain) {
+                    phase = GuidancePhase::Terminal;  // retaining track identity
+                } else {
+                    phase = GuidancePhase::LostTrack; // recovery via midcourse PN
+                }
             }
 
             auto mode = guidance.mode[i];
             if (mode == GuidanceMode::None) {
-                // Ballistic
-                guidance.commandedAccelX[i] = 0.0;
-                guidance.commandedAccelY[i] = 0.0;
-                guidance.commandedAccelZ[i] = 0.0;
+                zeroDemand(i, guidance);
+                phase = GuidancePhase::None;
+                law = GuidanceLaw::None;
                 continue;
             }
 
+            // A terminal-lost state (LostTrack, or retained Terminal) keeps its
+            // phase marking while the midcourse recovery demand is applied.
+            const bool terminalLost =
+                phase == GuidancePhase::LostTrack || phase == GuidancePhase::Terminal;
+
             if (mode == GuidanceMode::ProportionalNavigation) {
-                updateProportionalNavigation(i, nav, guidance);
+                if (!terminalLost) phase = GuidancePhase::Midcourse;
+                law = (guidance.apnFeedforwardEnabled[i] &&
+                       guidance.targetAccelAvailable[i])
+                    ? GuidanceLaw::AugmentedProNav : GuidanceLaw::PureProNav;
+                applyDemand(i, computeMidcourse(i, nav, guidance), guidance);
             } else if (mode == GuidanceMode::Waypoint) {
-                updateWaypoint(i, nav, guidance);
+                if (!terminalLost) phase = GuidancePhase::Midcourse;
+                law = GuidanceLaw::None;
+                double rx = guidance.targetX[i] - nav.estPx[i];
+                double ry = guidance.targetY[i] - nav.estPy[i];
+                double rz = guidance.targetZ[i] - nav.estPz[i];
+                double rMag = std::sqrt(rx * rx + ry * ry + rz * rz);
+                if (rMag < 1.0) rMag = 1.0;
+                const double k = guidance.waypointGain[i];
+                LawResult wp;
+                wp.ax = k * (rx / rMag);
+                wp.ay = k * (ry / rMag);
+                wp.az = k * (rz / rMag);
+                wp.tgoSec = rMag / 300.0;  // diagnostic only (nominal 300 m/s)
+                applyDemand(i, wp, guidance);
+            } else {
+                zeroDemand(i, guidance);
+                phase = GuidancePhase::None;
+                law = GuidanceLaw::None;
             }
-            clampCommandMagnitude(i, guidance);
         }
-    }
-
-    void GuidanceSystem::updateSeekerAPN(
-        std::size_t id,
-        const NavigationBlock& nav,
-        const SeekerBlock& seeker,
-        GuidanceBlock& guidance)
-    {
-        // Augmented Proportional Navigation using filtered seeker LOS rates.
-        // The seeker angles and rates are relative to the missile body.
-        
-        // a_cmd = N * V_c * d(lambda)/dt
-        const double N = guidance.navigationConstant[id];
-        double vc = std::abs(seeker.targetRangeRate[id]); // positive closing velocity
-        if (vc < 1.0) vc = 1.0;
-
-        // SeekerSystem supplies filtered finite-difference LOS rates in the
-        // seeker body frame. These are delayed/noisy track derivatives rather
-        // than the old angle-times-gain pursuit approximation.
-        const double dAz_dt = seeker.targetAzimuthRate[id];
-        const double dEl_dt = seeker.targetElevationRate[id];
-
-        // Commanded acceleration in body frame.  The seeker uses the same
-        // aerospace convention as the airframe (X forward, Y right, Z down):
-        // azimuth rate produces rightward (+Y) acceleration, while positive
-        // elevation rate is upward and therefore produces downward (-Z)
-        // acceleration.  Keep these axes/signs aligned with the autopilot's
-        // pitch/yaw mapping.
-        double a_cmd_y_body = N * vc * dAz_dt;       // yaw / right
-        double a_cmd_z_body = -N * vc * dEl_dt;      // pitch / up
-        double a_cmd_x_body = 0.0;             // Roll
-
-        // Rotate body frame commands to world frame
-        glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
-        glm::dvec3 a_cmd_world = estQ * glm::dvec3(a_cmd_x_body, a_cmd_y_body, a_cmd_z_body);
-
-        guidance.commandedAccelX[id] = a_cmd_world.x;
-        guidance.commandedAccelY[id] = a_cmd_world.y;
-        guidance.commandedAccelZ[id] = a_cmd_world.z;
-
-        clampCommandMagnitude(id, guidance);
-    }
-
-    void GuidanceSystem::updateProportionalNavigation(
-        std::size_t id,
-        const NavigationBlock& nav,
-        GuidanceBlock& guidance)
-    {
-        double rx = guidance.targetX[id] - nav.estPx[id];
-        double ry = guidance.targetY[id] - nav.estPy[id];
-        double rz = guidance.targetZ[id] - nav.estPz[id];
-
-        double rvx = guidance.targetVx[id] - nav.estVx[id];
-        double rvy = guidance.targetVy[id] - nav.estVy[id];
-        double rvz = guidance.targetVz[id] - nav.estVz[id];
-
-        const Models::Vec3 relativePosition{rx, ry, rz};
-        const Models::Vec3 relativeVelocity{rvx, rvy, rvz};
-        const Models::GuidanceSolution solution = Models::proportionalNavigation(
-            relativePosition, relativeVelocity, guidance.navigationConstant[id]);
-        if (!solution.valid) {
-            guidance.commandedAccelX[id] = 0.0;
-            guidance.commandedAccelY[id] = 0.0;
-            guidance.commandedAccelZ[id] = 0.0;
-            return;
-        }
-
-        guidance.commandedAccelX[id] = solution.acceleration[0];
-        guidance.commandedAccelY[id] = solution.acceleration[1];
-        guidance.commandedAccelZ[id] = solution.acceleration[2];
-    }
-
-    void GuidanceSystem::updateWaypoint(
-        std::size_t id,
-        const NavigationBlock& nav,
-        GuidanceBlock& guidance)
-    {
-        double rx = guidance.targetX[id] - nav.estPx[id];
-        double ry = guidance.targetY[id] - nav.estPy[id];
-        double rz = guidance.targetZ[id] - nav.estPz[id];
-        
-        double r_mag = std::sqrt(rx*rx + ry*ry + rz*rz);
-        if (r_mag < 1.0) r_mag = 1.0;
-
-        // Acceleration demand up to the maneuver limit (2 g here); the
-        // autopilot/servo limits bound the physical response.
-        const double k = guidance.waypointGain[id];
-        guidance.commandedAccelX[id] = k * (rx / r_mag);
-        guidance.commandedAccelY[id] = k * (ry / r_mag);
-        guidance.commandedAccelZ[id] = k * (rz / r_mag);
     }
 
 } // namespace StrikeEngine::Kernel

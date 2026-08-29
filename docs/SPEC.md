@@ -42,7 +42,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **34/34 CTest tests passing** in Release.
+Current validated checkpoint: **35/35 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
@@ -168,7 +168,9 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
   5σ), IMU body-frame lever arm.
 - `GuidanceAutopilotConfig`: `navigationConstant`, `waypointGain`, gains
   `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
-  `servoTimeConstantSec`, `maxServoRateRadPerSec`.
+  `servoTimeConstantSec`, `maxServoRateRadPerSec`. W36 phase/track keys
+  `handoffBlendTimeSec` (default 0), `lockLossRetentionSec` (default 0), and
+  `apnFeedforwardEnabled` (default false) are optional (§7.4).
 - `WarheadConfig`: `massKg`, `FusingType` (`Impact`/`Proximity`/`Timed`),
   `proximityTriggerM`, `timedDelaySec`, `lethalRadiusM`, optional `falloffRadiusM`
   (0.0 default = flat lethal-radius law; §8).
@@ -448,9 +450,41 @@ illuminator is a STATIC configured position; dynamic illuminator tracking future
 Stateless PN/APN helpers in `models/guidance`. Kernel PN uses target
 position/velocity; kernel APN uses filtered seeker LOS rates on lock. Seeker
 azimuth/elevation rates are mapped into the airframe's X-forward/Y-right/Z-down
-body frame before rotating the command to world coordinates. Seeker-locked APN
+body frame before rotating the command to world coordinates (azimuth → +Y,
+elevation → −Z; unchanged contract). Seeker-locked APN
 clamps commanded accel to per-entity `maxAccel`, matching PN/Waypoint.
 Autopilot translates world accel into bounded body fin demands.
+
+Phase selection is separated from law computation (§W36). Per entity the
+guidance system tracks an explicit `GuidancePhase`
+(`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and a `GuidanceLaw`
+(`None`/`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`). A seeker lock moves the
+state `Midcourse → Acquisition → Terminal`: during `Acquisition` the terminal
+APN weight `handoffWeight` ramps 0 → 1 over the configured
+`handoffBlendTimeSec` (0 = the legacy instant override), blending midcourse PN
+with seeker-rate APN. On lock loss during `Acquisition`/`Terminal`, the layer
+keeps the track identity for up to `lockLossRetentionSec` (0 = none); once that
+retention expires it drops to `LostTrack` and recovers via midcourse PN on the
+commanded target. APN target-acceleration feed-forward is emitted only when
+`apnFeedforwardEnabled && targetAccelAvailable`, and only when the target-
+acceleration inputs are finite; otherwise the law is pure PN. Non-finite
+guidance input, a zero/negative closing (`N ≤ 0`, `Vc ≤ 0`) marks the demand
+`lawInvalid`/`nonClosing` rather than emitting a spurious vector.
+
+Guidance publishes per-entity diagnostics on `GuidanceBlock`: `phase`, `law`,
+`trackId` (−1 none), `trackAgeSec`, `handoffWeight`, `lockLossCount`,
+`rawAccelX/Y/Z` (pre-clamp demand), `limitedByMaxAccel` (demand clamp),
+`lawInvalid`, `nonClosing`, and `tgoSec` (range / closing speed). Every demand
+passes the per-entity `maxAccel` clamp and publishes the raw + limited flags.
+`ControlBlock` adds `pitchSaturated`/`yawSaturated`/`rollSaturated` autopilot
+fin-clamp diagnostics, distinct from guidance `limitedByMaxAccel`.
+
+The `handoffBlendTimeSec`/`lockLossRetentionSec`/`apnFeedforwardEnabled` keys
+are config-backed and optional (defaults 0/0/false). Defaults select the legacy
+path byte-for-byte: seeker lock overrides to APN instantly, no guidance-layer
+retention, no feed-forward. `GuidanceAutopilotConfig` uses explicit
+`to_json`/`from_json` (not the NLOHMANN macro) so legacy design manifests and
+scenarios that omit the three keys still load.
 
 Constants per entity, read from config at creation: `navigationConstant`,
 `waypointGain`, gains (`kAccelP/kRateP/kAlphaP/kRollP/kRollD`), `maxDeflectionRad`
@@ -527,7 +561,10 @@ with chaff/flare; PN/APN/waypoint guidance; autopilot; WGS84/ECEF/local-earth
 models; optional ECEF kernel truth; batch/sweep/Monte Carlo/optimizer tooling;
 installable CMake packaging; flattened `VehicleConfig`; snake_case JSON/design/
 scenario serialization; per-entity sensor enablement; multi-stage staging +
-separation; warhead fusing (impact/proximity/timed); designer manifests
+separation; warhead fusing (impact/proximity/timed); traceable mode-aware
+guidance (phase/law state machine, acquisition blend, lock-loss retention,
+APN feed-forward availability, per-entity diagnostics) and seeker-intercept
+regression (`seeker_intercept_test`); designer manifests
 (`data/profiles`) and scenarios (`data/scenarios`) consumed end-to-end via
 `designer_pipeline_test`; profile-id database layer (aero/motor/seeker/sensor/
 RCS); data-driven static cd(M,α)/cl(M,α)/cm(M,α)/cy(M,β)/cn(M,β)/cl(M,β)

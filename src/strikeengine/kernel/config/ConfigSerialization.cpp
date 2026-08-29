@@ -312,10 +312,40 @@ void from_json(const json& j, SensorConfig& s) {
     s.imuLeverArmZ = j.at("imu_lever_arm_z").get<double>();
 }
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GuidanceAutopilotConfig, navigationConstant,
-                                   waypointGain, kAccelP, kRateP, kAlphaP,
-                                   kRollP, kRollD, maxDeflectionRad,
-                                   servoTimeConstantSec, maxServoRateRadPerSec)
+void to_json(json& j, const GuidanceAutopilotConfig& g) {
+    j = json::object();
+    j["navigationConstant"] = g.navigationConstant;
+    j["waypointGain"] = g.waypointGain;
+    j["kAccelP"] = g.kAccelP;
+    j["kRateP"] = g.kRateP;
+    j["kAlphaP"] = g.kAlphaP;
+    j["kRollP"] = g.kRollP;
+    j["kRollD"] = g.kRollD;
+    j["maxDeflectionRad"] = g.maxDeflectionRad;
+    j["servoTimeConstantSec"] = g.servoTimeConstantSec;
+    j["maxServoRateRadPerSec"] = g.maxServoRateRadPerSec;
+    // W36 phase-manager keys. Optional with legacy defaults on read, so old
+    // design manifests / scenarios without them keep the abrupt-override path.
+    j["handoffBlendTimeSec"] = g.handoffBlendTimeSec;
+    j["lockLossRetentionSec"] = g.lockLossRetentionSec;
+    j["apnFeedforwardEnabled"] = g.apnFeedforwardEnabled;
+}
+
+void from_json(const json& j, GuidanceAutopilotConfig& g) {
+    g.navigationConstant = j.at("navigationConstant").get<double>();
+    g.waypointGain = j.at("waypointGain").get<double>();
+    g.kAccelP = j.at("kAccelP").get<double>();
+    g.kRateP = j.at("kRateP").get<double>();
+    g.kAlphaP = j.at("kAlphaP").get<double>();
+    g.kRollP = j.at("kRollP").get<double>();
+    g.kRollD = j.at("kRollD").get<double>();
+    g.maxDeflectionRad = j.at("maxDeflectionRad").get<double>();
+    g.servoTimeConstantSec = j.at("servoTimeConstantSec").get<double>();
+    g.maxServoRateRadPerSec = j.at("maxServoRateRadPerSec").get<double>();
+    g.handoffBlendTimeSec = j.value("handoffBlendTimeSec", 0.0);
+    g.lockLossRetentionSec = j.value("lockLossRetentionSec", 0.0);
+    g.apnFeedforwardEnabled = j.value("apnFeedforwardEnabled", false);
+}
 
 // --- StageConfig / PropulsionConfig ----------------------------------------
 

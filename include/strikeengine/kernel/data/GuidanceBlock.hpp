@@ -10,6 +10,24 @@ namespace StrikeEngine::Kernel {
         Waypoint                // Navigating to static point
     };
 
+    // Explicit guidance-phase state (W36). Phase selection is separate from
+    // law computation; see GuidanceSystem.cpp.
+    enum class GuidancePhase : uint8_t {
+        None,        // ballistic / no guidance / comms failure
+        Midcourse,   // PN (or APN) on the commanded target track
+        Acquisition, // seeker locked: APN weight ramps 0 -> 1 (blend)
+        Terminal,    // full seeker-rate APN
+        LostTrack    // retention expired; recovering via midcourse PN
+    };
+
+    // Active guidance law used to produce the current demand.
+    enum class GuidanceLaw : uint8_t {
+        None,
+        PureProNav,     // N * Vc * (LOS-rate cross LOS)
+        SeekerRateAPN,  // body-frame LOS-rate APN (seeker)
+        AugmentedProNav // PN + target-acceleration feed-forward (0.5*N*a_t_perp)
+    };
+
     struct GuidanceBlock {
         std::vector<GuidanceMode> mode;
 
@@ -23,6 +41,13 @@ namespace StrikeEngine::Kernel {
         std::vector<double> targetVy;
         std::vector<double> targetVz;
 
+        // Target acceleration (feed-forward APN); only consumed when
+        // targetAccelAvailable and the augmented law is enabled.
+        std::vector<double> targetAccelX;
+        std::vector<double> targetAccelY;
+        std::vector<double> targetAccelZ;
+        std::vector<bool>   targetAccelAvailable;
+
         // Guidance demand magnitude limit (m/s^2); 0 = unlimited.
         // Set per entity via SimulationCommand::maxAccel.
         std::vector<double> maxAccel;
@@ -31,10 +56,31 @@ namespace StrikeEngine::Kernel {
         std::vector<double> navigationConstant;  // APN navigation constant N
         std::vector<double> waypointGain;        // m/s^2 per unit range fraction
 
+        // W36 phase/track configuration (defaults keep the legacy path).
+        std::vector<double> handoffBlendTimeSec;   // acquisition->terminal ramp; 0 = instant
+        std::vector<double> lockLossRetentionSec;  // guidance-layer track retention past lock loss; 0 = none
+        std::vector<bool>   apnFeedforwardEnabled; // APN target-accel feed-forward (needs targetAccelAvailable)
+
         // Output: Required acceleration command
         std::vector<double> commandedAccelX;
         std::vector<double> commandedAccelY;
         std::vector<double> commandedAccelZ;
+
+        // W36 phase/track state + diagnostics (see GuidanceSystem.cpp).
+        std::vector<GuidancePhase> phase;
+        std::vector<GuidanceLaw>   law;
+        std::vector<std::int64_t>  trackId;            // -1 = none
+        std::vector<double>        trackAgeSec;        // s since last valid seeker track
+        std::vector<double>        handoffWeight;      // 0..1 terminal APN blend weight
+        std::vector<std::uint32_t> lockLossCount;      // terminal lock lost transitions
+        // raw (pre-clamp) demand and limit flags
+        std::vector<double> rawAccelX;
+        std::vector<double> rawAccelY;
+        std::vector<double> rawAccelZ;
+        std::vector<bool>   limitedByMaxAccel;
+        std::vector<bool>   lawInvalid;
+        std::vector<bool>   nonClosing;
+        std::vector<double> tgoSec;                    // range / closing speed
     };
 
 } // namespace StrikeEngine::Kernel
