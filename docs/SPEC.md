@@ -42,7 +42,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **36/36 CTest tests passing** in Release.
+Current validated checkpoint: **37/37 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
@@ -160,7 +160,8 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
 - `AeroConfig`: `referenceArea` (JSON `reference_area`)/length, drag/lift
   coefficients, optional `aero_tables` (§6.2), optional `fins` (§6.2).
 - `PropulsionConfig`: ordered `stages` of `StageConfig` (`thrustCurve`,
-  `vacuumIsp`/`seaLevelIsp`, `propellantMassKg`, `dryMassKg`).
+  `vacuumIsp`/`seaLevelIsp`, `propellantMassKg`, `dryMassKg`, ignition/shutdown
+  timing, TVC limits/servo parameters, and engine position).
 - `SensorConfig`: `imuEnabled`/`gpsEnabled`, IMU/GPS noise/bias σ, `gpsUpdateRateHz`,
   IMU body-frame lever arm.
 - `GuidanceAutopilotConfig`: `navigationConstant`, `waypointGain`, gains
@@ -171,8 +172,11 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
   (0.0 default = flat lethal-radius law; §8).
 - `SeekerConfig`: per-entity seeker type and RF/IR/SARH params.
 
-Empty thrust curve = coasting. A motor burns only while fuel remains; mass flow
-clamped at dry mass; thrust along body +X. Staging §6.5, warhead fusing §8.
+Empty propulsion stages are inactive/coasting. A motor burns only while fuel
+remains; mass flow is clamped at the stage-aware dry-mass floor. Fixed axial
+stages produce thrust along body +X. Stages with TVC use achieved pitch/yaw
+gimbal angles and apply thrust torque about the configured engine position.
+Staging §6.5, transient/TVC details §6.6, failure details §8.
 
 Profile-id resolution: `aeroProfileId`/`motorProfileId`/`seekerProfileId`/
 `sensorProfileId` (JSON keys `aero_profile_id`/`motor_profile_id`/
@@ -334,6 +338,35 @@ there, so leftover ≈ 0 and they are byte-identical to pre-dump behavior.
 fuel-depletion guard caps mass flow to remaining propellant and scales thrust with
 capped flow, so thrust self-terminates at exhaustion — no free-thrust tail.
 
+### 6.6 Propulsion transients, TVC, and validation
+
+Each stage may define `ignition_delay_sec` and `ignition_ramp_sec` relative to
+its ignition time. Before the delay thrust and flow are zero; during the ramp
+the thrust/flow multiplier increases linearly to one. `shutdown_time_sec` is
+relative to stage ignition after the ignition delay and is optional (`-1.0`
+means curve-controlled cutoff). If non-negative, `shutdown_ramp_sec` linearly
+reduces thrust/flow to zero; zero gives an immediate cutoff. Staging burnout
+time includes ignition delay and the effective shutdown endpoint.
+
+TVC fields are `max_gimbal_pitch_rad`, `max_gimbal_yaw_rad`,
+`gimbal_time_constant_sec`, and `max_gimbal_rate_rad_per_sec` (`0` rate means
+unlimited). Zero pitch/yaw limits preserve fixed axial thrust. Positive pitch
+gimbals thrust toward body `-Z`; positive yaw toward body `+Y`. Commands are
+set with `SimulationKernel::setThrustVectorCommand(id, pitch, yaw)` and are
+clamped to stage limits. Achieved gimbal angles are first-order servo state,
+rate-limited, integrated by every supported CPU integrator, and reset at stage
+separation. `engine_position_x/y/z` is the body-frame engine position relative
+to the center of gravity; its cross product with the thrust vector contributes
+to rotational dynamics.
+
+Non-empty curves require at least two points, start at time zero, have finite
+strictly increasing non-negative times, non-negative finite thrust, and contain
+positive thrust. Isp, mass, timing, TVC, and engine-position fields are checked
+for finite values and valid ranges before backend registration. Invalid inline
+configs throw `std::invalid_argument`; invalid motor profiles fail to load.
+Serialization reads these fields when present and defaults them for legacy
+profiles.
+
 ## 7. Sensors, navigation, seekers, and guidance
 
 ### 7.1 Sensors
@@ -397,12 +430,15 @@ cleared, entity deactivated, timestamped `GroundImpact` event. Other event enum
 values are extension points, not all generated.
 
 Failure/damage injection (MVP): `failEntity(id, mode)` and `applyDamage(id,
-damage)`. Motor/actuator/sensor/communication failures set per-entity flags and
-dispatch `MotorFailure`/`ActuatorFailure`/`SensorFailure`/`CommunicationFailure`
-with timestamp + id. Structural failure (`failEntity(StructuralFailure)` or health
+damage)`. Legacy `MotorFailure` and explicit `EngineFailure` set the motor/engine
+flags, stop thrust and flow, and dispatch their corresponding events.
+`TankFailure` sets a separate tank/feed flag, stops thrust and flow, retains
+residual propellant, and dispatches `TankFailure`. Actuator/sensor/communication
+failures set per-entity flags and dispatch `ActuatorFailure`/`SensorFailure`/
+`CommunicationFailure` with timestamp + id. Structural failure (`failEntity(StructuralFailure)` or health
 0) deactivates like ground impact (`isAlive=false`, `health=0`, `active=false`,
 velocity/accel cleared) and dispatches `StructuralFailure`. Flags consumed by
-systems: motor zeroes thrust/mass flow; actuator freezes fins; sensor stops
+systems: motor/engine/tank zero thrust and mass flow; actuator freezes fins; sensor stops
 updates; comms zeroes commanded accel (ballistic). Flags deterministic, not
 probabilistic; partial health has no effect; repair not modeled.
 

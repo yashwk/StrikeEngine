@@ -3,7 +3,7 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-29
-**Runtime checkpoint:** `8c8ce00`
+**Runtime checkpoint:** `4e27580`
 
 [`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
 measured evidence. This record maps behavior to files, build, execution order,
@@ -14,7 +14,7 @@ validation, and remaining work.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **36/36 CTest tests pass**.
+- Release validation: **37/37 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -60,11 +60,12 @@ all public headers, and a CMake package config.
 
 `PhysicsBlock` is the truth SoA: per-entity translation, velocity, acceleration
 cache, quaternion, body rates, inertia, mass, aero coefficients, propulsion ID,
-ignition time, achieved fins, active state.
+ignition time, achieved fins and TVC gimbal angles, active state, and failure
+mirrors.
 
 | Block | State |
 | --- | --- |
-| `ControlBlock` | commanded thrust and fin channels |
+| `ControlBlock` | commanded thrust, fin, and TVC pitch/yaw channels |
 | `GuidanceBlock` | mode, target state, demand limit, acceleration command |
 | `NavigationBlock` | estimate, biases, alignment, row-major 15×15 covariance |
 | `SensorBlock` | IMU/GPS measurements and noise settings |
@@ -138,12 +139,13 @@ carries per-entity `stageIndex`/`stageCount`.
   REPLACE the abstract `clFin`/`CM_delta`/`Cl_delta`/`CN_beta` (body terms stay),
   and when null the legacy path is byte-identical. `fins` JSON parsed in
   `ConfigSerialization.cpp` and `AeroProfileDatabase.cpp` with fail-fast validation.
-- `PropulsionModel.hpp`/`ThrustCurve.hpp`: thrust interpolation, Isp, mass flow,
-  dry-mass limiting.
+- `PropulsionModel.hpp`/`ThrustCurve.hpp`: validated thrust interpolation, Isp,
+  mass flow, ignition/shutdown transients, two-axis gimballed thrust, and
+  effective burn duration.
 - `CPUBackend.cpp`: stage-re-evaluated forces, body Euler dynamics, quaternion
-  propagation, servo dynamics; reads `motorFailed`/`actuatorFailed`. Fuel-depletion
-  guard caps mass flow and scales thrust, so `T = ṁ·Isp·g0` holds at every instant
-  (no free-thrust tail).
+  propagation, fin/TVC servo dynamics, engine-position thrust torque; reads
+  motor/engine/tank and actuator flags. Fuel-depletion guard caps mass flow and
+  scales thrust, so `T = ṁ·Isp·g0` holds at every instant (no free-thrust tail).
 - `EarthModel.hpp`: WGS84 position/state conversions, normal and optional J2
   gravity, Coriolis, curvature, transport.
 - `EarthFrames.hpp`: ECEF/ENU/NED transforms, local normal/spherical/J2 gravity,
@@ -151,8 +153,8 @@ carries per-entity `stageIndex`/`stageCount`.
 - `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4 with optional
   J2 gravity.
 - `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid impact
-  clamp, failure event vocabulary (`MotorFailure`/`ActuatorFailure`/
-  `SensorFailure`/`StructuralFailure`/`CommunicationFailure`); `dumpedMassKg` on
+  clamp, failure event vocabulary (`MotorFailure`/`EngineFailure`/`TankFailure`/
+  `ActuatorFailure`/`SensorFailure`/`StructuralFailure`/`CommunicationFailure`); `dumpedMassKg` on
   `StageSeparation` (0.0 on exhaustion burnouts).
 
 ### GNC and studies
@@ -229,6 +231,7 @@ binary reader implemented; richer telemetry future.
 | `guidance`, `scenario` | guidance and scenario contracts |
 | `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics and events |
+| `propulsion` | strict profile validation, ignition/shutdown transients, TVC gimbal limits/servo, engine torque, engine/tank failures, serialization |
 | `lever_arm` | per-entity IMU lever-arm correction (α×l + ω×(ω×l)) |
 | `reporting` | versioned local/ECEF output, field selection, binary record/read |
 | `config_wiring` | per-entity sensor enablement, guidance/autopilot gain wiring |
@@ -270,6 +273,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 45.4 m miss | current |
 | W29 | geometric fins (RocketPy trapezoidal/elliptical/free-form) (`fins_test`) | current |
 | W30 | static moment/lateral aero tables (`coefficient_table_test`, `serialization_test`, `profile_database_test`) | current |
+| W32 | strict propulsion validation, ignition/shutdown transients, two-axis TVC + engine torque, engine/tank failures (`propulsion_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

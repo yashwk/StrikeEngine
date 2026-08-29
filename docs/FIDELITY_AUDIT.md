@@ -1,8 +1,8 @@
 # StrikeEngine — Fidelity Audit
 
 **Audit date:** 2026-08-29<br>
-**Runtime checkpoint:** `8c8ce00`<br>
-**Validation result:** Release build, **36/36 CTest tests passed**
+**Runtime checkpoint:** `4e27580`<br>
+**Validation result:** Release build, **37/37 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -56,6 +56,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W29 — Geometric fins (RocketPy port) | Implemented / MVP | `fins_test`; three shapes (trapezoidal/elliptical/free-form); Diederich planform lift slope + Prandtl–Glauert Mach correction; fin-number + interference corrections; per-shape CP; tail lever-arm sign convention (restoring); positive-cant roll forcing; ballistic flight on rocket_mvp with 4 tail fins — apogee 17.2 km, drift ~0 m; byte-identical fallback when `fins` absent |
 | W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
 | W31 — ECEF/geodetic states + J2 gravity | Implemented / MVP | `earth_test`, `earth_fixed_test`, `ecef_kernel_test`, `serialization_test`; explicit ENU/ECEF velocity conversion, pole/dateline round-trip, WGS84 J2 gravity, standalone propagator and truth/sensor/navigation consistency |
+| W32 — Propulsion transients, TVC, and feed failures | Implemented / MVP | `propulsion_test`; strict curve/config validation, ignition delay/ramp, shutdown ramp, two-axis achieved-gimbal limits, engine-position torque, explicit engine/tank failure flags/events, legacy motor-failure compatibility |
 
 ## 3. Subsystem fidelity assessment
 
@@ -65,7 +66,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Rotational truth | Diagonal inertia, gyroscopic coupling, quaternion, bounded fins | **MVP:** no inertia-tensor or flexible-body model |
 | Atmosphere | Layered ISA1976 through 86 km | **Implemented for stated envelope:** no weather model |
 | Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl/cm/cy/cn/rolling-cl tables; geometric fins (trapezoidal/elliptical/free-form) | **MVP:** static tables authoritative with scalar fallback; fins implement Mach-scaled fin effectiveness + lateral (β) side-force/stability for angled fins; tables are not yet CFD-validated and omit Reynolds/nonlinear stall/post-stall effects |
-| Propulsion | Thrust curves, Isp, mass flow, dry-mass limit; ordered staging + leftover dump | **MVP:** `propellantMassKg` caps drawdown; no thrust vectoring or tank/engine failure |
+| Propulsion | Validated thrust curves, pressure-interpolated Isp, fuel-limited mass flow, ignition/shutdown transients, two-axis TVC with achieved servo state and engine torque, ordered staging + leftover dump, engine/tank failures | **MVP:** deterministic no-leak tank failure; no pressure-fed turbomachinery, grain regression, mixture-ratio, thermal, or probabilistic degradation model |
 | Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
 | Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF | **MVP:** no geoid, terrain streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
@@ -76,13 +77,13 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Guidance | Stateless PN/APN, waypoint, seeker handoff, per-entity gains | **MVP:** no trajectory manager, pursuit, LQR/MPC, blended handoff |
 | Events and terrain | Terrain/wind callbacks, real impact deactivation, failure/damage events | **MVP:** no DEM/DTED database, streaming, datum/geoid, probabilistic failure |
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
-| Failure and damage | Deterministic flags → thrust cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic only; partial health no effect; no repair |
+| Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
 | Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, batch; versioned CSV/binary + reader | **MVP:** richer telemetry/streaming remain; some optimizer paths primary-entity oriented |
 | Backends and packaging | Deterministic CPU/static library, CMake packaging, optional Vulkan | **MVP:** Vulkan parity not validated, no GPU ECEF/CUDA |
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **36/36 tests passed** at the checkpoint above.
+- Release CTest suite green: **37/37 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **45.4 m minimum miss** at t≈11.5 s with a
@@ -111,10 +112,10 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
    `lever_arm_test`, `coning_sculling_test`, `earth_rate_gyro_test`); imaging IR,
    multi-target, dynamic illuminator, band-resolved extinction, multi-rate
    timestamp interpolation remain.
-5. **Staging/warhead:** leftover dump + falloff band done (`staging_warhead_test`,
-   `warhead_falloff_test`), `T = ṁ·Isp·g0` enforced at exhaustion
-   (`rocket_mvp_test`); arbitrary stage-count validation and a physics-based
-   blast/debris model remain.
+5. **Staging/warhead:** leftover dump + falloff band and propulsion transients/TVC
+   are implemented (`staging_warhead_test`, `warhead_falloff_test`,
+   `propulsion_test`); `T = ṁ·Isp·g0` enforced at exhaustion (`rocket_mvp_test`);
+   arbitrary stage-count validation and a physics-based blast/debris model remain.
 6. **Guidance/aero:** static cd/cl/cm/cy/cn/rolling-cl table plumbing is done
    (`coefficient_table_test`, `serialization_test`, `profile_database_test`);
    CFD validation, Reynolds/nonlinear aero, trajectory management, pursuit,
