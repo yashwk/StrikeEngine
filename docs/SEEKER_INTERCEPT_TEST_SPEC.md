@@ -1,31 +1,39 @@
-# Seeker-Guided Missile Intercept Test
+# Guidance System Improvement Specification
 
 ## Purpose
 
-Add a deterministic end-to-end regression that proves the engine can perform a
-seeker-guided missile engagement:
+Improve the complete StrikeEngine guidance system from a mostly stateless
+acceleration-command path into a traceable, frame-correct, mode-aware guidance
+stack. The seeker-guided missile intercept is one validation scenario for this
+work; it is not the whole deliverable.
 
 ```text
-midcourse command -> navigation/guidance -> seeker acquisition -> terminal APN
-                  -> autopilot -> fins/aero/propulsion -> proximity detonation
+command / target track -> guidance state and mode manager
+                       -> midcourse, terminal, or blended guidance law
+                       -> bounded world-frame acceleration
+                       -> autopilot / actuator interface
+                       -> vehicle dynamics and achieved response
 ```
 
-This test is needed because the existing `intercept_test` validates pure PN
-guidance only. It does not configure a seeker, test seeker lock, or exercise
-the terminal seeker-APN handoff.
+The implementation agent MUST diagnose failures before changing scenario
+geometry, acceleration limits, warhead radii, or other test parameters.
 
 ## Non-goals
 
 - Do not replace or weaken the existing pure-PN `intercept_test`.
-- Do not change `data/scenarios/intercept_test_01.json` to make this test pass.
-- Do not tune the scenario around a single miss-distance threshold without
-  first diagnosing seeker, guidance, autopilot, and propulsion behavior.
-- Do not claim this test validates a full operational missile model. It is an
-  engine integration regression at MVP fidelity.
+- Do not change `data/scenarios/intercept_test_01.json` to hide a guidance
+  defect.
+- Do not claim this work validates a full operational missile model.
+- Do not add terrain, GDAL, or a new propulsion model as a prerequisite.
 
-## Deliverable
+## Deliverables
 
-Add a new test named `seeker_intercept_test`:
+The primary deliverable is the guidance-system implementation, organized into
+the phases in this document. It includes guidance state, explicit law and phase
+selection, seeker handoff/track retention, frame correctness, limits, and
+diagnostics.
+
+The integrated validation artifact is a new test named `seeker_intercept_test`:
 
 ```text
 tests/validation/seeker_intercept_test.cpp
@@ -38,7 +46,230 @@ tests/CMakeLists.txt
 ```
 
 The test must run in both normal and GDAL-enabled builds. It should not depend
-on terrain or GDAL.
+on terrain or GDAL. It validates the implementation; it is not a substitute
+for the implementation.
+
+## Current baseline and required direction
+
+The current implementation is in:
+
+- `src/strikeengine/kernel/systems/GuidanceSystem.cpp`
+- `src/strikeengine/kernel/systems/AutopilotSystem.cpp`
+- `src/strikeengine/kernel/systems/SeekerSystem.cpp`
+- `include/strikeengine/kernel/data/GuidanceBlock.hpp`
+
+The current guidance priority is:
+
+1. Communication failure: zero acceleration.
+2. Valid seeker lock: terminal seeker APN overrides the configured mode.
+3. Otherwise: `None`, PN, or Waypoint mode.
+
+Existing MVP behavior must remain available:
+
+- PN using target position and velocity
+- Waypoint point-seeking
+- Seeker LOS-rate APN
+- Per-entity navigation constant and waypoint gain
+- Per-entity acceleration limit
+- World-to-body autopilot conversion
+
+The improvement must address these limitations:
+
+- No explicit persistent target-track or guidance-phase state
+- Abrupt seeker acquisition handoff
+- No bounded short-term lock-loss retention
+- No clear distinction between guidance demand and achieved vehicle response
+- Limited diagnostics for invalid geometry, non-closing targets, or saturation
+- No explicit interface for future pursuit, trajectory, energy, LQR, or MPC laws
+
+## Guidance system requirements
+
+### Inputs and state
+
+Guidance MUST consume clearly identified inputs:
+
+- Navigation estimate and attitude
+- External target command or persistent target track
+- Seeker track, quality, lock state, and LOS rates
+- Vehicle alive, failure, and communications state
+- Per-vehicle guidance configuration
+- Timestep and measurement timestamps where available
+
+Add or organize per-vehicle state for:
+
+- Active phase: `None`, `Midcourse`, `Acquisition`, `Terminal`, or `LostTrack`
+- Active guidance law
+- Target identity, when known
+- Track age and last valid measurement time
+- Seeker handoff/blend weight
+- Raw and limited acceleration demands
+- Limit/saturation flags
+- Invalid-input and non-closing flags
+
+State MUST reset correctly when vehicles are created, destroyed, or slots are
+reused.
+
+### Outputs and diagnostics
+
+Guidance MUST produce a finite, bounded world-frame acceleration command and
+diagnostics containing, at minimum:
+
+- Commanded `ax`, `ay`, `az` and magnitude
+- Whether `maxAccel` limited the command
+- Whether the selected law was invalid or non-closing
+- Active phase, law, and target identity
+- Handoff weight and track age when seeker guidance is involved
+
+Diagnostics should distinguish guidance demand limiting from downstream
+autopilot, servo, fin, or aerodynamic-authority limits.
+
+### Frame contract
+
+All guidance code MUST use:
+
+```text
+Body X: forward
+Body Y: right
+Body Z: down
+```
+
+Relative vectors use target-minus-interceptor convention:
+
+```text
+r = target_position − interceptor_position
+v = target_velocity − interceptor_velocity
+```
+
+Positive seeker azimuth rate maps to positive body-Y acceleration. Positive
+elevation rate maps to negative body-Z acceleration. Frame conversions MUST be
+explicit and covered by axis/sign tests.
+
+Guidance produces total world-frame acceleration demand. Gravity compensation
+MUST happen exactly once in the autopilot/control path.
+
+## Guidance-law requirements
+
+### Proportional navigation
+
+PN MUST use the configured navigation constant, target-relative position and
+velocity, and a safe closing-speed calculation. It must return zero or an
+explicit invalid status for zero range, non-closing geometry, non-finite input,
+or non-positive navigation constant.
+
+The current mathematical form is:
+
+```text
+Vc = −dot(r, v) / |r|
+ω  = cross(r, v) / |r|²
+a  = N × Vc × cross(ω, r_hat)
+```
+
+The output must be normal to the line of sight and tested independently of
+vehicle dynamics.
+
+### Seeker APN
+
+Seeker APN MUST use filtered LOS rates and closing speed, with this body-frame
+mapping:
+
+```text
+body-Y =  N × closing_speed × azimuth_rate
+body-Z = −N × closing_speed × elevation_rate
+body-X =  0
+```
+
+The command must then be rotated into the world frame using navigation
+attitude and bounded by `maxAccel`.
+
+The implementation should clearly distinguish this seeker-rate APN from APN
+with target-acceleration feed-forward. If target acceleration is unavailable,
+the behavior must be explicit rather than reading an uninitialized value.
+
+### Waypoint and future laws
+
+Waypoint guidance remains a backward-compatible point-seeking law. Future
+pursuit, trajectory, energy-management, LQR, or MPC laws must be separate
+explicit laws or managers, not hidden changes to waypoint behavior.
+
+## Phase selection and seeker handoff
+
+Replace the current abrupt lock override with an explicit, observable phase
+manager:
+
+```text
+No guidance -> Midcourse PN -> Acquisition blend -> Terminal APN
+                         ↘ LostTrack recovery -> Midcourse PN
+```
+
+Requirements:
+
+- Midcourse PN remains active until a valid seeker track exists.
+- Terminal APN weight ramps from 0 to 1 over a configured interval or quality
+  threshold.
+- Acceleration remains bounded throughout the transition.
+- A LOS-rate discontinuity is rate-limited or diagnosed.
+- Short permitted seeker dropouts retain target identity and timestamp.
+- Stale LOS rates cannot be used indefinitely.
+- After retention expiry, phase becomes `LostTrack` and recovery is explicit.
+
+The first blend may be linear or critically damped, but it must be
+deterministic and configuration-backed.
+
+## Autopilot integration requirements
+
+The autopilot remains downstream of guidance and MUST:
+
+- Consume world-frame total acceleration demand.
+- Convert to body frame exactly once.
+- Account for gravity exactly once.
+- Apply acceleration, rate, AoA, fin, servo, and roll limits.
+- Preserve documented pitch/yaw signs.
+- Expose commanded fin deflection and, where practical, achieved acceleration.
+
+The implementation must make it possible to tell whether a miss came from an
+incorrect guidance command, autopilot saturation, servo-rate limitation, fin
+authority, or aerodynamics.
+
+## Implementation phases
+
+### G0 — Baseline and observability
+
+- Preserve pure-PN `intercept_test`.
+- Add phase, law, target, command, lock, handoff, and saturation diagnostics.
+- Establish a baseline without changing scenario geometry or limits.
+
+### G1 — Explicit guidance state and law interface
+
+- Add per-vehicle phase and track state.
+- Separate phase selection from law calculation.
+- Make invalid and non-closing outputs explicit.
+- Preserve existing public behavior where no new policy is configured.
+
+### G2 — Handoff and track retention
+
+- Implement acquisition-to-terminal blending.
+- Implement bounded short-term dropout retention.
+- Implement lost-track recovery and transition diagnostics.
+
+### G3 — Guidance-law fidelity
+
+- Validate PN for head-on, crossing, and non-closing geometries.
+- Add APN target-acceleration feed-forward with explicit availability semantics.
+- Add time-to-go or predicted-intercept diagnostics where numerically sound.
+
+### G4 — Autopilot coupling
+
+- Report guidance demand versus achieved response.
+- Verify acceleration, rate, AoA, fin, servo, and aero saturation paths.
+- Add achieved-acceleration feedback only after checking control-loop stability.
+
+### G5 — Integrated validation
+
+- Add the two-missile seeker intercept regression below.
+- Add moving-target and controlled maneuvering-target cases.
+- Compare truth, navigation estimate, seeker track, guidance demand, actuator
+  output, and achieved acceleration.
+- Update authoritative project documents with measured evidence.
 
 ## Engagement setup
 
@@ -179,7 +410,7 @@ Choose a head-on or shallow crossing engagement that satisfies all of these:
 Start with a non-maneuvering moving target. Once this passes, add a separate
 maneuvering-target test rather than making the first test ambiguous.
 
-## Implementation notes from the current engine
+## Runtime integration reference
 
 The simulation step order is:
 
@@ -196,29 +427,9 @@ commands
 
 This is implemented in `SimulationKernel::step()`.
 
-The guidance priority is:
-
-1. Communication failure: zero commanded acceleration.
-2. Valid seeker lock: terminal seeker APN overrides the configured mode.
-3. Otherwise use `None`, PN, or Waypoint mode.
-
-Terminal APN uses filtered seeker azimuth/elevation rates in the airframe
-convention:
-
-```text
-X = forward
-Y = right
-Z = down
-
-body-Y command =  N * closing_speed * azimuth_rate
-body-Z command = -N * closing_speed * elevation_rate
-```
-
-The body-frame command is rotated into world coordinates using the navigation
-attitude estimate and then limited by `maxAccel`.
-
-The autopilot converts world-frame acceleration into bounded fin commands. The
-requested guidance acceleration is therefore not guaranteed to equal the
+Guidance and autopilot run after the physics update, so a newly generated
+control demand is applied by the backend on the following simulation step.
+The requested guidance acceleration is therefore not guaranteed to equal the
 actual vehicle acceleration.
 
 ## Failure diagnosis order
