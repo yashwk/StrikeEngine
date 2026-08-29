@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-29<br>
 **Runtime checkpoint:** `eb4983c`<br>
-**Validation result:** Release build, **38/38 CTest tests passed**
+**Validation result:** Release build, **34/34 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -84,7 +84,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **38/38 tests passed** at the checkpoint above.
+- Release CTest suite green: **34/34 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **45.4 m minimum miss** at t≈11.5 s with a

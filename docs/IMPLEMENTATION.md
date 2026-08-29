@@ -14,7 +14,7 @@ validation, and remaining work.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **38/38 CTest tests pass**.
+- Release validation: **34/34 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -224,11 +224,10 @@ binary reader implemented; richer telemetry future.
 
 ## 7. Validation inventory
 
-36 deterministic CTest programs:
+34 deterministic CTest programs:
 
 | Test | Coverage |
 | --- | --- |
-| `singlerun`, `sweep`, `montecarlo`, `optimizer` | study wrappers |
 | `rigidbody`, `vehicleconfig`, `intercept` | truth dynamics and control |
 | `integrator` | RK4/RK45 and impact interpolation |
 | `seeker`, `navigation`, `environment` | GNC and environment MVPs |

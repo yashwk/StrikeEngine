@@ -42,7 +42,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **38/38 CTest tests passing** in Release.
+Current validated checkpoint: **34/34 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
