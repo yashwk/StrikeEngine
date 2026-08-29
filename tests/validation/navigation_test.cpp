@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 using namespace StrikeEngine::Kernel;
 
@@ -28,6 +29,7 @@ void makeBlocks(PhysicsBlock& physics, SensorBlock& sensors)
     sensors.gyroBiasStdDev = {0.001};
     sensors.gpsPosNoiseStdDev = {1000.0}; // isolate velocity/bias observability
     sensors.gpsVelNoiseStdDev = {0.05};
+    sensors.gpsInnovationGateSigma = {5.0};
 }
 
 }
@@ -91,6 +93,40 @@ int main()
     check(bounded, "full covariance remains finite and bounded");
     check(std::abs(qNorm - 1.0) < 1e-10,
           "EKF attitude correction preserves quaternion normalization");
+
+    // A gross GPS jump must not overwrite the INS state or covariance. The
+    // scalar gate rejects only inconsistent channels, so a later valid fix
+    // can still be fused normally.
+    sensors.gpsPosNoiseStdDev[0] = 1.0;
+    sensors.gpsVelNoiseStdDev[0] = 0.1;
+    sensors.gpsUpdated[0] = true;
+    sensors.gpsPosX[0] = 100000.0;
+    sensors.gpsPosY[0] = -100000.0;
+    sensors.gpsPosZ[0] = 100000.0;
+    sensors.gpsVelX[0] = 10000.0;
+    sensors.gpsVelY[0] = -10000.0;
+    sensors.gpsVelZ[0] = 10000.0;
+    const double beforeRejectedPosition = nav.estPx[0];
+    system.update(sensors, physics, nav, dt);
+    check(nav.lastGpsUpdateRejected[0] &&
+              nav.lastGpsMaxInnovationSigma[0] > sensors.gpsInnovationGateSigma[0] &&
+              std::abs(nav.estPx[0] - beforeRejectedPosition) < 1.0,
+          "GPS innovation gate rejects gross position and velocity outliers");
+
+    sensors.gpsPosX[0] = physics.px[0];
+    sensors.gpsPosY[0] = physics.py[0];
+    sensors.gpsPosZ[0] = physics.pz[0];
+    sensors.gpsVelX[0] = physics.vx[0];
+    sensors.gpsVelY[0] = physics.vy[0];
+    sensors.gpsVelZ[0] = physics.vz[0];
+    system.update(sensors, physics, nav, dt);
+    check(!nav.lastGpsUpdateRejected[0],
+          "consistent GPS fixes remain eligible for EKF fusion after rejection");
+
+    sensors.gpsPosX[0] = std::numeric_limits<double>::quiet_NaN();
+    system.update(sensors, physics, nav, dt);
+    check(nav.lastGpsUpdateRejected[0],
+          "non-finite GPS measurements are rejected without poisoning the EKF");
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

@@ -25,6 +25,12 @@ namespace StrikeEngine::Kernel {
         // accelerometer bias(3), gyro bias(3), stored row-major.
         std::vector<std::array<double, 225>> covarianceFull;
 
+        // GPS fusion diagnostics. A rejected flag means at least one scalar
+        // position/velocity innovation was outside the configured gate during
+        // the most recent GPS update.
+        std::vector<bool> lastGpsUpdateRejected;
+        std::vector<double> lastGpsMaxInnovationSigma;
+
         // Status
         std::vector<bool> isAligned;
 

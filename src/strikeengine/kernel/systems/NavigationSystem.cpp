@@ -117,6 +117,8 @@ namespace StrikeEngine::Kernel {
             nav.covarianceDiag.resize(size, defaultDiag);
             nav.isAligned.resize(size, false);
         }
+        nav.lastGpsUpdateRejected.resize(size, false);
+        nav.lastGpsMaxInnovationSigma.resize(size, 0.0);
 
         const std::size_t oldCovarianceSize = nav.covarianceFull.size();
         nav.covarianceFull.resize(size);
@@ -393,6 +395,10 @@ namespace StrikeEngine::Kernel {
         // Sequential scalar GPS position/velocity updates. The full covariance
         // couples the observed translational states to attitude and IMU bias
         // corrections instead of applying independent diagonal gains.
+        nav.lastGpsUpdateRejected[id] = false;
+        nav.lastGpsMaxInnovationSigma[id] = 0.0;
+        const double innovationGate = id < sensors.gpsInnovationGateSigma.size()
+            ? sensors.gpsInnovationGateSigma[id] : 0.0;
         double rPos = sensors.gpsPosNoiseStdDev[id] * sensors.gpsPosNoiseStdDev[id];
         double rVel = sensors.gpsVelNoiseStdDev[id] * sensors.gpsVelNoiseStdDev[id];
 
@@ -408,12 +414,27 @@ namespace StrikeEngine::Kernel {
         auto updateScalar = [&](std::size_t measurementIndex,
                                 double measurement,
                                 double variance) {
+            if (!std::isfinite(measurement)) {
+                nav.lastGpsUpdateRejected[id] = true;
+                return;
+            }
             variance = std::max(variance, kMinCovariance);
             const double innovation = measurement -
                 (baseState[measurementIndex] + correction[measurementIndex]);
             const double innovationVariance = covariance[covarianceIndex(
                 measurementIndex, measurementIndex)] + variance;
             if (innovationVariance <= kMinCovariance) return;
+            const double innovationSigma = std::abs(innovation) /
+                std::sqrt(innovationVariance);
+            if (std::isfinite(innovationSigma)) {
+                nav.lastGpsMaxInnovationSigma[id] = std::max(
+                    nav.lastGpsMaxInnovationSigma[id], innovationSigma);
+            }
+            if (innovationGate > 0.0 &&
+                (!std::isfinite(innovationSigma) || innovationSigma > innovationGate)) {
+                nav.lastGpsUpdateRejected[id] = true;
+                return;
+            }
 
             const Covariance prior = covariance;
             for (std::size_t row = 0; row < kErrorStateSize; ++row) {

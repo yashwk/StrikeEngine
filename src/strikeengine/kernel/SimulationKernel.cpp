@@ -222,6 +222,7 @@ namespace StrikeEngine::Kernel {
             sensorBlock.gyroBiasStdDev.push_back(0.001);
             sensorBlock.gpsPosNoiseStdDev.push_back(5.0);
             sensorBlock.gpsVelNoiseStdDev.push_back(0.5);
+            sensorBlock.gpsInnovationGateSigma.push_back(5.0);
             sensorBlock.imuLeverArmX.push_back(0.0);
             sensorBlock.imuLeverArmY.push_back(0.0);
             sensorBlock.imuLeverArmZ.push_back(0.0);
@@ -296,6 +297,7 @@ namespace StrikeEngine::Kernel {
         sensorBlock.gyroBiasStdDev[id] = resolved.sensor.gyroBiasStdDev;
         sensorBlock.gpsPosNoiseStdDev[id] = resolved.sensor.gpsPosNoiseStdDev;
         sensorBlock.gpsVelNoiseStdDev[id] = resolved.sensor.gpsVelNoiseStdDev;
+        sensorBlock.gpsInnovationGateSigma[id] = resolved.sensor.gpsInnovationGateSigma;
         sensorBlock.imuLeverArmX[id] = resolved.sensor.imuLeverArmX;
         sensorBlock.imuLeverArmY[id] = resolved.sensor.imuLeverArmY;
         sensorBlock.imuLeverArmZ[id] = resolved.sensor.imuLeverArmZ;

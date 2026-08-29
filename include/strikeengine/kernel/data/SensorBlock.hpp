@@ -22,6 +22,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> gyroBiasStdDev;
         std::vector<double> gpsPosNoiseStdDev;
         std::vector<double> gpsVelNoiseStdDev;
+        std::vector<double> gpsInnovationGateSigma;
         std::vector<double> imuLeverArmX, imuLeverArmY, imuLeverArmZ;  // body-frame IMU lever arm (m)
         
         // Per-entity device enablement + GPS rate (config wiring).

@@ -62,8 +62,8 @@ int main()
     ControlBlock control;
     GuidanceSystem system;
     system.update(status, nav, seeker, guidance, control, 0.01);
-    check(guidance.commandedAccelY[0] > 0.0,
-          "kernel PN mode responds to target velocity");
+    check(std::abs(guidance.commandedAccelY[0] - 3.5) < 1e-12,
+          "kernel PN mode applies the configured navigation constant");
 
     seeker.type[0] = SeekerType::RF;
     seeker.isLocked[0] = true;

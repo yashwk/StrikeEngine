@@ -12,6 +12,9 @@ namespace StrikeEngine::Kernel {
         double gpsPosNoiseStdDev = 5.0;
         double gpsVelNoiseStdDev = 0.5;
         double gpsUpdateRateHz = 1.0;
+        // Normalized innovation gate for each scalar GPS position/velocity
+        // measurement. <= 0 disables rejection; the default is a 5-sigma gate.
+        double gpsInnovationGateSigma = 5.0;
         double imuLeverArmX = 0.0;
         double imuLeverArmY = 0.0;
         double imuLeverArmZ = 0.0;

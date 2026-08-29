@@ -112,6 +112,7 @@ VehicleConfig makeRichConfig()
     cfg.sensor.gpsPosNoiseStdDev = 7.0;
     cfg.sensor.gpsVelNoiseStdDev = 0.8;
     cfg.sensor.gpsUpdateRateHz = 2.0;
+    cfg.sensor.gpsInnovationGateSigma = 4.0;
     cfg.sensor.imuLeverArmX = 0.1;
     cfg.sensor.imuLeverArmY = 0.2;
     cfg.sensor.imuLeverArmZ = 0.3;
@@ -202,6 +203,7 @@ int main()
         check(cfg2.sensor.accelNoiseStdDev == 0.3 &&
                   cfg2.sensor.gyroBiasStdDev == 0.005 &&
                   cfg2.sensor.gpsUpdateRateHz == 2.0 &&
+                  cfg2.sensor.gpsInnovationGateSigma == 4.0 &&
                   cfg2.sensor.imuLeverArmZ == 0.3,
               "sensor noise/bias/lever-arm fields survive");
         check(cfg2.guidanceAutopilot.navigationConstant == 4.0 &&

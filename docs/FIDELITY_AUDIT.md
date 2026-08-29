@@ -35,8 +35,8 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W19 — Earth-rate gyro modeling + compensation | Implemented / MVP | `earth_rate_gyro_test`; ECEF truth only, local excluded |
 | W20 — Strapdown coning/sculling corrections | Implemented / MVP | `coning_sculling_test`; rotation-vector update + `+0.5(ω×f)dt²` |
 | W6 — Seeker and sensor fidelity | Implemented / MVP | `seeker_test`, `seeker_rich_test`; RF/IR/SARH/PassiveRF, decoys, strongest-signal |
-| W7 — Navigation EKF | MVP / partial | `navigation_test`; coupled 15-state, GPS corrections |
-| W8 — Scenario and guidance contract | MVP / partial | `guidance_test`, `scenario_test`; PN/APN, batch |
+| W7 — Navigation EKF | Implemented / MVP | `navigation_test`; coupled 15-state, GPS corrections, scalar innovation gating and rejection diagnostics |
+| W8 — Scenario and guidance contract | Implemented / MVP | `guidance_test`, `scenario_test`; PN/APN, configured navigation constant, waypoint, batch |
 | W9 — WGS84 local-earth model | MVP / partial | `earth_test`; geodetic/ECEF, normal gravity, Coriolis |
 | W10 — Earth frames and acceleration | MVP / partial | `earth_frames_test`; ECEF/ENU/NED, centrifugal |
 | W11 — Moving-origin transport | MVP / partial | `earth_transport_test` |
@@ -49,16 +49,18 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; fail-fast loaders, profile-wins resolution |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; IMU freeze, GPS schedule, gain wiring |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation + fusing |
-| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; 45.4 m miss < 50 m at t≈11.5 s + kill; seed `0xDEADBEEF`, pipeline demo not a performance claim |
+| W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; 49.1 m miss < 50 m at t≈11.5 s + kill after configured-PN rebaseline; seed `0xDEADBEEF`, pipeline demo not a performance claim |
 | W26 — Rocket-launch verification + propulsion-law fix | Implemented | `rocket_mvp_test`; T0 60000 N, flow 27.81 kg/s, init accel 110.275 vs 110.208 m/s², cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee 17.19 km, max-Q ~242 kPa; `T = ṁ·Isp·g0`, no free-thrust tail |
 | W27 — Data-driven aero coefficient tables | Implemented / MVP | `coefficient_table_test`, `rocket_mvp_tables_test`; table run higher/faster (apogee 24.79 vs 17.19 km, burnout V 713.6 vs 686.8 m/s, max-Q 260.4 vs 242.2 kPa); fallback byte-identical; awaiting StrikeCFD |
-| W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 45.4 m miss |
+| W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 49.1 m miss |
 | W29 — Geometric fins (RocketPy port) | Implemented / MVP | `fins_test`; three shapes (trapezoidal/elliptical/free-form); Diederich planform lift slope + Prandtl–Glauert Mach correction; fin-number + interference corrections; per-shape CP; tail lever-arm sign convention (restoring); positive-cant roll forcing; ballistic flight on rocket_mvp with 4 tail fins — apogee 17.2 km, drift ~0 m; byte-identical fallback when `fins` absent |
 | W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
 | W31 — ECEF/geodetic states + J2 gravity | Implemented / MVP | `earth_test`, `earth_fixed_test`, `ecef_kernel_test`, `serialization_test`; explicit ENU/ECEF velocity conversion, pole/dateline round-trip, WGS84 J2 gravity, standalone propagator and truth/sensor/navigation consistency |
 | W32 — Propulsion transients, TVC, and feed failures | Implemented / MVP | `propulsion_test`; strict curve/config validation, ignition delay/ramp, shutdown ramp, two-axis achieved-gimbal limits, engine-position torque, explicit engine/tank failure flags/events, legacy motor-failure compatibility |
 | W33 — Geodetic global terrain raster | Implemented / MVP | `global_terrain_test`; in-memory raster, ESRI ASCII Grid loading, NODATA handling, dateline normalization, local ENU and ECEF terrain impact/clamping |
 | W34 — Extended terrain sources and surfaces | Implemented / MVP | `global_terrain_test`; nearest/bilinear sampling, explicit coverage status, WGS84-scaled normals/slope, optional GDAL GeoTIFF/DTED/VRT loading, bounded LRU reuse, impact-event surface payload |
+| W35 — GPS fusion robustness | Implemented / MVP | `navigation_test`, `serialization_test`; configurable scalar normalized-innovation gate rejects gross/non-finite fixes while preserving valid channels |
+| W36 — Configured PN authority | Implemented / MVP | `guidance_test`; kernel PN now applies each entity's configured navigation constant rather than the model default |
 
 ## 3. Subsystem fidelity assessment
 
@@ -73,7 +75,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF, geodetic terrain sources | **MVP:** no geoid, automatic spatial multi-tile discovery/streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
 | Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
-| Navigation | Alignment, strapdown INS, 15-state EKF | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation |
+| Navigation | Alignment, strapdown INS, 15-state EKF, scalar GPS innovation gating and diagnostics | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation or broader sensor fusion |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
 | Guidance | Stateless PN/APN, waypoint, seeker handoff, per-entity gains | **MVP:** no trajectory manager, pursuit, LQR/MPC, blended handoff |
 | Events and terrain | Local callbacks plus geodetic raster sources, nearest/bilinear status-aware sampling, terrain normals/slope, real local/ECEF impact deactivation and clamping, enriched impact events | **MVP:** GDAL source loading is eager and single-source; no automatic spatial tile discovery/streaming, prefetch, datum/geoid, or probabilistic failure |
@@ -87,7 +89,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 - Release CTest suite green: **34/34 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
-- Designer→engine pipeline: **45.4 m minimum miss** at t≈11.5 s with a
+- Designer→engine pipeline: **49.1 m minimum miss** at t≈11.5 s with a
   proximity-warhead kill (`designer_pipeline_test`), flying on data-driven aero
   tables; seed `0xDEADBEEF`, a data-contract demonstration, not a
   guidance-performance claim.
@@ -146,7 +148,7 @@ Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 
 The 2026-08-25 pre-restart audit recorded 5/7 workstreams with failures in control
 signs, aero authority, integration, events, seeker fidelity, and navigation; it is
-superseded by W1–W34 above. Historical measurements/commits remain in repository
+superseded by W1–W36 above. Historical measurements/commits remain in repository
 history and are not repeated here.
 
 ## 7. Conclusion

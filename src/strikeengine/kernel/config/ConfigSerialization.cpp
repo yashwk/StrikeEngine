@@ -290,6 +290,7 @@ void to_json(json& j, const SensorConfig& s) {
     j["gps_pos_noise_std_dev"] = s.gpsPosNoiseStdDev;
     j["gps_vel_noise_std_dev"] = s.gpsVelNoiseStdDev;
     j["gps_update_rate_hz"] = s.gpsUpdateRateHz;
+    j["gps_innovation_gate_sigma"] = s.gpsInnovationGateSigma;
     j["imu_lever_arm_x"] = s.imuLeverArmX;
     j["imu_lever_arm_y"] = s.imuLeverArmY;
     j["imu_lever_arm_z"] = s.imuLeverArmZ;
@@ -305,6 +306,7 @@ void from_json(const json& j, SensorConfig& s) {
     s.gpsPosNoiseStdDev = j.at("gps_pos_noise_std_dev").get<double>();
     s.gpsVelNoiseStdDev = j.at("gps_vel_noise_std_dev").get<double>();
     s.gpsUpdateRateHz = j.at("gps_update_rate_hz").get<double>();
+    s.gpsInnovationGateSigma = j.value("gps_innovation_gate_sigma", 5.0);
     s.imuLeverArmX = j.at("imu_lever_arm_x").get<double>();
     s.imuLeverArmY = j.at("imu_lever_arm_y").get<double>();
     s.imuLeverArmZ = j.at("imu_lever_arm_z").get<double>();

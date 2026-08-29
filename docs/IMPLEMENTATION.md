@@ -171,7 +171,8 @@ carries per-entity `stageIndex`/`stageCount`.
   freezes sample + stops bias drift while GPS continues; sensor-failure stops
   updates. Exposes `nextUniform01()` (uniform [0,1) from shared kernel RNG) used by
   `processWarheads`.
-- `NavigationSystem.cpp`: alignment, strapdown INS, coupled 15-state EKF.
+- `NavigationSystem.cpp`: alignment, strapdown INS, coupled 15-state EKF with
+  configurable scalar GPS innovation gating and rejection diagnostics.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, latency.
 - `GuidanceSystem.cpp`: PN, waypoint, seeker APN handoff; reads
   `navigationConstant`/`waypointGain`; comms-failure zeroes accel.
@@ -230,12 +231,12 @@ binary reader implemented; richer telemetry future.
 | --- | --- |
 | `rigidbody`, `vehicleconfig`, `intercept` | truth dynamics and control |
 | `integrator` | RK4/RK45 and impact interpolation |
-| `seeker`, `navigation`, `environment` | GNC and environment MVPs |
+| `seeker`, `navigation`, `environment` | GNC and environment MVPs; navigation includes GPS innovation gating |
 | `seeker_rich`, `earth_rate_gyro`, `coning_sculling` | richer seekers; earth-rate gyro; coning/sculling |
 | `earth`, `earth_frames`, `earth_transport` | WGS84 conversion/state helpers and local frames |
 | `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation, including J2 |
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation, including J2 |
-| `guidance`, `scenario` | guidance and scenario contracts |
+| `guidance`, `scenario` | guidance and scenario contracts, configured PN gain wiring |
 | `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics and events |
 | `propulsion` | strict profile validation, ignition/shutdown transients, TVC gimbal limits/servo, engine torque, engine/tank failures, serialization |
@@ -247,7 +248,7 @@ binary reader implemented; richer telemetry future.
 | `warhead_falloff` | falloff law (1/linear/0), fixed-seed in-band outcome, flat-law RNG exclusion, round-trip + reject |
 | `serialization` | config round-trip, scenario/design load-save, `designRef` override, four profile-id keys, legacy-compat |
 | `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
-| `designer_pipeline` | manifest→`designRef`→profile-id→intercept (45.4 m miss) + kill |
+| `designer_pipeline` | manifest→`designRef`→profile-id→intercept (49.1 m miss) + kill |
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
@@ -277,13 +278,15 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W24 | profile-id DB layer (`profile_database_test`) | current |
 | W25 | designer→engine pipeline (`designer_pipeline_test`): manifests, flat RCS table, scenario, `SeekerTypeStrings` dedup, guided intercept + kill | current |
 | W26 | rocket verification (`rocket_mvp_test`) + propulsion-law fix (`T = ṁ·Isp·g0`) | current |
-| W27 | data-driven cd/cl aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (45.4 m miss after W28, 15 km/8 km) | current |
-| W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 45.4 m miss | current |
+| W27 | data-driven cd/cl aero tables (`coefficient_table_test`, `rocket_mvp_tables_test`); pipeline re-baselined (49.1 m miss after W36, 15 km/8 km) | current |
+| W28 | leftover dump + warhead falloff (`staging_warhead_test`, `warhead_falloff_test`); SAM 50/50/90 m; 49.1 m miss | current |
 | W29 | geometric fins (RocketPy trapezoidal/elliptical/free-form) (`fins_test`) | current |
 | W30 | static moment/lateral aero tables (`coefficient_table_test`, `serialization_test`, `profile_database_test`) | current |
 | W32 | strict propulsion validation, ignition/shutdown transients, two-axis TVC + engine torque, engine/tank failures (`propulsion_test`) | current |
 | W33 | geodetic terrain raster, ESRI ASCII loader, dateline-safe sampling, local/ECEF impact integration (`global_terrain_test`) | current |
 | W34 | terrain source contract, nearest/bilinear + coverage/surface data, optional GDAL GeoTIFF/DTED/VRT loading, bounded LRU cache, impact surface payload (`global_terrain_test`) | current |
+| W35 | configurable scalar GPS innovation gating and navigation rejection diagnostics (`navigation_test`, `serialization_test`) | current |
+| W36 | configured navigation constant applied by kernel PN (`guidance_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

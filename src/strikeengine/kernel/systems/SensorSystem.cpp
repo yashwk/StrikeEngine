@@ -68,6 +68,7 @@ namespace StrikeEngine::Kernel {
             sensors.gpsVelX.resize(size); sensors.gpsVelY.resize(size); sensors.gpsVelZ.resize(size);
             sensors.gpsUpdated.resize(size);
             sensors.imuLeverArmX.resize(size); sensors.imuLeverArmY.resize(size); sensors.imuLeverArmZ.resize(size);
+            sensors.gpsInnovationGateSigma.resize(size, 5.0);
             sensors.imuEnabled.resize(size, true);
             sensors.gpsEnabled.resize(size, true);
             sensors.gpsUpdateRateHz.resize(size, 1.0);

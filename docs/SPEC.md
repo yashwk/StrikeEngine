@@ -164,7 +164,8 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
   `vacuumIsp`/`seaLevelIsp`, `propellantMassKg`, `dryMassKg`, ignition/shutdown
   timing, TVC limits/servo parameters, and engine position).
 - `SensorConfig`: `imuEnabled`/`gpsEnabled`, IMU/GPS noise/bias σ, `gpsUpdateRateHz`,
-  IMU body-frame lever arm.
+  `gpsInnovationGateSigma` (<=0 disables scalar GPS outlier rejection; default
+  5σ), IMU body-frame lever arm.
 - `GuidanceAutopilotConfig`: `navigationConstant`, `waypointGain`, gains
   `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
   `servoTimeConstantSec`, `maxServoRateRadPerSec`.
@@ -259,7 +260,8 @@ Frame note: designers MUST emit local ENU coordinates, not ECEF Earth-radius
 offsets. `intercept_test_01` runs in local ENU (§4.2), re-baselined to 15 km/8 km
 (the table-aero missile is faster/lower-drag; 20 km/10 km no longer fits the
 seeker's ~3 km acquisition range) — a deterministically tuned set (seed
-`0xDEADBEEF`), pipeline evidence (min miss 45.4 m at t≈11.5 s; proximity kill),
+`0xDEADBEEF`, 80 m/s² initial guidance cap), pipeline evidence (min miss 49.1 m
+at t≈11.5 s; proximity kill),
 not a performance claim.
 
 `VehicleInitState` fields are optional in JSON with safe defaults (zero pose,
@@ -407,6 +409,11 @@ cadence, in the selected world frame (incl. ECEF).
 Per entity: `imuEnabled=false` freezes the IMU (held sample, bias drift stops)
 while GPS continues to aid the EKF — a stale-sample degradation, not full GPS-only
 positioning. `gpsEnabled=false` stops GPS updates; `gpsUpdateRateHz` sets cadence.
+Each GPS position/velocity scalar is normalized by its predicted innovation
+standard deviation. If it exceeds `gpsInnovationGateSigma`, that scalar is
+rejected without changing the state or covariance; valid scalars in the same
+fix remain eligible. `NavigationBlock::lastGpsUpdateRejected` and
+`lastGpsMaxInnovationSigma` expose diagnostics for the most recent fix.
 
 ### 7.2 Navigation
 
@@ -415,7 +422,8 @@ Attitude update is a rotation-vector step (exact delta-quaternion per sample,
 validated against a fine-step reference), bounding coning drift; velocity update
 applies single-interval sculling/rotation compensation `+0.5(ω×f)dt²` in the body
 frame. Covariance: position, velocity, attitude error, accel bias, gyro bias,
-row-major 15×15. GPS position/velocity correct the coupled state. MVP: no
+row-major 15×15. GPS position/velocity correct the coupled state with the
+configurable innovation gate above. MVP: no
 multi-rate timestamp interpolation; earth-rate compensation only in ECEF truth
 (local truth gyro resolves the non-rotating-frame rate; correct local compensation
 needs the rotating-frame ECEF path).

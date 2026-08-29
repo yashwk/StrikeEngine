@@ -124,7 +124,7 @@ namespace StrikeEngine::Kernel {
         const Models::Vec3 relativePosition{rx, ry, rz};
         const Models::Vec3 relativeVelocity{rvx, rvy, rvz};
         const Models::GuidanceSolution solution = Models::proportionalNavigation(
-            relativePosition, relativeVelocity);
+            relativePosition, relativeVelocity, guidance.navigationConstant[id]);
         if (!solution.valid) {
             guidance.commandedAccelX[id] = 0.0;
             guidance.commandedAccelY[id] = 0.0;
