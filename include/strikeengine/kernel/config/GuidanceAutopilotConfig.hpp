@@ -21,6 +21,13 @@ namespace StrikeEngine::Kernel {
         double handoffBlendTimeSec  = 0.0;  // acquisition -> terminal ramp time (s)
         double lockLossRetentionSec = 0.0;  // parent track retention after lock loss (s)
         bool   apnFeedforwardEnabled = false; // use target-accel feed-forward APN
+
+        // W39 persistent target-track manager (defaults keep the external
+        // command state as the guidance aim; a track only supersedes it once
+        // confirmations of consistent seeker measurements arrive).
+        int    trackConfirmations  = 3;    // measurement updates to promote to Maintain
+        double trackCoastTimeoutSec = 0.5; // no measurement: Maintain/Acquire -> Coast
+        double trackLossTimeoutSec  = 2.0; // no measurement: Coast -> Lost
     };
 
 } // namespace StrikeEngine::Kernel

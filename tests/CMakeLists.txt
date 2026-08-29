@@ -74,6 +74,9 @@ target_link_libraries(seeker_intercept_test PRIVATE strikeengine)
 target_compile_definitions(seeker_intercept_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+add_executable(track_manager_test validation/track_manager_test.cpp)
+target_link_libraries(track_manager_test PRIVATE strikeengine)
+
 add_executable(scenario_test validation/scenario_test.cpp)
 target_link_libraries(scenario_test PRIVATE strikeengine)
 
@@ -187,6 +190,9 @@ set_tests_properties(guidance PROPERTIES TIMEOUT 120)
 
 add_test(NAME seeker_intercept COMMAND seeker_intercept_test)
 set_tests_properties(seeker_intercept PROPERTIES TIMEOUT 120)
+
+add_test(NAME track_manager COMMAND track_manager_test)
+set_tests_properties(track_manager PROPERTIES TIMEOUT 120)
 
 add_test(NAME scenario COMMAND scenario_test)
 set_tests_properties(scenario PROPERTIES TIMEOUT 120)

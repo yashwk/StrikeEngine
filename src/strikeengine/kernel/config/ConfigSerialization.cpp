@@ -329,6 +329,10 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["handoffBlendTimeSec"] = g.handoffBlendTimeSec;
     j["lockLossRetentionSec"] = g.lockLossRetentionSec;
     j["apnFeedforwardEnabled"] = g.apnFeedforwardEnabled;
+    // W39 track-manager keys (optional with defaults).
+    j["trackConfirmations"] = g.trackConfirmations;
+    j["trackCoastTimeoutSec"] = g.trackCoastTimeoutSec;
+    j["trackLossTimeoutSec"] = g.trackLossTimeoutSec;
 }
 
 void from_json(const json& j, GuidanceAutopilotConfig& g) {
@@ -345,6 +349,9 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.handoffBlendTimeSec = j.value("handoffBlendTimeSec", 0.0);
     g.lockLossRetentionSec = j.value("lockLossRetentionSec", 0.0);
     g.apnFeedforwardEnabled = j.value("apnFeedforwardEnabled", false);
+    g.trackConfirmations = j.value("trackConfirmations", 3);
+    g.trackCoastTimeoutSec = j.value("trackCoastTimeoutSec", 0.5);
+    g.trackLossTimeoutSec = j.value("trackLossTimeoutSec", 2.0);
 }
 
 // --- StageConfig / PropulsionConfig ----------------------------------------
@@ -630,6 +637,9 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
         j["initial_target_accel_z"] = e.initialTargetAccelZ;
         j["initial_target_accel_available"] = true;
     }
+    if (e.initialTargetId >= 0) {
+        j["initial_target_id"] = e.initialTargetId;
+    }
 }
 
 void from_json(const json& j, ScenarioEntityConfig& e) {
@@ -648,6 +658,7 @@ void from_json(const json& j, ScenarioEntityConfig& e) {
     e.initialTargetAccelY = j.value("initial_target_accel_y", 0.0);
     e.initialTargetAccelZ = j.value("initial_target_accel_z", 0.0);
     e.initialTargetAccelAvailable = j.value("initial_target_accel_available", false);
+    e.initialTargetId = j.value("initial_target_id", static_cast<std::int64_t>(-1));
 
     e.designRef = j.value("design_ref", std::string(""));
     if (!e.designRef.empty()) {

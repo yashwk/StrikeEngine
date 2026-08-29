@@ -14,7 +14,7 @@ validation, and remaining work.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **35/35 CTest tests pass**.
+- Release validation: **36/36 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -70,6 +70,7 @@ mirrors.
 | `NavigationBlock` | estimate, biases, alignment, row-major 15×15 covariance |
 | `SensorBlock` | IMU/GPS measurements and noise settings |
 | `SeekerBlock` | RF/IR config, lock, measurements, latency history |
+| `TrackBlock` | per-entity persistent target track (state, identity, pos/vel/optional accel, timestamp, age, quality/covariance, update/dropout counts, previous fix) |
 | `EntityStatusBlock` | type, allegiance, health, profile IDs, alive state |
 
 Entity slots reused via kernel free list; blocks share entity indices; inactive
@@ -80,7 +81,10 @@ entities skipped.
 1. Save previous positions; advance time. 2. Apply queued commands.
 3. Advance truth physics. 4. Staging pass (`processStaging`).
 5. Generate IMU/GPS. 6. Propagate + fuse navigation. 7. Update seekers/lock/LOS/
-latency. 8. Compute guidance. 9. Convert to actuator commands.
+latency. 3.75. Update the persistent target-track manager (`TrackManagerSystem`;
+the "3.75" denotes it runs right after seekers, before guidance).
+8. Compute guidance.
+9. Convert to actuator commands.
 10. Evaluate terrain/ground events. 11. Warhead pass (`processWarheads`).
 12. Dispatch event queue.
 
@@ -183,7 +187,26 @@ carries per-entity `stageIndex`/`stageCount`.
   `apnFeedforwardEnabled && targetAccelAvailable` (never reads uninitialized
   values); publishes raw/limited demands + invalid/non-closing diagnostics; maps
   seeker rates to the X-forward/Y-right/Z-down body frame; reads
-  `navigationConstant`/`waypointGain`; comms-failure zeroes accel.
+  `navigationConstant`/`waypointGain`; comms-failure zeroes accel. Midcourse PN
+  consumes the persistent track (§ W39) when measurement-anchored (active &&
+  `updateCount > 0`), falls back to the external command state otherwise (legacy
+  preserved); APN feed-forward target accel from the track when available, else
+  the command.
+- `TrackManagerSystem.cpp`: persistent single target-track manager (W39); runs
+  after seekers, before guidance. Seeds/fuses external command (`CommandProcessor`)
+  and seeker LOS fixes into one per-entity track: LOS body angles → body LOS
+  (aerospace X/Y/Z) → world via nav quaternion; measured position = nav pos +
+  LOS_world × range; finite-difference velocity between fixes (never physics
+  truth); Acquire→Maintain→Coast→Lost→Reacquire lifecycle with
+  `confirmations`/`coastTimeoutSec`/`lossTimeoutSec`; multi-rate kinematic
+  prediction at the sim rate; deterministic quality/covariance model
+  (quality01 = exp(−age/1.0), positionStdM = 5 + 25·age, velocityStdMs = 25 + 50·age);
+  `TrackBlock` (`include/strikeengine/kernel/data/TrackBlock.hpp`). Config keys
+  `trackConfirmations`/`trackCoastTimeoutSec`/`trackLossTimeoutSec` on
+  `GuidanceAutopilotConfig` (defaults 3/0.5/2.0).
+- `CommandProcessor.cpp`: applies queued `SimulationCommand`s; W39 seeds/refreshes
+  `TrackBlock` from the command state (identity via `cmd.targetId`, `-1` unknown;
+  scenario `initial_target_id` flows through it).
 - `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
   + `maxDeflectionRad`; publishes `pitchSaturated`/`yawSaturated`/
   `rollSaturated` fin-clamp diagnostics.
@@ -236,7 +259,7 @@ binary reader implemented; richer telemetry future.
 
 ## 7. Validation inventory
 
-35 deterministic CTest programs:
+36 deterministic CTest programs:
 
 | Test | Coverage |
 | --- | --- |
@@ -261,6 +284,7 @@ binary reader implemented; richer telemetry future.
 | `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
 | `designer_pipeline` | manifest→`designRef`→profile-id→intercept (9.7 m miss) + kill |
 | `seeker_intercept` | two explicit missiles: friendly RF-seeker interceptor (sa_missile_mk1 aero/motor profiles + 12 kW radar, 20° FOV half-angle, 65° gimbal, 0.5 s acquisition blend, proximity warhead 20/15/25 m) vs hostile coasting target missile (target_missile_rcs.json, 0.25 m² flat RCS); midcourse PN on explicit state, RF acquisition via radar equation + RCS + allegiance (no fake lock), phase sequence Midcourse→Acquisition→Terminal asserted, terminal APN, detonation + kill; seed `0x5EEDF1A5u` |
+| `track_manager` | W39 persistent target-track lifecycle: external command seed (identity/pos/vel/accel/timestamp); seeker LOS fix → world-frame estimate via nav (no truth coupling) + finite-difference velocity; Acquire→Maintain after `trackConfirmations` fixes; coast prediction at the sim rate (pos advances vel·dt); quality decay (exp tau 1 s) + uncertainty growth (5+25·age, 25+50·age); Maintain→Coast→Lost timing; Reacquire→Maintain; guidance handoff (PN on the track when measurement-anchored, fallback to external command when Lost) and the three config keys; extended `GuidanceSystem::update(const TrackBlock&)` signature |
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
@@ -301,6 +325,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W36 | configured navigation constant applied by kernel PN (`guidance_test`) | current |
 | W37 | seeker APN azimuth/elevation rate mapping corrected for the X-forward/Y-right/Z-down body frame (`guidance_test`); original 120 m/s² pipeline scenario restored, 9.7 m miss | current |
 | W38 | traceable mode-aware guidance stack (phases, blend, bounded lock-loss retention replays the retained terminal command, diagnostics, APN feed-forward availability + public command/scenario target-accel inputs, `GuidanceLaw::Waypoint` + non-finite hardening) + seeker intercept regression (`seeker_intercept_test`, `guidance_test`) | current |
+| W39 | persistent target-track manager (acquire/maintain/coast/lost/reacquire, identity, quality/covariance model, multi-rate prediction, command+seeker fusion, track-based midcourse aim with legacy fallback) (`track_manager_test`, `seeker_intercept_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

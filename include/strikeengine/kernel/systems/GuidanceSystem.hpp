@@ -1,6 +1,7 @@
 #pragma once
 
 #include <strikeengine/kernel/data/NavigationBlock.hpp>
+#include <strikeengine/kernel/data/TrackBlock.hpp>
 #include <strikeengine/kernel/data/GuidanceBlock.hpp>
 #include <strikeengine/kernel/data/ControlBlock.hpp>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
@@ -32,6 +33,7 @@ namespace StrikeEngine::Kernel {
             const EntityStatusBlock& status,
             const NavigationBlock& nav,
             const SeekerBlock& seeker,
+            const TrackBlock& tracks,
             GuidanceBlock& guidance,
             ControlBlock& control,
             double dt

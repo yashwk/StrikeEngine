@@ -285,6 +285,26 @@ namespace StrikeEngine::Kernel {
             seekerBlock.previousElevation.push_back(0);
             seekerBlock.lockLostTimeSec.push_back(0);
             seekerBlock.hasPreviousLos.push_back(false);
+
+            // W39 persistent track state (config defaults; reset in the common path)
+            trackBlock.confirmations.push_back(3);
+            trackBlock.coastTimeoutSec.push_back(0.5);
+            trackBlock.lossTimeoutSec.push_back(2.0);
+            trackBlock.state.push_back(TrackState::None);
+            trackBlock.trackId.push_back(-1);
+            trackBlock.posX.push_back(0); trackBlock.posY.push_back(0); trackBlock.posZ.push_back(0);
+            trackBlock.velX.push_back(0); trackBlock.velY.push_back(0); trackBlock.velZ.push_back(0);
+            trackBlock.accelX.push_back(0); trackBlock.accelY.push_back(0); trackBlock.accelZ.push_back(0);
+            trackBlock.accelAvailable.push_back(false);
+            trackBlock.timestampSec.push_back(0.0);
+            trackBlock.ageSec.push_back(0.0);
+            trackBlock.positionStdM.push_back(5.0);
+            trackBlock.velocityStdMs.push_back(25.0);
+            trackBlock.quality01.push_back(0.0);
+            trackBlock.updateCount.push_back(0);
+            trackBlock.dropoutCount.push_back(0);
+            trackBlock.measPosX.push_back(0); trackBlock.measPosY.push_back(0); trackBlock.measPosZ.push_back(0);
+            trackBlock.measTimeSec.push_back(0.0);
         }
 
         // Per-entity defaults apply to BOTH fresh and reused slots so a
@@ -337,6 +357,26 @@ namespace StrikeEngine::Kernel {
         controlBlock.pitchSaturated[id] = false;
         controlBlock.yawSaturated[id] = false;
         controlBlock.rollSaturated[id] = false;
+
+        // W39 track config + state reset (fresh and reused slots).
+        trackBlock.confirmations[id] = config.guidanceAutopilot.trackConfirmations;
+        trackBlock.coastTimeoutSec[id] = config.guidanceAutopilot.trackCoastTimeoutSec;
+        trackBlock.lossTimeoutSec[id] = config.guidanceAutopilot.trackLossTimeoutSec;
+        trackBlock.state[id] = TrackState::None;
+        trackBlock.trackId[id] = -1;
+        trackBlock.posX[id] = 0; trackBlock.posY[id] = 0; trackBlock.posZ[id] = 0;
+        trackBlock.velX[id] = 0; trackBlock.velY[id] = 0; trackBlock.velZ[id] = 0;
+        trackBlock.accelX[id] = 0; trackBlock.accelY[id] = 0; trackBlock.accelZ[id] = 0;
+        trackBlock.accelAvailable[id] = false;
+        trackBlock.timestampSec[id] = 0.0;
+        trackBlock.ageSec[id] = 0.0;
+        trackBlock.positionStdM[id] = 5.0;
+        trackBlock.velocityStdMs[id] = 25.0;
+        trackBlock.quality01[id] = 0.0;
+        trackBlock.updateCount[id] = 0;
+        trackBlock.dropoutCount[id] = 0;
+        trackBlock.measPosX[id] = 0; trackBlock.measPosY[id] = 0; trackBlock.measPosZ[id] = 0;
+        trackBlock.measTimeSec[id] = 0.0;
 
         sensorBlock.accelNoiseStdDev[id] = resolved.sensor.accelNoiseStdDev;
         sensorBlock.accelBiasStdDev[id] = resolved.sensor.accelBiasStdDev;
@@ -777,7 +817,7 @@ namespace StrikeEngine::Kernel {
         const std::vector<double> previousPy = physicsBlock.py;
         const std::vector<double> previousPz = physicsBlock.pz;
         time.advance(dt);
-        commandProcessor.process(guidanceBlock);
+        commandProcessor.process(guidanceBlock, trackBlock, time.currentTime());
         
         // 1. Advance true physics
         backend->step(physicsBlock, controlBlock, time.currentTime(), dt);
@@ -794,8 +834,14 @@ namespace StrikeEngine::Kernel {
         // 3.5 Process Seekers
         seekerSystem.update(physicsBlock, statusBlock, seekerBlock, dt);
 
-        // 4. Update Guidance based on estimates and seekers
-        guidanceSystem.update(statusBlock, navigationBlock, seekerBlock, guidanceBlock, controlBlock, dt);
+        // 3.75 Persistent target-track manager (seeker measurements + command
+        // seeds -> estimate; prediction at the sim rate between measurements)
+        trackManagerSystem.update(navigationBlock, seekerBlock, trackBlock,
+                                  time.currentTime(), dt);
+
+        // 4. Update Guidance based on estimates, tracks, and seekers
+        guidanceSystem.update(statusBlock, navigationBlock, seekerBlock,
+                              trackBlock, guidanceBlock, controlBlock, dt);
 
         // 4.5 Update Autopilot to translate commanded accel to fin deflections
         autopilotSystem.update(statusBlock, navigationBlock, sensorBlock, guidanceBlock, controlBlock, dt);

@@ -40,6 +40,10 @@ namespace StrikeEngine::Kernel {
         double initialTargetAccelY = 0.0;
         double initialTargetAccelZ = 0.0;
         bool   initialTargetAccelAvailable = false;
+
+        // Optional target identity for the persistent track (W39); -1 unknown
+        // (the seeker supplies identity once it locks).
+        std::int64_t initialTargetId = -1;
     };
 
     struct ScenarioConfig {
@@ -84,6 +88,7 @@ namespace StrikeEngine::Kernel {
                     cmd.targetAccelY = entityCfg.initialTargetAccelY;
                     cmd.targetAccelZ = entityCfg.initialTargetAccelZ;
                     cmd.targetAccelAvailable = entityCfg.initialTargetAccelAvailable;
+                    cmd.targetId = entityCfg.initialTargetId;
                     kernel.queueCommand(cmd);
                 }
             }

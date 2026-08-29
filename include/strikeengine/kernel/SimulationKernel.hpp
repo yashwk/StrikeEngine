@@ -18,8 +18,10 @@
 #include <strikeengine/kernel/data/SensorBlock.hpp>
 #include <strikeengine/kernel/data/SeekerBlock.hpp>
 #include <strikeengine/kernel/data/NavigationBlock.hpp>
+#include <strikeengine/kernel/data/TrackBlock.hpp>
 #include <strikeengine/kernel/systems/SensorSystem.hpp>
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
+#include <strikeengine/kernel/systems/TrackManagerSystem.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <strikeengine/kernel/integrator/IntegratorFactory.hpp>
@@ -117,6 +119,7 @@ namespace StrikeEngine::Kernel {
         const NavigationBlock& getNavigation() const { return navigationBlock; }
         const SensorBlock& getSensors() const { return sensorBlock; }
         const SeekerBlock& getSeekers() const { return seekerBlock; }
+        const TrackBlock& getTracks() const { return trackBlock; }
         const EntityStatusBlock& getStatus() const { return statusBlock; }
         EventSystem& getEventSystem() { return eventSystem; }
         double getSimulationTime() const { return time.currentTime(); }
@@ -130,11 +133,13 @@ namespace StrikeEngine::Kernel {
         SensorBlock sensorBlock;
         NavigationBlock navigationBlock;
         SeekerBlock seekerBlock;
+        TrackBlock trackBlock;   // W39 persistent target tracks
 
         // Systems
         SensorSystem sensorSystem;
         NavigationSystem navigationSystem;
         SeekerSystem seekerSystem;
+        TrackManagerSystem trackManagerSystem;  // W39 (after seekers, before guidance)
         GuidanceSystem guidanceSystem;
         AutopilotSystem autopilotSystem;
         EventSystem eventSystem;

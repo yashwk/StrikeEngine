@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstddef>
 #include <strikeengine/kernel/data/GuidanceBlock.hpp>
+#include <strikeengine/kernel/data/TrackBlock.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -27,6 +28,10 @@ namespace StrikeEngine::Kernel {
         double targetAccelY = 0.0;
         double targetAccelZ = 0.0;
         bool   targetAccelAvailable = false;
+
+        // Optional target identity for the persistent track (W39).
+        // -1 = unknown identity (track is still maintained on state only).
+        std::int64_t targetId = -1;
     };
 
     class CommandProcessor {
@@ -34,8 +39,9 @@ namespace StrikeEngine::Kernel {
         // Queue a command to be executed
         void enqueueCommand(const SimulationCommand& cmd);
 
-        // Process all queued commands, applying them to the data blocks
-        void process(GuidanceBlock& guidance);
+        // Process all queued commands, applying them to the data blocks and
+        // seeding the persistent target track (W39).
+        void process(GuidanceBlock& guidance, TrackBlock& tracks, double simTimeSec);
 
     private:
         std::vector<SimulationCommand> commandQueue;

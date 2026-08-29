@@ -70,8 +70,11 @@ namespace StrikeEngine::Kernel {
         }
 
         // Midcourse PN / APN on the commanded target track (world frame).
+        // Aim source: a measurement-anchored persistent target track (W39)
+        // wins over the raw external command state; see update().
         LawResult computeMidcourse(
-            std::size_t id, const NavigationBlock& nav, GuidanceBlock& guidance)
+            std::size_t id, const NavigationBlock& nav,
+            const TrackBlock* tracks, GuidanceBlock& guidance)
         {
             LawResult out;
             const double N = guidance.navigationConstant[id];
@@ -80,12 +83,28 @@ namespace StrikeEngine::Kernel {
                 out.valid = false;
                 return out;
             }
-            const double rx = guidance.targetX[id] - nav.estPx[id];
-            const double ry = guidance.targetY[id] - nav.estPy[id];
-            const double rz = guidance.targetZ[id] - nav.estPz[id];
-            const double vx = guidance.targetVx[id] - nav.estVx[id];
-            const double vy = guidance.targetVy[id] - nav.estVy[id];
-            const double vz = guidance.targetVz[id] - nav.estVz[id];
+
+            // Select the aim state: persistent track (measurement-anchored)
+            // or the external command state (legacy).
+            double tx, ty, tz, tvx, tvy, tvz;
+            bool trackAim = false;
+            if (tracks && id < tracks->size && tracks->active(id) &&
+                tracks->updateCount[id] > 0)
+            {
+                trackAim = true;
+                tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
+                tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
+            } else {
+                tx = guidance.targetX[id]; ty = guidance.targetY[id]; tz = guidance.targetZ[id];
+                tvx = guidance.targetVx[id]; tvy = guidance.targetVy[id]; tvz = guidance.targetVz[id];
+            }
+
+            const double rx = tx - nav.estPx[id];
+            const double ry = ty - nav.estPy[id];
+            const double rz = tz - nav.estPz[id];
+            const double vx = tvx - nav.estVx[id];
+            const double vy = tvy - nav.estVy[id];
+            const double vz = tvz - nav.estVz[id];
             if (!isFinite3(rx, ry, rz) || !isFinite3(vx, vy, vz)) {
                 out.lawInvalid = true;
                 out.valid = false;
@@ -98,14 +117,24 @@ namespace StrikeEngine::Kernel {
             const double closingSpeed = (range > 1e-9)
                 ? -(rx * vx + ry * vy + rz * vz) / range : 0.0;
 
-            const bool feedforward = guidance.apnFeedforwardEnabled[id] &&
-                guidance.targetAccelAvailable[id] && isFinite3(
-                    guidance.targetAccelX[id], guidance.targetAccelY[id],
-                    guidance.targetAccelZ[id]);
+            // Feed-forward target acceleration: from the track when
+            // measurement-anchored and available, else from the command.
+            bool ffAvailable = false;
+            double atx = 0.0, aty = 0.0, atz = 0.0;
+            if (trackAim && tracks->accelAvailable[id]) {
+                ffAvailable = isFinite3(tracks->accelX[id], tracks->accelY[id],
+                                        tracks->accelZ[id]);
+                atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
+            } else if (!trackAim && guidance.targetAccelAvailable[id]) {
+                ffAvailable = isFinite3(guidance.targetAccelX[id],
+                                        guidance.targetAccelY[id],
+                                        guidance.targetAccelZ[id]);
+                atx = guidance.targetAccelX[id]; aty = guidance.targetAccelY[id];
+                atz = guidance.targetAccelZ[id];
+            }
+            const bool feedforward = guidance.apnFeedforwardEnabled[id] && ffAvailable;
             const Models::GuidanceSolution sol = feedforward
-                ? Models::augmentedProportionalNavigation(r, v,
-                      {guidance.targetAccelX[id], guidance.targetAccelY[id],
-                       guidance.targetAccelZ[id]}, N)
+                ? Models::augmentedProportionalNavigation(r, v, {atx, aty, atz}, N)
                 : Models::proportionalNavigation(r, v, N);
 
             if (!sol.valid) {
@@ -162,6 +191,7 @@ namespace StrikeEngine::Kernel {
         const EntityStatusBlock& status,
         const NavigationBlock& nav,
         const SeekerBlock& seeker,
+        const TrackBlock& tracks,
         GuidanceBlock& guidance,
         ControlBlock& control,
         double dt)
@@ -225,7 +255,7 @@ namespace StrikeEngine::Kernel {
                 LawResult out = apn;
                 if (phase == GuidancePhase::Acquisition) {
                     // Blend midcourse PN -> terminal APN (deterministic ramp).
-                    const LawResult pn = computeMidcourse(i, nav, guidance);
+                    const LawResult pn = computeMidcourse(i, nav, &tracks, guidance);
                     const double w = guidance.handoffWeight[i];
                     out.ax = (1.0 - w) * (pn.valid ? pn.ax : 0.0) + w * apn.ax;
                     out.ay = (1.0 - w) * (pn.valid ? pn.ay : 0.0) + w * apn.ay;
@@ -289,7 +319,7 @@ namespace StrikeEngine::Kernel {
                 law = (guidance.apnFeedforwardEnabled[i] &&
                        guidance.targetAccelAvailable[i])
                     ? GuidanceLaw::AugmentedProNav : GuidanceLaw::PureProNav;
-                applyDemand(i, computeMidcourse(i, nav, guidance), guidance);
+                applyDemand(i, computeMidcourse(i, nav, &tracks, guidance), guidance);
             } else if (mode == GuidanceMode::Waypoint) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Waypoint;

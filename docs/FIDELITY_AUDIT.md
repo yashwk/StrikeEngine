@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-29<br>
 **Runtime checkpoint:** `0a1bfef`<br>
-**Validation result:** Release build, **35/35 CTest tests passed**
+**Validation result:** Release build, **36/36 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -63,6 +63,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W36 — Configured PN authority | Implemented / MVP | `guidance_test`; kernel PN applies each entity's configured navigation constant rather than the model default |
 | W37 — Seeker APN frame mapping | Implemented / MVP | `guidance_test`, `designer_pipeline_test`; azimuth/elevation LOS rates map to the X-forward/Y-right/Z-down body frame, restoring the original 120 m/s² scenario and reducing miss from 52.5 m to 9.7 m |
 | W38 — Mode-aware guidance stack + seeker intercept | Implemented | `guidance_test` (head-on/crossing/non-closing/feed-forward-availability/blend ramp/body-signs/retention+reacquisition/waypoint law+nanner/command inputs), `seeker_intercept_test` (two explicit missiles, RF acquisition 3.6 km, blend 0.5 s, miss 3.70 m < 15 m lethal, detonation t=7.04 s vs closest approach 7.05 s, target kill, 1 post-pass lock loss reported, deterministic seed `0x5EEDF1A5u`); retention replays the bounded retained terminal command; public target-accel inputs via `SimulationCommand`/scenario `initial_target_accel_*`; `GuidanceLaw::Waypoint` + non-finite hardening; byte-identical legacy when blend=0 |
+| W39 — Persistent target-track manager | Implemented | `track_manager_test`; command+seeker fusion into one per-entity track (identity, pos/vel/optional accel, measurement timestamp + age, quality/covariance model), Acquire->Maintain->Coast->Lost->Reacquire, multi-rate prediction between measurements, track-based midcourse PN aim with legacy external-command fallback, no physics-truth coupling; `seeker_intercept_test` evidence unchanged (3.70 m, lock 5.13 s @ 3606 m, kill 7.04 s) |
 
 ## 3. Subsystem fidelity assessment
 
@@ -79,7 +80,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF, scalar GPS innovation gating and diagnostics | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation or broader sensor fusion |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
-| Guidance | Stateless PN/APN, waypoint, phase/law state machine (Midcourse→Acquisition blend→Terminal, LostTrack recovery), lock-loss retention, APN feed-forward availability, per-entity gains; publishes phase/law/track/limit/invalid/non-closing/tgo diagnostics | **MVP:** no trajectory manager, pursuit, LQR/MPC; blended handoff beyond the seeker acquisition blend remains |
+| Guidance | Stateless PN/APN, waypoint, phase/law state machine (Midcourse→Acquisition blend→Terminal, LostTrack recovery), lock-loss retention, APN feed-forward availability, per-entity gains; publishes phase/law/track/limit/invalid/non-closing/tgo diagnostics; persistent single target-track manager (W39) fused from command seeds + seeker LOS fixes (Acquire→Maintain→Coast→Lost→Reacquire, multi-rate prediction, quality/covariance), track-based midcourse aim with legacy external-command fallback | **MVP:** multi-target tracking deferred; no trajectory manager, pursuit, LQR/MPC; blended handoff beyond the seeker acquisition blend remains |
 | Events and terrain | Local callbacks plus geodetic raster sources, nearest/bilinear status-aware sampling, terrain normals/slope, real local/ECEF impact deactivation and clamping, enriched impact events | **MVP:** GDAL source loading is eager and single-source; no automatic spatial tile discovery/streaming, prefetch, datum/geoid, or probabilistic failure |
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
 | Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
@@ -88,7 +89,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **35/35 tests passed** at the checkpoint above.
+- Release CTest suite green: **36/36 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **9.7 m minimum miss** at t≈11.5 s with a
@@ -148,6 +149,10 @@ and no longer deferred. The mode-aware guidance stack (phase/law state machine,
 acquisition→terminal blend, bounded lock-loss retention, APN feed-forward
 availability + public `SimulationCommand`/scenario target-acceleration inputs,
 waypoint law hardening, per-entity diagnostics) is W38 and no longer deferred.
+The persistent single target-track manager (command + seeker fusion into one
+per-entity track, Acquire/Maintain/Coast/Lost/Reacquire, multi-rate prediction,
+quality/covariance model, track-based midcourse aim with legacy fallback) is W39
+and no longer deferred; multi-target tracking remains deferred.
 Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 `data/rcs`, `data/profiles`, `data/scenarios/intercept_test_01`,
 `data/schemas/seeker_schema.json`) are part of this layer.
@@ -156,7 +161,7 @@ Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 
 The 2026-08-25 pre-restart audit recorded 5/7 workstreams with failures in control
 signs, aero authority, integration, events, seeker fidelity, and navigation; it is
-superseded by W1–W38 above. Historical measurements/commits remain in repository
+superseded by W1–W39 above. Historical measurements/commits remain in repository
 history and are not repeated here.
 
 ## 7. Conclusion

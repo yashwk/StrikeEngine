@@ -115,6 +115,7 @@ int main()
     seeker.targetElevationRate = {0.0};
 
     ControlBlock control;
+    TrackBlock tracks;   // empty: guidance falls back to the external command aim
     GuidanceSystem system;
 
     // --- Midcourse PN with diagnostics -------------------------------------
@@ -123,7 +124,7 @@ int main()
         guidance.mode = {GuidanceMode::ProportionalNavigation};
         guidance.targetX = {1000.0}; guidance.targetY = {0.0}; guidance.targetZ = {0.0};
         guidance.targetVx = {0.0}; guidance.targetVy = {10.0}; guidance.targetVz = {0.0};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(std::abs(guidance.commandedAccelY[0] - 3.5) < 1e-12,
               "kernel PN mode applies the configured navigation constant");
         check(guidance.phase[0] == GuidancePhase::Midcourse &&
@@ -140,7 +141,7 @@ int main()
         GuidanceBlock guidance = makeBlock();
         guidance.mode = {GuidanceMode::ProportionalNavigation};
         guidance.targetX = {-1000.0};  // target behind the interceptor
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.lawInvalid[0] == false && guidance.nonClosing[0],
               "receding target: nonClosing diagnostics set, demand zeroed");
         check(std::abs(guidance.commandedAccelY[0]) < 1e-12,
@@ -152,7 +153,7 @@ int main()
         GuidanceBlock guidance = makeBlock();
         guidance.mode = {GuidanceMode::ProportionalNavigation};
         guidance.targetX = {std::numeric_limits<double>::infinity()};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.lawInvalid[0] && !guidance.nonClosing[0],
               "non-finite target input: lawInvalid set");
     }
@@ -166,7 +167,7 @@ int main()
         guidance.apnFeedforwardEnabled = {true};
         guidance.targetAccelAvailable = {true};
         guidance.targetAccelY = {2.0};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
               "augmented APN: 0.5*N*a_t_perp added when available+enabled");
         check(guidance.law[0] == GuidanceLaw::AugmentedProNav,
@@ -180,7 +181,7 @@ int main()
         g2.apnFeedforwardEnabled = {true};
         g2.targetAccelAvailable = {false};
         g2.targetAccelY = {2.0};
-        system.update(status, nav, seeker, g2, control, 0.01);
+        system.update(status, nav, seeker, tracks, g2, control, 0.01);
         check(std::abs(g2.commandedAccelY[0] - 3.5) < 1e-12 &&
                   g2.law[0] == GuidanceLaw::PureProNav,
               "feed-forward unavailable: pure PN, never reads uninitialized accel");
@@ -198,7 +199,7 @@ int main()
         seeker.targetRangeRate = {-100.0};
         seeker.targetAzimuthRate = {0.02};
         seeker.targetElevationRate = {0.0};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12 &&
                   std::abs(guidance.commandedAccelZ[0]) < 1e-12 &&
                   guidance.phase[0] == GuidancePhase::Terminal &&
@@ -208,7 +209,7 @@ int main()
 
         seeker.targetAzimuthRate = {0.0};
         seeker.targetElevationRate = {0.02};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(std::abs(guidance.commandedAccelY[0]) < 1e-12 &&
                   std::abs(guidance.commandedAccelZ[0] + 7.0) < 1e-12,
               "elevation rate -> upward (-body-Z) APN acceleration");
@@ -228,14 +229,14 @@ int main()
         seeker.targetAzimuthRate = {0.02};
         seeker.targetElevationRate = {0.0};
 
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.phase[0] == GuidancePhase::Acquisition,
               "new lock with blend time starts in Acquisition");
         const double w1 = guidance.handoffWeight[0];
         check(w1 > 0.0 && w1 < 1.0, "blend weight strictly inside (0,1)");
         // 50 steps at dt=0.01 -> weight ramps to 1.0 and phase -> Terminal.
         for (int s = 0; s < 50; ++s) {
-            system.update(status, nav, seeker, guidance, control, 0.01);
+            system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         }
         check(std::abs(guidance.handoffWeight[0] - 1.0) < 1e-12 &&
                   guidance.phase[0] == GuidancePhase::Terminal,
@@ -262,7 +263,7 @@ int main()
         seeker.targetAzimuthRate = {0.02};
         seeker.targetElevationRate = {0.0};
 
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.phase[0] == GuidancePhase::Terminal &&
                   std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
               "locked terminal step commands APN demand");
@@ -270,22 +271,22 @@ int main()
         // Drop the lock: within the retention window the bounded predicted
         // terminal command (the last valid demand) is applied, phase Terminal.
         seeker.isLocked = {false};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.phase[0] == GuidancePhase::Terminal &&
                   guidance.law[0] == GuidanceLaw::SeekerRateAPN &&
                   std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
               "retention window applies the bounded retained terminal command");
         // 18 more unlocked steps reach trackAge 0.19 (inside the 0.2 s window).
         for (int s = 0; s < 18; ++s) {
-            system.update(status, nav, seeker, guidance, control, 0.01);
+            system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         }
         check(guidance.phase[0] == GuidancePhase::Terminal,
               "retention holds across the configured window");
         check(guidance.lockLossCount[0] == 1,
               "lock loss counted exactly once");
         // Two more steps: retention expires -> LostTrack recovery via PN.
-        system.update(status, nav, seeker, guidance, control, 0.01);
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.phase[0] == GuidancePhase::LostTrack &&
                   guidance.law[0] == GuidanceLaw::PureProNav &&
                   std::abs(guidance.commandedAccelY[0] - 3.5) < 1e-12,
@@ -294,12 +295,12 @@ int main()
         // Reacquisition: a fresh lock restarts the blend and reaches Terminal.
         seeker.isLocked = {true};
         guidance.handoffBlendTimeSec = {0.5};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.phase[0] == GuidancePhase::Acquisition &&
                   guidance.handoffWeight[0] > 0.0 && guidance.handoffWeight[0] < 1.0,
               "reacquisition restarts the acquisition blend");
         for (int s = 0; s < 50; ++s) {
-            system.update(status, nav, seeker, guidance, control, 0.01);
+            system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         }
         check(guidance.phase[0] == GuidancePhase::Terminal,
               "reacquisition blend completes to Terminal");
@@ -312,7 +313,7 @@ int main()
         guidance.targetX = {500.0}; guidance.targetY = {0.0}; guidance.targetZ = {0.0};
         seeker.type = {SeekerType::None};
         seeker.isLocked = {false};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.law[0] == GuidanceLaw::Waypoint &&
                   std::abs(guidance.commandedAccelX[0] - 20.0) < 1e-9 &&
                   guidance.phase[0] == GuidancePhase::Midcourse,
@@ -321,7 +322,7 @@ int main()
         GuidanceBlock g2 = makeBlock();
         g2.mode = {GuidanceMode::Waypoint};
         g2.targetX = {std::numeric_limits<double>::infinity()};
-        system.update(status, nav, seeker, g2, control, 0.01);
+        system.update(status, nav, seeker, tracks, g2, control, 0.01);
         check(g2.lawInvalid[0] && std::abs(g2.commandedAccelX[0]) < 1e-12,
               "non-finite waypoint geometry: lawInvalid set, demand zeroed");
     }
@@ -336,7 +337,7 @@ int main()
         seeker.targetRangeRate = {-100.0};
         seeker.targetAzimuthRate = {0.0};
         seeker.targetElevationRate = {0.0};
-        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
         check(guidance.lawInvalid[0] && std::isfinite(guidance.tgoSec[0]) &&
                   std::abs(guidance.commandedAccelY[0]) < 1e-12,
               "non-finite seeker range: lawInvalid set, finite tgo, zero demand");
@@ -353,7 +354,7 @@ int main()
         cmd.targetAccelY = 2.0;
         cmd.targetAccelAvailable = true;
         processor.enqueueCommand(cmd);
-        processor.process(guidance);
+        processor.process(guidance, tracks, 0.0);
         check(guidance.targetAccelY[0] == 2.0 && guidance.targetAccelAvailable[0],
               "SimulationCommand target acceleration reaches the guidance block");
 
@@ -362,7 +363,7 @@ int main()
         cmd2.entityId = 0;
         cmd2.mode = GuidanceMode::ProportionalNavigation;
         processor.enqueueCommand(cmd2);
-        processor.process(g2);
+        processor.process(g2, tracks, 0.0);
         check(!g2.targetAccelAvailable[0] && g2.targetAccelY[0] == 0.0,
               "default command leaves feed-forward explicitly unavailable");
     }

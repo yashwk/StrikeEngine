@@ -42,7 +42,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **35/35 CTest tests passing** in Release.
+Current validated checkpoint: **36/36 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
@@ -141,9 +141,9 @@ Primary class: `StrikeEngine::Kernel::SimulationKernel`.
 
 `reset()` clears SoA blocks, commands, time, free slots, seeker tracking, sensor
 random-walk bias and GPS phase, preserving kernel/backend. `initialize()` resets
-the simulation. `step(dt)` advances truth, then sensors, navigation, seekers,
-guidance, autopilot, finally events; throws `std::invalid_argument` when
-`dt <= 0.0`.
+the simulation. `step(dt)` advances truth, then sensors, navigation, seekers, the
+persistent target-track manager (§7.5), guidance, autopilot, finally events;
+throws `std::invalid_argument` when `dt <= 0.0`.
 
 ### 5.2 Vehicle initialization and configuration
 
@@ -170,7 +170,9 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
   `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
   `servoTimeConstantSec`, `maxServoRateRadPerSec`. W38 phase/track keys
   `handoffBlendTimeSec` (default 0), `lockLossRetentionSec` (default 0), and
-  `apnFeedforwardEnabled` (default false) are optional (§7.4).
+  `apnFeedforwardEnabled` (default false) are optional (§7.4). W39 track-manager
+  keys `trackConfirmations` (default 3), `trackCoastTimeoutSec` (default 0.5),
+  and `trackLossTimeoutSec` (default 2.0) are optional (§7.5).
 - `WarheadConfig`: `massKg`, `FusingType` (`Impact`/`Proximity`/`Timed`),
   `proximityTriggerM`, `timedDelaySec`, `lethalRadiusM`, optional `falloffRadiusM`
   (0.0 default = flat lethal-radius law; §8).
@@ -195,10 +197,15 @@ mass/inertia, and RCS/IR/emitter signature fields are NOT profile-resolved.
 ### 5.3 Commands and guidance state
 
 `SimulationCommand` supplies guidance mode (a `GuidanceMode`), target
-position/velocity, and an optional max-accel demand. Modes: `None` (ballistic),
+position/velocity, an optional max-accel demand, and an optional `targetId`
+(int64; `-1` = unknown identity) that seeds/refreshes the W39 persistent target
+track (§7.5, §5.5). Modes: `None` (ballistic),
 `ProportionalNavigation` (relative-position/velocity PN), `Waypoint` (static
 point). Queue applied on next step. `ControlBlock::thrustCommand` exists but is
 not a throttle interface; callers MUST NOT expect it to change motor output.
+A scenario entity may seed identity via the optional `initial_target_id`
+(`ScenarioEntityConfig`, default `-1`) which flows into `SimulationCommand::
+targetId` on the initial guidance command (§5.5).
 
 ### 5.4 Environment callbacks
 
@@ -476,6 +483,16 @@ guidance input, a zero/negative closing (`N ≤ 0`, `Vc ≤ 0`) marks the demand
 `lawInvalid`/`nonClosing` rather than emitting a spurious vector. Waypoint mode
 reports `GuidanceLaw::Waypoint` and validates non-finite geometry the same way.
 
+Midcourse PN consumes the persistent target track (§7.5) when it is
+measurement-anchored (state active AND `updateCount > 0`), using the track's
+world-frame position/velocity in preference to the raw external command aim; the
+APN target-acceleration feed-forward then comes from the track when
+`accelAvailable` and finite. When the track is inactive, lost, or absent (state
+`None`/`Lost`, or `updateCount == 0`), midcourse PN falls back to the external
+command state (`SimulationCommand`/scenario) exactly as before — the legacy
+behavior is preserved byte-for-byte. Guidance NEVER reads physics truth: all aim
+states come from the navigation estimate plus either the command or the track.
+
 Guidance publishes per-entity diagnostics on `GuidanceBlock`: `phase`, `law`,
 `trackId` (−1 none), `trackAgeSec`, `handoffWeight`, `lockLossCount`,
 `rawAccelX/Y/Z` (pre-clamp demand), `limitedByMaxAccel` (demand clamp),
@@ -496,9 +513,69 @@ scenarios that omit the three keys still load.
 Constants per entity, read from config at creation: `navigationConstant`,
 `waypointGain`, gains (`kAccelP/kRateP/kAlphaP/kRollP/kRollD`), `maxDeflectionRad`
 (fin clamp, default 0.43 rad). Read from per-entity blocks, not class constants.
-Planned, not supported: trajectory management, pursuit, LQR/MPC, imaging IR,
-multi-target tracking, dynamic SARH illuminator tracking. (`Acquisition->Terminal`
-blended handoff is implemented and config-backed; see §7.4.)
+The `Acquisition->Terminal` seeker handoff blend is implemented and
+config-backed (§7.4). Planned, not supported: trajectory management, pursuit,
+LQR/MPC, imaging IR, multi-target tracking, dynamic SARH illuminator tracking.
+
+### 7.5 Persistent target-track manager (W39)
+
+`SimulationKernel::step()` runs the target-track manager (step 3.75) AFTER
+seekers and BEFORE guidance (§7.4). It fuses external command seeds
+(`SimulationCommand`, §5.3) and seeker LOS measurements into one PER-ENTITY track
+consumed by guidance. This is a SINGLE persistent track per seeker entity — NOT
+multi-target tracking (that remains planned, §7.4).
+
+Per-entity state lives in `TrackBlock` (`include/strikeengine/kernel/data/
+TrackBlock.hpp`):
+
+- `TrackState` enum: `None` (no track) / `Acquire` / `Maintain` / `Coast` /
+  `Lost` / `Reacquire`; `active()` is true for every state except `None`/`Lost`.
+- identity `trackId` (int64; `-1` = unknown).
+- world-frame `posX/Y/Z`, `velX/Y/Z`, `accelX/Y/Z` + `accelAvailable` (optional
+  target acceleration, from the command seed only).
+- `timestampSec` (sim time of the last measurement/seed) and `ageSec` (time since
+  it).
+- `positionStdM` / `velocityStdMs` (growing uncertainty model) and `quality01`
+  (exponential decay).
+- `updateCount` / `dropoutCount` (consecutive measurement updates / steps without
+  one), plus `measPosX/Y/Z` / `measTimeSec` (previous fix, for finite-difference
+  velocity).
+
+Lifecycle (deterministic, per entity):
+
+1. A `SimulationCommand` seeds the track into `Acquire` with the command
+   identity/position/velocity/optional acceleration; a scenario can seed identity
+   via `initial_target_id` (§5.3, §5.5).
+2. A seeker LOS fix converts body LOS angles to a world-frame estimate through
+   the navigation estimate (LOS body angles → body LOS via the aerospace
+   X-forward/Y-right/Z-down convention → world via the nav quaternion;
+   measured position = nav position + LOS_world × range; velocity = finite
+   difference between consecutive fixes — NEVER physics truth). A re-lock on a
+   different target starts a fresh track.
+3. After `trackConfirmations` (default 3) consistent measurement updates the
+   state promotes `Acquire → Maintain` (`updateCount` resets to 1 on the first
+   fix, then increments per consistent fix).
+4. No measurement for `trackCoastTimeoutSec` (0.5 s) moves `Maintain`/`Acquire` →
+   `Coast`; while coasting (or between measurements) the track predicts
+   kinematically at the simulation rate (`pos += vel·dt`; `vel += accel·dt` when
+   `accelAvailable`).
+5. No measurement for `trackLossTimeoutSec` (2.0 s) moves `Coast → Lost` (the
+   track leaves guidance consumption; the external command becomes the aim).
+6. A new fix on `Coast`/`Lost` moves the track `→ Reacquire`, then `→ Maintain`
+   after the confirmation count is satisfied again.
+
+Track-quality model (deterministic, updated each step with no measurement while
+active): `quality01 = exp(−age/1.0)` (tau 1 s); `positionStdM = 5 + 25·age`;
+`velocityStdMs = 25 + 50·age`. A new measurement resets them to the single-fix
+bases (quality 1.0, position 5 m, velocity 25 m/s) and resets `ageSec`/
+`dropoutCount`.
+
+Per-entity config, exposed as optional camelCase `GuidanceAutopilotConfig` keys
+with legacy-compatible defaults (omitted keys load the defaults and legacy
+manifests keep the external-command aim): `trackConfirmations` (3, int),
+`trackCoastTimeoutSec` (0.5), `trackLossTimeoutSec` (2.0). Guidance consumes the
+track as described in §7.4 (measurement-anchored track aim with legacy external-
+command fallback; APN feed-forward from the track when available).
 
 ## 8. Events and simulation tools
 
@@ -572,7 +649,11 @@ scenario serialization; per-entity sensor enablement; multi-stage staging +
 separation; warhead fusing (impact/proximity/timed); traceable mode-aware
 guidance (phase/law state machine, acquisition blend, lock-loss retention,
 APN feed-forward availability, per-entity diagnostics) and seeker-intercept
-regression (`seeker_intercept_test`); designer manifests
+regression (`seeker_intercept_test`); persistent single target-track manager
+(W39, §7.5: per-entity track fusing command seeds + seeker LOS fixes,
+Acquire/Maintain/Coast/Lost/Reacquire lifecycle, multi-rate prediction,
+quality/covariance model, track-based midcourse aim with legacy fallback);
+designer manifests
 (`data/profiles`) and scenarios (`data/scenarios`) consumed end-to-end via
 `designer_pipeline_test`; profile-id database layer (aero/motor/seeker/sensor/
 RCS); data-driven static cd(M,α)/cl(M,α)/cm(M,α)/cy(M,β)/cn(M,β)/cl(M,β)
