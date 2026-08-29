@@ -89,6 +89,14 @@ GuidanceBlock makeGuidance()
     g.nonClosing = {false};
     g.tgoSec = {0.0};
     g.retainedAccelX = {0.0}; g.retainedAccelY = {0.0}; g.retainedAccelZ = {0.0};
+    g.trajectoryMinSpeedMps = {30.0};
+    g.trajectoryFeasibilityAccelFactor = {0.95};
+    g.predictedInterceptX = {0.0}; g.predictedInterceptY = {0.0}; g.predictedInterceptZ = {0.0};
+    g.predictedTgoSec = {0.0};
+    g.trajectoryRequiredAccel = {0.0};
+    g.trajectoryAimSource = {GuidanceAimSource::None};
+    g.trajectoryFeasible = {false};
+    g.trajectoryReason = {TrajectoryReason::None};
     return g;
 }
 

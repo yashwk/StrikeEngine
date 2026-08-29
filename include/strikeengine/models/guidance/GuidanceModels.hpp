@@ -98,4 +98,140 @@ namespace StrikeEngine::Models {
         return solution;
     }
 
+    /**
+     * @brief W40 constant-velocity intercept prediction (trajectory core).
+     *
+     * Solves for the earliest positive-time intercept of an interceptor
+     * flying at constant speed toward a (optionally constant-acceleration)
+     * target, returns the predicted intercept point (PIP), time-to-go, the
+     * required acceleration (PN demand magnitude aimed at the PIP), and a
+     * status. All inputs are world-frame; the caller supplies navigation
+     * estimates and a command/track aim state (guidance never reads physics
+     * truth). Deterministic and non-finite-safe.
+     *
+     * Geometry: r = targetPos - interceptorPos, v = targetVel - interceptorVel.
+     * Constant-speed intercept satisfies ||r + v*t||^2 = |Vi|^2 * t^2, a
+     * quadratic in t; the smallest positive root is tgo. PIP = T + Vt*tgo
+     * (+ 0.5*At*tgo^2 when targetAccelAvailable). requiredAccel is the PN
+     * demand toward the PIP evaluated at the intercept-time closing velocity.
+     */
+    enum class InterceptStatus : uint8_t {
+        Ok,          // valid predicted intercept (out.valid == true)
+        VelocityLow, // interceptor est speed below minSpeedMps
+        NoIntercept, // no positive-time constant-velocity intercept (or no
+                     // valid closing PN toward the PIP)
+        NonFinite    // non-finite input / non-positive navigation constant
+    };
+
+    struct InterceptResult {
+        Vec3 pip{0.0, 0.0, 0.0};
+        double tgoSec = 0.0;
+        double requiredAccel = 0.0; // |PN demand| toward the PIP (m/s^2)
+        InterceptStatus status = InterceptStatus::NoIntercept;
+        bool valid = false;         // true only when status == Ok
+    };
+
+    inline Vec3 vec3Scale(const Vec3& v, double s)
+    {
+        return {v[0] * s, v[1] * s, v[2] * s};
+    }
+
+    inline Vec3 vec3Add(const Vec3& a, const Vec3& b)
+    {
+        return {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
+    }
+
+    inline Vec3 vec3Sub(const Vec3& a, const Vec3& b)
+    {
+        return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+    }
+
+    inline InterceptResult predictIntercept(
+        const Vec3& interceptorPos,
+        const Vec3& interceptorVel,
+        const Vec3& targetPos,
+        const Vec3& targetVel,
+        const Vec3& targetAccel,
+        bool targetAccelAvailable,
+        double navigationConstant,
+        double minSpeedMps)
+    {
+        InterceptResult out;
+
+        auto finite3 = [](const Vec3& v) {
+            return std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]);
+        };
+
+        if (!finite3(interceptorPos) || !finite3(interceptorVel) ||
+            !finite3(targetPos) || !finite3(targetVel) ||
+            (targetAccelAvailable && !finite3(targetAccel)) ||
+            !std::isfinite(navigationConstant) || navigationConstant <= 0.0 ||
+            !std::isfinite(minSpeedMps) || minSpeedMps < 0.0)
+        {
+            out.status = InterceptStatus::NonFinite;
+            return out;
+        }
+
+        const Vec3 r = vec3Sub(targetPos, interceptorPos);
+        const Vec3 v = vec3Sub(targetVel, interceptorVel);
+        if (!finite3(r) || !finite3(v)) {
+            out.status = InterceptStatus::NonFinite;
+            return out;
+        }
+
+        const double vi2 = dot(interceptorVel, interceptorVel);
+        const double vi = std::sqrt(vi2);
+        if (vi < minSpeedMps) {
+            out.status = InterceptStatus::VelocityLow;
+            return out;
+        }
+
+        // Quadratic: (|v|^2 - |Vi|^2) t^2 + 2 (r.v) t + |r|^2 = 0
+        const double a = dot(v, v) - vi2;
+        const double b = 2.0 * dot(r, v);
+        const double c = dot(r, r);
+        double tStar = -1.0;
+        if (std::abs(a) < 1e-12) {
+            // Degenerate |v| ~= |Vi|: linear  b t + c = 0 requires b < 0.
+            if (b < -1e-12) tStar = -c / b;
+        } else {
+            const double disc = b * b - 4.0 * a * c;
+            if (disc >= 0.0 && std::isfinite(disc)) {
+                const double sq = std::sqrt(disc);
+                const double t1 = (-b - sq) / (2.0 * a);
+                const double t2 = (-b + sq) / (2.0 * a);
+                if (t1 > 0.0) tStar = t1;
+                if (t2 > 0.0 && (tStar < 0.0 || t2 < tStar)) tStar = t2;
+            }
+        }
+        if (!(tStar > 0.0) || !std::isfinite(tStar)) {
+            out.status = InterceptStatus::NoIntercept;
+            return out;
+        }
+
+        const Vec3 at = targetAccelAvailable ? targetAccel : Vec3{0.0, 0.0, 0.0};
+        const Vec3 pip = {
+            targetPos[0] + targetVel[0] * tStar + 0.5 * at[0] * tStar * tStar,
+            targetPos[1] + targetVel[1] * tStar + 0.5 * at[1] * tStar * tStar,
+            targetPos[2] + targetVel[2] * tStar + 0.5 * at[2] * tStar * tStar};
+        const Vec3 vClose = {
+            (targetVel[0] + at[0] * tStar) - interceptorVel[0],
+            (targetVel[1] + at[1] * tStar) - interceptorVel[1],
+            (targetVel[2] + at[2] * tStar) - interceptorVel[2]};
+
+        const GuidanceSolution sol = proportionalNavigation(
+            vec3Sub(pip, interceptorPos), vClose, navigationConstant);
+        if (!sol.valid) {
+            out.status = InterceptStatus::NoIntercept;
+            return out;
+        }
+
+        out.pip = pip;
+        out.tgoSec = tStar;
+        out.requiredAccel = std::sqrt(dot(sol.acceleration, sol.acceleration));
+        out.status = InterceptStatus::Ok;
+        out.valid = true;
+        return out;
+    }
+
 } // namespace StrikeEngine::Models

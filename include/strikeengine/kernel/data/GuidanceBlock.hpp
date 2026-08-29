@@ -7,7 +7,8 @@ namespace StrikeEngine::Kernel {
     enum class GuidanceMode : uint8_t {
         None,                   // Ballistic or Uncontrolled
         ProportionalNavigation, // ProNav interception
-        Waypoint                // Navigating to static point
+        Waypoint,               // Navigating to static point
+        Trajectory              // W40 predictive intercept management (midcourse)
     };
 
     // Explicit guidance-phase state (W36). Phase selection is separate from
@@ -26,7 +27,25 @@ namespace StrikeEngine::Kernel {
         Waypoint,       // point-seeking proportional-to-range law
         PureProNav,     // N * Vc * (LOS-rate cross LOS)
         SeekerRateAPN,  // body-frame LOS-rate APN (seeker)
-        AugmentedProNav // PN + target-acceleration feed-forward (0.5*N*a_t_perp)
+        AugmentedProNav,// PN + target-acceleration feed-forward (0.5*N*a_t_perp)
+        Trajectory      // W40 PN aimed at a predicted intercept point
+    };
+
+    // Aim source for the W40 trajectory predictor (diagnostic).
+    enum class GuidanceAimSource : uint8_t {
+        None,    // no aim selected (ballistic / not in Trajectory mode)
+        Command, // external command state (SimulationCommand / scenario)
+        Track    // measurement-anchored persistent target track (W39)
+    };
+
+    // W40 trajectory-feasibility reason (diagnostic).
+    enum class TrajectoryReason : uint8_t {
+        None,          // no prediction evaluated this step
+        Ok,            // predicted intercept is feasible
+        VelocityLow,   // own est speed below trajectoryMinSpeedMps
+        NoIntercept,   // no positive-time constant-velocity intercept exists
+        AccelLimited,  // required acceleration exceeds the maxAccel budget
+        NonFinite      // non-finite input / navigation constant
     };
 
     struct GuidanceBlock {
@@ -62,6 +81,11 @@ namespace StrikeEngine::Kernel {
         std::vector<double> lockLossRetentionSec;  // guidance-layer track retention past lock loss; 0 = none
         std::vector<bool>   apnFeedforwardEnabled; // APN target-accel feed-forward (needs targetAccelAvailable)
 
+        // W40 trajectory-core configuration (active only in Trajectory mode;
+        // defaults preserve the legacy midcourse path for all other modes).
+        std::vector<double> trajectoryMinSpeedMps;          // own est-speed floor for an intercept prediction (default 30.0)
+        std::vector<double> trajectoryFeasibilityAccelFactor; // feasibility: requiredAccel <= factor * maxAccel when maxAccel > 0 (0.95)
+
         // Output: Required acceleration command
         std::vector<double> commandedAccelX;
         std::vector<double> commandedAccelY;
@@ -89,6 +113,16 @@ namespace StrikeEngine::Kernel {
         std::vector<double> retainedAccelX;
         std::vector<double> retainedAccelY;
         std::vector<double> retainedAccelZ;
+
+        // W40 trajectory prediction + feasibility diagnostics (midcourse).
+        std::vector<double> predictedInterceptX;  // predicted intercept point (world frame)
+        std::vector<double> predictedInterceptY;
+        std::vector<double> predictedInterceptZ;
+        std::vector<double> predictedTgoSec;      // time to the predicted intercept (0 = none)
+        std::vector<double> trajectoryRequiredAccel; // |PN demand| aimed at the PIP (m/s^2)
+        std::vector<GuidanceAimSource> trajectoryAimSource; // Track/Command/None
+        std::vector<bool>   trajectoryFeasible;   // predicted intercept fits the accel budget
+        std::vector<TrajectoryReason> trajectoryReason;
     };
 
 } // namespace StrikeEngine::Kernel

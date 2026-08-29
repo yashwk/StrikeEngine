@@ -78,6 +78,7 @@ std::string guidanceModeToString(GuidanceMode m) {
         case GuidanceMode::None: return "none";
         case GuidanceMode::ProportionalNavigation: return "proportional_navigation";
         case GuidanceMode::Waypoint: return "waypoint";
+        case GuidanceMode::Trajectory: return "trajectory";
     }
     throw std::runtime_error("ConfigSerialization: unhandled GuidanceMode");
 }
@@ -86,6 +87,7 @@ GuidanceMode guidanceModeFromString(const std::string& s) {
     if (s == "none") return GuidanceMode::None;
     if (s == "proportional_navigation") return GuidanceMode::ProportionalNavigation;
     if (s == "waypoint") return GuidanceMode::Waypoint;
+    if (s == "trajectory") return GuidanceMode::Trajectory;
     throw std::runtime_error("ConfigSerialization: unknown GuidanceMode string '" + s + "'");
 }
 
@@ -333,6 +335,9 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["trackConfirmations"] = g.trackConfirmations;
     j["trackCoastTimeoutSec"] = g.trackCoastTimeoutSec;
     j["trackLossTimeoutSec"] = g.trackLossTimeoutSec;
+    // W40 trajectory-core keys (optional with defaults).
+    j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
+    j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
 }
 
 void from_json(const json& j, GuidanceAutopilotConfig& g) {
@@ -352,6 +357,8 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackConfirmations = j.value("trackConfirmations", 3);
     g.trackCoastTimeoutSec = j.value("trackCoastTimeoutSec", 0.5);
     g.trackLossTimeoutSec = j.value("trackLossTimeoutSec", 2.0);
+    g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
+    g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
 }
 
 // --- StageConfig / PropulsionConfig ----------------------------------------

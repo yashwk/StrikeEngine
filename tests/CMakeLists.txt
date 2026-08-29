@@ -77,6 +77,9 @@ target_compile_definitions(seeker_intercept_test PRIVATE
 add_executable(track_manager_test validation/track_manager_test.cpp)
 target_link_libraries(track_manager_test PRIVATE strikeengine)
 
+add_executable(trajectory_test validation/trajectory_test.cpp)
+target_link_libraries(trajectory_test PRIVATE strikeengine)
+
 add_executable(scenario_test validation/scenario_test.cpp)
 target_link_libraries(scenario_test PRIVATE strikeengine)
 
@@ -193,6 +196,9 @@ set_tests_properties(seeker_intercept PROPERTIES TIMEOUT 120)
 
 add_test(NAME track_manager COMMAND track_manager_test)
 set_tests_properties(track_manager PROPERTIES TIMEOUT 120)
+
+add_test(NAME trajectory COMMAND trajectory_test)
+set_tests_properties(trajectory PROPERTIES TIMEOUT 120)
 
 add_test(NAME scenario COMMAND scenario_test)
 set_tests_properties(scenario PROPERTIES TIMEOUT 120)

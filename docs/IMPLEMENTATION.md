@@ -207,6 +207,15 @@ carries per-entity `stageIndex`/`stageCount`.
 - `CommandProcessor.cpp`: applies queued `SimulationCommand`s; W39 seeds/refreshes
   `TrackBlock` from the command state (identity via `cmd.targetId`, `-1` unknown;
   scenario `initial_target_id` flows through it).
+- `GuidanceModels.hpp`: `Models::predictIntercept` (W40) — constant-speed intercept
+  predictor (PIP + tgo + required accel), `InterceptStatus`
+  (`Ok`/`VelocityLow`/`NoIntercept`/`NonFinite`), deterministic + non-finite-safe.
+- `GuidanceSystem.cpp`: `GuidanceMode::Trajectory` midcourse path — aim-source
+  precedence (measurement-anchored track wins, command fallback), feasibility gate
+  `requiredAccel ≤ factor·maxAccel`, PN-on-PIP command with bounded raw-aim
+  fallback, `GuidanceLaw::Trajectory` + `trajectoryReason`/`trajectoryAimSource`/
+  PIP/tgo/required-accel diagnostics; W40 config keys on `GuidanceAutopilotConfig`
+  (`trajectoryMinSpeedMps` 30.0, `trajectoryFeasibilityAccelFactor` 0.95).
 - `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
   + `maxDeflectionRad`; publishes `pitchSaturated`/`yawSaturated`/
   `rollSaturated` fin-clamp diagnostics.
@@ -285,6 +294,7 @@ binary reader implemented; richer telemetry future.
 | `designer_pipeline` | manifest→`designRef`→profile-id→intercept (9.7 m miss) + kill |
 | `seeker_intercept` | two explicit missiles: friendly RF-seeker interceptor (sa_missile_mk1 aero/motor profiles + 12 kW radar, 20° FOV half-angle, 65° gimbal, 0.5 s acquisition blend, proximity warhead 20/15/25 m) vs hostile coasting target missile (target_missile_rcs.json, 0.25 m² flat RCS); midcourse PN on explicit state, RF acquisition via radar equation + RCS + allegiance (no fake lock), phase sequence Midcourse→Acquisition→Terminal asserted, terminal APN, detonation + kill; seed `0x5EEDF1A5u` |
 | `track_manager` | W39 persistent target-track lifecycle: external command seed (identity/pos/vel/accel/timestamp); seeker LOS fix → world-frame estimate via nav (no truth coupling) + finite-difference velocity; Acquire→Maintain after `trackConfirmations` fixes; coast prediction at the sim rate (pos advances vel·dt); quality decay (exp tau 1 s) + uncertainty growth (5+25·age, 25+50·age); Maintain→Coast→Lost timing; Reacquire→Maintain; guidance handoff (PN on the track when measurement-anchored, fallback to external command when Lost) and the three config keys; extended `GuidanceSystem::update(const TrackBlock&)` signature |
+| `trajectory` | W40 trajectory-aware midcourse guidance: `predictIntercept` closed-form math (head-on/crossing PIP + tgo + required accel, target-accel term, VelocityLow/NoIntercept/NonFinite); Trajectory mode law/phase + track/command aim-source precedence; PIP/tgo/required-accel diagnostics; feasibility budget (AccelLimited + maxAccel clamp); command fallback on Lost/bare-seed; dropout Maintain→Coast (streamed track predictions) → Lost (command aim) → re-lock Reacquire→Maintain (track aim restored); seeker-lock precedence (terminal APN override + cleared trajectory diagnostics); legacy PN parity; bit-identical determinism |
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
@@ -326,6 +336,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W37 | seeker APN azimuth/elevation rate mapping corrected for the X-forward/Y-right/Z-down body frame (`guidance_test`); original 120 m/s² pipeline scenario restored, 9.7 m miss | current |
 | W38 | traceable mode-aware guidance stack (phases, blend, bounded lock-loss retention replays the retained terminal command, diagnostics, APN feed-forward availability + public command/scenario target-accel inputs, `GuidanceLaw::Waypoint` + non-finite hardening) + seeker intercept regression (`seeker_intercept_test`, `guidance_test`) | current |
 | W39 | persistent target-track manager (acquire/maintain/coast/lost/reacquire, identity, quality/covariance model, multi-rate prediction, command+seeker fusion, track-based midcourse aim with legacy fallback) (`track_manager_test`, `seeker_intercept_test`) | current |
+| W40 | trajectory-aware midcourse guidance: explicit `GuidanceMode::Trajectory`, constant-speed intercept predictor (PIP + tgo + required accel) over the track/command aim, `maxAccel`-budget feasibility gate (`trajectoryReason`/`trajectoryAimSource` diagnostics), dropout/reacquisition response, midcourse-only with seeker-lock override preserved, legacy byte-identical when unselected (`trajectory_test`, `guidance_test`, `track_manager_test`, `seeker_intercept_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -356,10 +367,12 @@ Tracked so these are not mistaken for missing docs or current guarantees:
 - **Navigation/sensing:** sensor fusion, magnetometer, barometer, radar altimeter,
   richer timing/calibration. (Lever arms, coning/sculling, earth-rate gyro done —
   MVP; SPEC §7.1–7.2.)
-- **Guidance/control/seekers:** trajectory/waypoint/energy managers, pursuit,
-  LQR/MPC, seeker management + blended handoff, imaging IR, dynamic SARH
-  illuminator tracking, multi-target tracking, band-resolved extinction. (SARH,
-  PassiveRF, Beer-Lambert IR, chaff/flare done — MVP.)
+- **Guidance/control/seekers:** trajectory **optimization** and energy/waypoint
+  managers, energy-aware shaping (W40 implemented the trajectory-core predictor +
+  feasibility gate only), pursuit, LQR/MPC, seeker management + blended handoff,
+  imaging IR, dynamic SARH illuminator tracking, multi-target tracking,
+  band-resolved extinction. (SARH, PassiveRF, Beer-Lambert IR, chaff/flare done —
+  MVP.)
 - **Execution/platforms:** parallel CPU, validated Vulkan/CPU parity, GPU ECEF,
   CUDA (if required).
 - **Tools/integration:** richer telemetry schemas, versioned schema evolution,
@@ -374,7 +387,7 @@ streaming, tile prefetch, datum/geoid, and higher-fidelity polar coverage;
 probabilistic failure degradation/partial
 health/repair (deterministic flags done, MVP); GNC depth (imaging IR, multi-target,
 dynamic illuminator, band-resolved extinction, multi-rate timestamp
-interpolation); guidance/aero depth (trajectory management, pursuit, LQR/MPC,
+interpolation); guidance/aero depth (trajectory optimization/energy management, pursuit, LQR/MPC,
 blended handoff, CFD validation, Reynolds/nonlinear aero — static coefficient
 tables done); GPU parity (validate Vulkan
 vs CPU, GPU ECEF, CUDA if required); explicit versioned StrikeSim/StrikeDesigner/

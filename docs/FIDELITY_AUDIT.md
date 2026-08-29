@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-29<br>
 **Runtime checkpoint:** `1645355`<br>
-**Validation result:** Release build, **36/36 CTest tests passed**
+**Validation result:** Release build, **37/37 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -64,6 +64,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W37 — Seeker APN frame mapping | Implemented / MVP | `guidance_test`, `designer_pipeline_test`; azimuth/elevation LOS rates map to the X-forward/Y-right/Z-down body frame, restoring the original 120 m/s² scenario and reducing miss from 52.5 m to 9.7 m |
 | W38 — Mode-aware guidance stack + seeker intercept | Implemented | `guidance_test` (head-on/crossing/non-closing/feed-forward-availability/blend ramp/body-signs/retention+reacquisition/waypoint law+nanner/command inputs), `seeker_intercept_test` (two explicit missiles, RF acquisition 3.6 km, blend 0.5 s, miss 3.70 m < 15 m lethal, detonation t=7.04 s vs closest approach 7.05 s, target kill, 1 post-pass lock loss reported, deterministic seed `0x5EEDF1A5u`); retention replays the bounded retained terminal command; public target-accel inputs via `SimulationCommand`/scenario `initial_target_accel_*`; `GuidanceLaw::Waypoint` + non-finite hardening; byte-identical legacy when blend=0 |
 | W39 — Persistent target-track manager | Implemented | `track_manager_test`; command+seeker fusion into one per-entity track (identity, pos/vel/optional accel, measurement timestamp + age, quality/covariance model), Acquire->Maintain->Coast->Lost->Reacquire, multi-rate prediction between measurements, track-based midcourse PN aim with legacy external-command fallback, no physics-truth coupling; `seeker_intercept_test` evidence unchanged (3.70 m, lock 5.13 s @ 3606 m, kill 7.04 s) |
+| W40 — Trajectory-aware midcourse guidance | Implemented / MVP | `trajectory_test`; explicit `GuidanceMode::Trajectory` (midcourse-only; seeker lock still overrides to terminal APN); `Models::predictIntercept` constant-speed intercept predictor (PIP + tgo + required-accel, target-accel term, VelocityLow/NoIntercept/NonFinite); track/command aim-source precedence with Coast-prediction streaming and Lost/bare-seed command fallback; `maxAccel`-budget feasibility gate (`trajectoryReason` AccelLimited + clamp); `GuidanceBlock` PIP/tgo/required-accel/aim-source/reason diagnostics; legacy PN/Waypoint/None and `seeker_intercept_test` evidence byte-identical; deterministic (bit-identical repeats); predictor has no drag/thrust model and energy management remains deferred (W41) |
 
 ## 3. Subsystem fidelity assessment
 
@@ -80,7 +81,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF, scalar GPS innovation gating and diagnostics | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation or broader sensor fusion |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
-| Guidance | Stateless PN/APN, waypoint, phase/law state machine (Midcourse→Acquisition blend→Terminal, LostTrack recovery), lock-loss retention, APN feed-forward availability, per-entity gains; publishes phase/law/track/limit/invalid/non-closing/tgo diagnostics; persistent single target-track manager (W39) fused from command seeds + seeker LOS fixes (Acquire→Maintain→Coast→Lost→Reacquire, multi-rate prediction, quality/covariance), track-based midcourse aim with legacy external-command fallback | **MVP:** multi-target tracking deferred; no trajectory manager, pursuit, LQR/MPC; blended handoff beyond the seeker acquisition blend remains |
+| Guidance | Stateless PN/APN, waypoint, phase/law state machine (Midcourse→Acquisition blend→Terminal, LostTrack recovery), lock-loss retention, APN feed-forward availability, per-entity gains; publishes phase/law/track/limit/invalid/non-closing/tgo diagnostics; persistent single target-track manager (W39) fused from command seeds + seeker LOS fixes (Acquire→Maintain→Coast→Lost→Reacquire, multi-rate prediction, quality/covariance), track-based midcourse aim with legacy external-command fallback; trajectory-aware midcourse guidance (W40) — constant-speed intercept predictor (PIP/tgo/required-accel) over track/command aim, `maxAccel`-budget feasibility gate + `trajectoryReason`/`trajectoryAimSource` diagnostics, midcourse-only with seeker-lock override | **MVP:** multi-target tracking deferred; trajectory optimization and energy management deferred (W41); pursuit, LQR/MPC deferred; blended handoff beyond the seeker acquisition blend remains |
 | Events and terrain | Local callbacks plus geodetic raster sources, nearest/bilinear status-aware sampling, terrain normals/slope, real local/ECEF impact deactivation and clamping, enriched impact events | **MVP:** GDAL source loading is eager and single-source; no automatic spatial tile discovery/streaming, prefetch, datum/geoid, or probabilistic failure |
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
 | Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
@@ -131,8 +132,10 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
    the mode-aware guidance stack (phases, acquisition→terminal blend,
    lock-loss retention, APN feed-forward availability, per-entity diagnostics)
    and seeker intercept are W38 (`guidance_test`, `seeker_intercept_test`);
-   CFD validation, Reynolds/nonlinear aero, trajectory/energy management,
-   pursuit, LQR/MPC, and seeker-management blended handoff remain.
+   trajectory-aware midcourse guidance (predictor + feasibility gate) is W40
+   (`trajectory_test`); CFD validation, Reynolds/nonlinear aero, trajectory
+   optimization/energy management (W41), pursuit, LQR/MPC, and seeker-management
+   blended handoff remain.
 7. **Backend parity:** validate Vulkan vs CPU, GPU ECEF, CUDA if required.
 8. **Application handoffs:** designer→engine contract exercised end-to-end
    (`designer_pipeline_test`); explicit versioned StrikeSim/StrikeDesigner/
@@ -141,7 +144,8 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
 Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling (and
 CFD validation of the moment (cm)/lateral (β) coefficient tables), a full
  GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
-(trajectory/energy/pursuit/LQR/MPC), Vulkan/CPU parity, and automatic multi-tile global
+(trajectory optimization/energy management — W41 — plus pursuit/LQR/MPC), Vulkan/
+CPU parity, and automatic multi-tile global
 terrain discovery/streaming. The
 falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin
 effectiveness, lateral β side-force/stability for angled fins) are implemented
@@ -152,7 +156,11 @@ waypoint law hardening, per-entity diagnostics) is W38 and no longer deferred.
 The persistent single target-track manager (command + seeker fusion into one
 per-entity track, Acquire/Maintain/Coast/Lost/Reacquire, multi-rate prediction,
 quality/covariance model, track-based midcourse aim with legacy fallback) is W39
-and no longer deferred; multi-target tracking remains deferred.
+and no longer deferred; multi-target tracking remains deferred. The
+trajectory-aware midcourse guidance core (W40: constant-speed intercept
+predictor, `maxAccel`-budget feasibility gate, track/command aim-source
+precedence, dropout/reacquisition response) is no longer deferred; trajectory
+optimization and energy management (W41) remain deferred.
 Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 `data/rcs`, `data/profiles`, `data/scenarios/intercept_test_01`,
 `data/schemas/seeker_schema.json`) are part of this layer.

@@ -223,6 +223,16 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.retainedAccelX.push_back(0);
             guidanceBlock.retainedAccelY.push_back(0);
             guidanceBlock.retainedAccelZ.push_back(0);
+            guidanceBlock.trajectoryMinSpeedMps.push_back(30.0);
+            guidanceBlock.trajectoryFeasibilityAccelFactor.push_back(0.95);
+            guidanceBlock.predictedInterceptX.push_back(0);
+            guidanceBlock.predictedInterceptY.push_back(0);
+            guidanceBlock.predictedInterceptZ.push_back(0);
+            guidanceBlock.predictedTgoSec.push_back(0.0);
+            guidanceBlock.trajectoryRequiredAccel.push_back(0.0);
+            guidanceBlock.trajectoryAimSource.push_back(GuidanceAimSource::None);
+            guidanceBlock.trajectoryFeasible.push_back(false);
+            guidanceBlock.trajectoryReason.push_back(TrajectoryReason::None);
 
             statusBlock.type.push_back(EntityType::Missile);
             statusBlock.allegiance.push_back(Allegiance::Friendly);
@@ -353,6 +363,17 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.retainedAccelX[id] = 0;
         guidanceBlock.retainedAccelY[id] = 0;
         guidanceBlock.retainedAccelZ[id] = 0;
+        // W40 trajectory-core config + state/diagnostics reset (fresh and reused).
+        guidanceBlock.trajectoryMinSpeedMps[id] = config.guidanceAutopilot.trajectoryMinSpeedMps;
+        guidanceBlock.trajectoryFeasibilityAccelFactor[id] = config.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
+        guidanceBlock.predictedInterceptX[id] = 0;
+        guidanceBlock.predictedInterceptY[id] = 0;
+        guidanceBlock.predictedInterceptZ[id] = 0;
+        guidanceBlock.predictedTgoSec[id] = 0.0;
+        guidanceBlock.trajectoryRequiredAccel[id] = 0.0;
+        guidanceBlock.trajectoryAimSource[id] = GuidanceAimSource::None;
+        guidanceBlock.trajectoryFeasible[id] = false;
+        guidanceBlock.trajectoryReason[id] = TrajectoryReason::None;
 
         controlBlock.pitchSaturated[id] = false;
         controlBlock.yawSaturated[id] = false;

@@ -465,7 +465,7 @@ Autopilot translates world accel into bounded body fin demands.
 Phase selection is separated from law computation (§W38). Per entity the
 guidance system tracks an explicit `GuidancePhase`
 (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and a `GuidanceLaw`
-(`None`/`Waypoint`/`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`). A seeker lock moves the
+(`None`/`Waypoint`/`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`/`Trajectory`). A seeker lock moves the
 state `Midcourse → Acquisition → Terminal`: during `Acquisition` the terminal
 APN weight `handoffWeight` ramps 0 → 1 over the configured
 `handoffBlendTimeSec` (0 = the legacy instant override), blending midcourse PN
@@ -514,8 +514,10 @@ Constants per entity, read from config at creation: `navigationConstant`,
 `waypointGain`, gains (`kAccelP/kRateP/kAlphaP/kRollP/kRollD`), `maxDeflectionRad`
 (fin clamp, default 0.43 rad). Read from per-entity blocks, not class constants.
 The `Acquisition->Terminal` seeker handoff blend is implemented and
-config-backed (§7.4). Planned, not supported: trajectory management, pursuit,
-LQR/MPC, imaging IR, multi-target tracking, dynamic SARH illuminator tracking.
+config-backed (§7.4). Trajectory-aware midcourse management is implemented
+(§7.6). Planned, not supported: trajectory optimization/energy management,
+pursuit, LQR/MPC, imaging IR, multi-target tracking, dynamic SARH illuminator
+tracking.
 
 ### 7.5 Persistent target-track manager (W39)
 
@@ -576,6 +578,58 @@ manifests keep the external-command aim): `trackConfirmations` (3, int),
 `trackCoastTimeoutSec` (0.5), `trackLossTimeoutSec` (2.0). Guidance consumes the
 track as described in §7.4 (measurement-anchored track aim with legacy external-
 command fallback; APN feed-forward from the track when available).
+
+### 7.6 Trajectory-aware midcourse guidance (W40)
+
+`GuidanceMode::Trajectory` is an explicit, opt-in midcourse capability that
+manages the prediction and feasibility of an intercept over the aim state
+(command or the W39 track) instead of only steering toward the raw aim. It
+consumes the SAME inputs as midcourse PN (navigation estimate + command/track,
+never physics truth), nests inside the existing phase manager
+(`Midcourse`/`LostTrack`), and does not change terminal behavior: a seeker lock
+still moves `Midcourse → Acquisition → Terminal` and overrides trajectory
+management exactly as it overrides `ProportionalNavigation` (§7.4). When the
+mode is not selected, guidance is byte-identical to the legacy path.
+
+Prediction model (deterministic, in `models/guidance/GuidanceModels.hpp`):
+`predictIntercept` solves the constant-speed intercept
+`‖r + v·t‖² = |Vi|²·t²` for the smallest positive time-to-go `t*`
+(`r = aimPos − navPos`, `v = aimVel − navVel`), then publishes the predicted
+intercept point `PIP = T + Vt·t*` (+ `0.5·At·t*²` when target acceleration is
+available) and the required acceleration (the `|PN|` demand aimed at the PIP,
+evaluated at the intercept-time closing velocity). It rejects non-finite input,
+a non-positive navigation constant, own est speed below `trajectoryMinSpeedMps`
+(`VelocityLow`), and geometry with no positive-time intercept
+(`NoIntercept`).
+
+Aim-source precedence matches §7.4/§7.5 exactly: a measurement-anchored track
+(state active AND `updateCount > 0`) wins; a `Coast` track keeps streaming
+kinematic predictions; a `Lost` track (or a bare command seed with no
+measurements) falls back to the external command aim. Per-entity outputs on
+`GuidanceBlock`: `predictedInterceptX/Y/Z`, `predictedTgoSec`,
+`trajectoryRequiredAccel`, `trajectoryAimSource` (`None`/`Command`/`Track`),
+`trajectoryFeasible`, and `trajectoryReason`
+(`None`/`Ok`/`VelocityLow`/`NoIntercept`/`AccelLimited`/`NonFinite`); `law`
+reports `GuidanceLaw::Trajectory`.
+
+Feasibility is the W40 energy/accel limit: a predicted intercept is feasible
+when a positive-time intercept exists AND its required acceleration fits the
+per-entity `maxAccel` budget
+(`requiredAccel ≤ trajectoryFeasibilityAccelFactor × maxAccel`, factor 0.95;
+`maxAccel ≤ 0` = budget-free, geometry-only). A feasible prediction commands
+PN toward the PIP. An infeasible or unpredicable geometry commands bounded PN
+toward the raw aim (a finite best-effort demand) while `trajectoryFeasible`
+stays false with the reason published — never a non-finite vector and never a
+silent fallback. Actuator (fin) saturation remains diagnosed downstream by
+`ControlBlock` `pitchSaturated`/`yawSaturated`/`rollSaturated`. Constraint/
+limits: predictor uses constant interceptor speed and optionally constant target
+acceleration (no drag/thrust model); trajectory **optimization** and specific-
+energy corridor/energy **management** remain planned (§9).
+
+Config keys (optional, camelCase, legacy-compatible defaults):
+`trajectoryMinSpeedMps` (30.0), `trajectoryFeasibilityAccelFactor` (0.95).
+The mode is selected per entity through `SimulationCommand::mode` /
+scenario `initial_guidance_mode` `"trajectory"`.
 
 ## 8. Events and simulation tools
 
@@ -653,6 +707,11 @@ regression (`seeker_intercept_test`); persistent single target-track manager
 (W39, §7.5: per-entity track fusing command seeds + seeker LOS fixes,
 Acquire/Maintain/Coast/Lost/Reacquire lifecycle, multi-rate prediction,
 quality/covariance model, track-based midcourse aim with legacy fallback);
+trajectory-aware midcourse guidance (W40, §7.6: explicit
+`GuidanceMode::Trajectory`, constant-speed intercept predictor with predicted
+intercept point / tgo / required acceleration, `maxAccel`-budget feasibility
+gate with `trajectoryReason` diagnostics, track/command aim-source precedence,
+dropout/reacquisition response — midcourse only, seeker-lock override retained);
 designer manifests
 (`data/profiles`) and scenarios (`data/scenarios`) consumed end-to-end via
 `designer_pipeline_test`; profile-id database layer (aero/motor/seeker/sensor/
@@ -670,8 +729,9 @@ advanced atmosphere; automatic spatial multi-tile terrain discovery/streaming,
 terrain tile prefetch, vertical datum/geoid models, and higher-fidelity polar
 coverage; imaging IR; multi-target
 tracking; dynamic SARH illuminator tracking; band-resolved extinction; sensor
-fusion; trajectory/energy management; pursuit; LQR/MPC; richer telemetry; parallel
-CPU; CUDA; production GPU backend. Optional ECS/editor mapping,
+fusion; trajectory optimization and energy management (W40 implemented the
+trajectory-core predictor + feasibility gate only); pursuit; LQR/MPC; richer
+telemetry; parallel CPU; CUDA; production GPU backend. Optional ECS/editor mapping,
 visualization/plotting/analysis/scenario tooling, and an API server are
 integration/tooling ideas, not kernel features.
 

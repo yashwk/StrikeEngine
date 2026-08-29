@@ -69,6 +69,22 @@ namespace StrikeEngine::Kernel {
             g.tgoSec[id] = 0.0;
         }
 
+        // Reset the W40 trajectory prediction diagnostics. Called at the top
+        // of every per-entity guidance step so a mode/phase change (e.g. a
+        // seeker lock that overrides trajectory midcourse) never leaks stale
+        // PIP/feasibility state from a previous step.
+        void clearTrajectoryDiagnostics(std::size_t id, GuidanceBlock& g)
+        {
+            g.predictedInterceptX[id] = 0.0;
+            g.predictedInterceptY[id] = 0.0;
+            g.predictedInterceptZ[id] = 0.0;
+            g.predictedTgoSec[id] = 0.0;
+            g.trajectoryRequiredAccel[id] = 0.0;
+            g.trajectoryAimSource[id] = GuidanceAimSource::None;
+            g.trajectoryFeasible[id] = false;
+            g.trajectoryReason[id] = TrajectoryReason::None;
+        }
+
         // Midcourse PN / APN on the commanded target track (world frame).
         // Aim source: a measurement-anchored persistent target track (W39)
         // wins over the raw external command state; see update().
@@ -149,6 +165,134 @@ namespace StrikeEngine::Kernel {
             return out;
         }
 
+        // W40 trajectory-aware midcourse guidance on the commanded aim state.
+        // Predicts a constant-velocity intercept (PIP + tgo) over the aim
+        // (measurement-anchored track wins over the command, W39 precedence),
+        // gates feasibility against the per-entity maxAccel budget, publishes
+        // the prediction/feasibility diagnostics, and commands PN toward the
+        // PIP when feasible. When infeasible or unpredicable the demand falls
+        // back to bounded PN toward the raw aim (never non-finite) with the
+        // reason flagged. Midcourse-only: a seeker lock overrides it upstream.
+        LawResult computeTrajectory(
+            std::size_t id, const NavigationBlock& nav,
+            const TrackBlock* tracks, GuidanceBlock& g)
+        {
+            LawResult out;
+            const double N = g.navigationConstant[id];
+            if (!std::isfinite(N) || N <= 0.0) {
+                out.lawInvalid = true;
+                out.valid = false;
+                g.trajectoryFeasible[id] = false;
+                g.trajectoryReason[id] = TrajectoryReason::NonFinite;
+                return out;
+            }
+
+            // Select the aim state with the exact W39 precedence: a
+            // measurement-anchored persistent track beats the command state.
+            double tx, ty, tz, tvx, tvy, tvz;
+            double atx = 0.0, aty = 0.0, atz = 0.0;
+            bool accelAvailable = false;
+            const bool trackAim = tracks && id < tracks->size &&
+                                  tracks->active(id) && tracks->updateCount[id] > 0;
+            if (trackAim) {
+                g.trajectoryAimSource[id] = GuidanceAimSource::Track;
+                tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
+                tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
+                accelAvailable = tracks->accelAvailable[id];
+                atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
+            } else {
+                g.trajectoryAimSource[id] = GuidanceAimSource::Command;
+                tx = g.targetX[id]; ty = g.targetY[id]; tz = g.targetZ[id];
+                tvx = g.targetVx[id]; tvy = g.targetVy[id]; tvz = g.targetVz[id];
+                accelAvailable = g.targetAccelAvailable[id];
+                atx = g.targetAccelX[id]; aty = g.targetAccelY[id]; atz = g.targetAccelZ[id];
+            }
+
+            const Models::Vec3 ownP{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
+            const Models::Vec3 ownV{nav.estVx[id], nav.estVy[id], nav.estVz[id]};
+            const double minSpeed = g.trajectoryMinSpeedMps[id];
+            const double factor = std::isfinite(g.trajectoryFeasibilityAccelFactor[id])
+                ? g.trajectoryFeasibilityAccelFactor[id] : 0.95;
+
+            const Models::InterceptResult pred = Models::predictIntercept(
+                ownP, ownV,
+                {tx, ty, tz}, {tvx, tvy, tvz},
+                {atx, aty, atz}, accelAvailable,
+                N, minSpeed);
+
+            // Publish prediction diagnostics.
+            g.predictedInterceptX[id] = pred.pip[0];
+            g.predictedInterceptY[id] = pred.pip[1];
+            g.predictedInterceptZ[id] = pred.pip[2];
+            g.predictedTgoSec[id] = pred.valid ? pred.tgoSec : 0.0;
+            g.trajectoryRequiredAccel[id] = pred.requiredAccel;
+
+            switch (pred.status) {
+                case Models::InterceptStatus::Ok:
+                    g.trajectoryReason[id] = TrajectoryReason::Ok;
+                    break;
+                case Models::InterceptStatus::VelocityLow:
+                    g.trajectoryReason[id] = TrajectoryReason::VelocityLow;
+                    break;
+                case Models::InterceptStatus::NoIntercept:
+                    g.trajectoryReason[id] = TrajectoryReason::NoIntercept;
+                    break;
+                case Models::InterceptStatus::NonFinite:
+                    g.trajectoryReason[id] = TrajectoryReason::NonFinite;
+                    break;
+            }
+
+            const double lim = g.maxAccel[id];
+            const bool withinBudget = (lim <= 0.0) ||
+                (pred.valid && pred.requiredAccel <= factor * lim);
+            if (pred.valid) {
+                if (withinBudget) {
+                    g.trajectoryFeasible[id] = true;
+                } else {
+                    g.trajectoryFeasible[id] = false;
+                    g.trajectoryReason[id] = TrajectoryReason::AccelLimited;
+                }
+            } else {
+                g.trajectoryFeasible[id] = false;
+            }
+
+            if (pred.valid && withinBudget) {
+                // Command PN aimed at the predicted intercept point, closed at
+                // the intercept-time relative velocity (optional accel).
+                const Models::Vec3 rPip = Models::vec3Sub(pred.pip, ownP);
+                const Models::Vec3 vClose = {
+                    (tvx + (accelAvailable ? atx : 0.0) * pred.tgoSec) - nav.estVx[id],
+                    (tvy + (accelAvailable ? aty : 0.0) * pred.tgoSec) - nav.estVy[id],
+                    (tvz + (accelAvailable ? atz : 0.0) * pred.tgoSec) - nav.estVz[id]};
+                const Models::GuidanceSolution sol =
+                    Models::proportionalNavigation(rPip, vClose, N);
+                if (sol.valid) {
+                    out.ax = sol.acceleration[0];
+                    out.ay = sol.acceleration[1];
+                    out.az = sol.acceleration[2];
+                    out.tgoSec = pred.tgoSec;
+                    return out;
+                }
+                // PIP geometry invalid at evaluation: flag infeasible and fall
+                // back to the bounded raw-aim demand below.
+                g.trajectoryFeasible[id] = false;
+                g.trajectoryReason[id] = TrajectoryReason::NoIntercept;
+            }
+
+            // Infeasible / unpredicable: bounded best-effort PN toward the raw
+            // aim (same shape as legacy midcourse) while the trajectory
+            // diagnostics keep the infeasibility explicit and the demand finite.
+            const LawResult fallback = computeMidcourse(id, nav, tracks, g);
+            out.ax = fallback.ax;
+            out.ay = fallback.ay;
+            out.az = fallback.az;
+            out.valid = fallback.valid;
+            out.lawInvalid = fallback.lawInvalid;
+            out.nonClosing = fallback.nonClosing;
+            out.tgoSec = fallback.tgoSec;
+            return out;
+        }
+
         // Seeker-rate APN: N * Vc * LOS rate, body-frame mapping per the frame
         // contract (azimuth -> +body-Y, elevation -> -body-Z), rotated to the
         // world frame with the navigation attitude.
@@ -198,6 +342,8 @@ namespace StrikeEngine::Kernel {
     {
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
+
+            clearTrajectoryDiagnostics(i, guidance);
 
             auto& phase = guidance.phase[i];
             auto& law = guidance.law[i];
@@ -343,6 +489,10 @@ namespace StrikeEngine::Kernel {
                 wp.az = k * (rz / rMag);
                 wp.tgoSec = rMag / 300.0;  // diagnostic only (nominal 300 m/s)
                 applyDemand(i, wp, guidance);
+            } else if (mode == GuidanceMode::Trajectory) {
+                if (!terminalLost) phase = GuidancePhase::Midcourse;
+                law = GuidanceLaw::Trajectory;
+                applyDemand(i, computeTrajectory(i, nav, &tracks, guidance), guidance);
             } else {
                 zeroDemand(i, guidance);
                 phase = GuidancePhase::None;

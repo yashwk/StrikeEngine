@@ -28,6 +28,13 @@ namespace StrikeEngine::Kernel {
         int    trackConfirmations  = 3;    // measurement updates to promote to Maintain
         double trackCoastTimeoutSec = 0.5; // no measurement: Maintain/Acquire -> Coast
         double trackLossTimeoutSec  = 2.0; // no measurement: Coast -> Lost
+
+        // W40 trajectory-core keys (optional with legacy defaults; active only
+        // when GuidanceMode::Trajectory is explicitly selected). A seeker lock
+        // still overrides midcourse trajectory management exactly as it does
+        // for ProportionalNavigation (W36 precedence).
+        double trajectoryMinSpeedMps = 30.0;           // own est-speed floor for an intercept prediction
+        double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
     };
 
 } // namespace StrikeEngine::Kernel
