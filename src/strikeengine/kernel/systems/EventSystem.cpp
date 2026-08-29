@@ -65,8 +65,8 @@ namespace StrikeEngine::Kernel {
 
             const auto terrain = [&environment](const TerrainLocation& point) {
                 if (environment.globalTerrain) {
-                    return environment.globalTerrain->elevationM(
-                        point.geodetic.latitudeRad, point.geodetic.longitudeRad);
+                    return environment.globalTerrain->sample(
+                        point.geodetic.latitudeRad, point.geodetic.longitudeRad).elevationM;
                 }
                 return environment.terrainElevation
                     ? environment.terrainElevation(point.local[0], point.local[1]) : 0.0;
@@ -123,6 +123,14 @@ namespace StrikeEngine::Kernel {
                 evt.type = EventType::GroundImpact;
                 evt.entityId = i;
                 evt.timestamp = impactTime;
+                evt.terrainElevationM = currentGround;
+                if (environment.globalTerrain) {
+                    const auto surface = environment.globalTerrain->surface(
+                        currentLocal.geodetic.latitudeRad,
+                        currentLocal.geodetic.longitudeRad);
+                    evt.terrainNormalEnu = surface.normalEnu;
+                    evt.terrainSlopeRad = surface.slopeRad;
+                }
                 dispatch(evt);
             }
         }

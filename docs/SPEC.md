@@ -121,8 +121,9 @@ standalone rotating-Earth propagator. Without J2, both legacy gravity flags set
 → WGS84 wins;
 in ECEF truth, spherical is the fallback when normal gravity is off. All-options-
 false default: legacy constant `-9.80665 m/s²` in local Z. Not a complete
-geophysical model (no geoid separation, multi-tile terrain streaming, atmospheric
-rotation/wind coupling, or full moving-origin global propagator).
+geophysical model (no geoid separation, automatic multi-tile terrain
+discovery/streaming, atmospheric rotation/wind coupling, or full moving-origin
+global propagator).
 
 ## 5. Kernel API contract
 
@@ -202,18 +203,29 @@ not a throttle interface; callers MUST NOT expect it to change motor output.
 ECEF-truth x/y are ENU displacement from the reference. `windVelocity(x, y, z,
 time)` returns world/ECEF air-mass velocity; truth subtracts it before aero
 evaluation. `EnvironmentConfig::globalTerrain` optionally supplies a WGS84
-geodetic raster (`GlobalTerrain`) sampled by latitude/longitude. It takes
-precedence over the local callback and is used in both local ENU and absolute
-ECEF truth modes. Null callbacks/database → zero wind/terrain.
+geodetic terrain source sampled by latitude/longitude. It takes precedence over
+the local callback and is used in both local ENU and absolute ECEF truth modes.
+Null callbacks/database → zero wind/terrain.
 
 `GlobalTerrain` stores south-to-north, west-to-east cell-center elevations in
-metres above the WGS84 ellipsoid and returns bilinearly interpolated values.
-Out-of-coverage and all-NODATA samples return 0 m; partial NODATA neighborhoods
-renormalize valid interpolation weights. Longitude is normalized across the
-dateline, and full-width rasters may wrap periodically. The dependency-free
-loader accepts ESRI/ArcInfo ASCII Grid files, reversing their north-first row
-order and recognizing `xllcorner`/`xllcenter`, `yllcorner`/`yllcenter`,
-`cellsize`, and `NODATA_value`.
+metres above the WGS84 ellipsoid. Callers select nearest-neighbor or bilinear
+sampling. Samples explicitly report `Valid`, `PartialNoData`, `NoData`,
+`OutOfCoverage`, or `Invalid`; partial bilinear neighborhoods renormalize valid
+weights. Longitude is normalized across the dateline, and full-width rasters may
+wrap periodically. `surface()` returns an upward ENU unit normal and slope angle
+from WGS84 local metric scales. The dependency-free loader accepts ESRI/ArcInfo
+ASCII Grid files, reversing their north-first row order and recognizing
+`xllcorner`/`xllcenter`, `yllcorner`/`yllcenter`, `cellsize`, and `NODATA_value`.
+
+When built with `STRIKEENGINE_WITH_GDAL=ON`, `loadGdalTerrain()` accepts any
+installed GDAL single-band raster driver, including GeoTIFF/COG, DTED, and VRT.
+The source MUST provide a geotransform and CRS transformable to WGS84; the
+adapter applies band scale/offset and NODATA handling, then eagerly normalizes
+the source to a deterministic WGS84 raster. `TerrainTileCache` provides a
+thread-safe bounded LRU cache of these normalized sources; a VRT is the supported
+way to supply a multi-file mosaic. GDAL-disabled builds retain the ASCII and
+in-memory paths and reject GDAL loading clearly. `GroundImpact` events include
+the sampled terrain elevation, ENU normal, and slope.
 
 ### 5.5 Configuration serialization and design interchange
 
@@ -496,7 +508,9 @@ not yet in the supported contract.
 
 Implemented or MVP: CPU SoA kernel; per-entity physics; 6-DOF rigid body; ISA1976
 atmosphere; aero/propulsion; RK4/RK45/Euler/Symplectic; terrain/wind callbacks;
-geodetic global terrain rasters with ESRI ASCII loading and bilinear sampling;
+geodetic global terrain rasters with ESRI ASCII loading, nearest/bilinear
+sampling, NODATA/coverage status, surface normals/slope, optional GDAL
+GeoTIFF/DTED/VRT loading, and bounded source caching;
 impact events; deterministic failure/damage (motor, actuator, sensor, structural,
 communication) with events; sensors; navigation EKF; RF/IR/SARH/PassiveRF seekers
 with chaff/flare; PN/APN/waypoint guidance; autopilot; WGS84/ECEF/local-earth
@@ -516,8 +530,9 @@ burnout velocity vs `Δv = Isp·g0·ln(m0/mdry)`), confirming `T = ṁ·Isp·g0`
 Planned or partial: CFD validation and higher-order aero (Reynolds dependence,
 nonlinear stall/post-stall, body/fin interference, flexible-body effects);
 probabilistic failure degradation; partial health/repair;
-advanced atmosphere; streamed multi-tile terrain, DTED/GeoTIFF ingestion and
-geoid models; imaging IR; multi-target
+advanced atmosphere; automatic spatial multi-tile terrain discovery/streaming,
+terrain tile prefetch, vertical datum/geoid models, and higher-fidelity polar
+coverage; imaging IR; multi-target
 tracking; dynamic SARH illuminator tracking; band-resolved extinction; sensor
 fusion; trajectory/energy management; pursuit; LQR/MPC; richer telemetry; parallel
 CPU; CUDA; production GPU backend. Optional ECS/editor mapping,

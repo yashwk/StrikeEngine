@@ -100,6 +100,9 @@ add_executable(global_terrain_test validation/global_terrain_test.cpp)
 target_link_libraries(global_terrain_test PRIVATE strikeengine)
 target_compile_definitions(global_terrain_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+if(STRIKEENGINE_WITH_GDAL)
+    target_compile_definitions(global_terrain_test PRIVATE STRIKEENGINE_WITH_GDAL=1)
+endif()
 
 add_executable(config_wiring_test validation/config_wiring_test.cpp)
 target_link_libraries(config_wiring_test PRIVATE strikeengine)

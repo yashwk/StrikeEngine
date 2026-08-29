@@ -2,9 +2,12 @@
 
 include(CMakeFindDependencyMacro)
 
-# The installed package is self-contained: glm and nlohmann/json are
-# header-only and only used by the library implementation, so the exported
-# target references no external packages.
+# glm and nlohmann/json are header-only build dependencies. GDAL is an
+# optional runtime-linked dependency when the package was built with terrain
+# raster support enabled.
+if(@STRIKEENGINE_WITH_GDAL@)
+    find_dependency(GDAL CONFIG)
+endif()
 include("${CMAKE_CURRENT_LIST_DIR}/strikeengineTargets.cmake")
 
 # The optional Vulkan compute backend links Vulkan::Vulkan; only needed when

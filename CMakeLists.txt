@@ -11,6 +11,7 @@ include(FetchContent)
 # Optional GPU compute backend. Any consumer that wants Vulkan executes it on
 # GPU must build with this ON; core simulations are CPU-only by default.
 option(STRIKEENGINE_WITH_VULKAN "Build the optional Vulkan compute backend" OFF)
+option(STRIKEENGINE_WITH_GDAL "Build GDAL-backed terrain loading" OFF)
 
 FetchContent_Declare(
         glm
@@ -45,10 +46,16 @@ target_link_libraries(strikeengine PUBLIC
     $<BUILD_INTERFACE:glm>
     $<BUILD_INTERFACE:nlohmann_json>
 )
+
+if(STRIKEENGINE_WITH_GDAL)
+    find_package(GDAL CONFIG REQUIRED)
+    target_link_libraries(strikeengine PUBLIC GDAL::GDAL)
+    target_compile_definitions(strikeengine PRIVATE STRIKEENGINE_WITH_GDAL=1)
+endif()
 # glm and nlohmann/json are header-only and used only in .cpp files, never in
 # public headers. Build-tree consumers (add_subdirectory / FetchContent) get
-# them via BUILD_INTERFACE; the INSTALLED package is self-contained and its
-# exported target carries no external dependencies.
+# them via BUILD_INTERFACE. GDAL is an explicit dependency of installed
+# packages built with STRIKEENGINE_WITH_GDAL=ON.
 
 # --- Optional Vulkan compute backend -------------------------------------
 # Requesting BackendType::Vulkan from SimulationKernel works only when the

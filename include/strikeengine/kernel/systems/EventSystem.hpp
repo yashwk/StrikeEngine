@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <vector>
 #include <functional>
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
@@ -33,6 +34,10 @@ namespace StrikeEngine::Kernel {
         // Stage-separation payload: unburned propellant jettisoned with the
         // spent stage (kg). 0.0 when the stage burned out by exhaustion.
         double dumpedMassKg = 0.0;
+        // Ground-impact terrain surface sampled at the crossing location.
+        double terrainElevationM = 0.0;
+        std::array<double, 3> terrainNormalEnu{0.0, 0.0, 1.0};
+        double terrainSlopeRad = 0.0;
     };
 
     using EventCallback = std::function<void(const SimulationEvent&)>;

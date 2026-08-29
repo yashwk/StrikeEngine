@@ -57,7 +57,8 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
 | W31 — ECEF/geodetic states + J2 gravity | Implemented / MVP | `earth_test`, `earth_fixed_test`, `ecef_kernel_test`, `serialization_test`; explicit ENU/ECEF velocity conversion, pole/dateline round-trip, WGS84 J2 gravity, standalone propagator and truth/sensor/navigation consistency |
 | W32 — Propulsion transients, TVC, and feed failures | Implemented / MVP | `propulsion_test`; strict curve/config validation, ignition delay/ramp, shutdown ramp, two-axis achieved-gimbal limits, engine-position torque, explicit engine/tank failure flags/events, legacy motor-failure compatibility |
-| W33 — Geodetic global terrain raster | Implemented / MVP | `global_terrain_test`; in-memory bilinear raster, ESRI ASCII Grid loading, NODATA handling, dateline normalization, local ENU and ECEF terrain impact/clamping |
+| W33 — Geodetic global terrain raster | Implemented / MVP | `global_terrain_test`; in-memory raster, ESRI ASCII Grid loading, NODATA handling, dateline normalization, local ENU and ECEF terrain impact/clamping |
+| W34 — Extended terrain sources and surfaces | Implemented / MVP | `global_terrain_test`; nearest/bilinear sampling, explicit coverage status, WGS84-scaled normals/slope, optional GDAL GeoTIFF/DTED/VRT loading, bounded LRU reuse, impact-event surface payload |
 
 ## 3. Subsystem fidelity assessment
 
@@ -67,16 +68,15 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Rotational truth | Diagonal inertia, gyroscopic coupling, quaternion, bounded fins | **MVP:** no inertia-tensor or flexible-body model |
 | Atmosphere | Layered ISA1976 through 86 km | **Implemented for stated envelope:** no weather model |
 | Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl/cm/cy/cn/rolling-cl tables; geometric fins (trapezoidal/elliptical/free-form) | **MVP:** static tables authoritative with scalar fallback; fins implement Mach-scaled fin effectiveness + lateral (β) side-force/stability for angled fins; tables are not yet CFD-validated and omit Reynolds/nonlinear stall/post-stall effects |
-| Propulsion | Validated thrust curves, pressure-interpolated Isp, fuel-limited mass flow, ignition/shutdown transients, two-axis TVC with achieved servo state and engine torque, ordered staging + leftover dump, engine/tank failures | **MVP:** deterministic no-leak tank failure; no pressure-fed turbomachinery, grain regression, mixture-ratio, thermal, or probabilistic degradation model |
 | Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
-| Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF, geodetic terrain raster queries | **MVP:** no geoid, multi-tile terrain streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
+| Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF, geodetic terrain sources | **MVP:** no geoid, automatic spatial multi-tile discovery/streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
 | Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
 | Guidance | Stateless PN/APN, waypoint, seeker handoff, per-entity gains | **MVP:** no trajectory manager, pursuit, LQR/MPC, blended handoff |
-| Events and terrain | Local callbacks plus geodetic raster database, real local/ECEF impact deactivation and clamping | **MVP:** ESRI ASCII single-raster loader only; no multi-tile streaming, DTED/GeoTIFF, datum/geoid, or probabilistic failure |
+| Events and terrain | Local callbacks plus geodetic raster sources, nearest/bilinear status-aware sampling, terrain normals/slope, real local/ECEF impact deactivation and clamping, enriched impact events | **MVP:** GDAL source loading is eager and single-source; no automatic spatial tile discovery/streaming, prefetch, datum/geoid, or probabilistic failure |
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
 | Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
 | Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, batch; versioned CSV/binary + reader | **MVP:** richer telemetry/streaming remain; some optimizer paths primary-entity oriented |
@@ -105,9 +105,12 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
 
 1. **Study output:** binary reader done; richer telemetry, streaming sinks, output
    selection remain.
-2. **Global terrain:** basic geodetic raster and frame-aware collision queries are
-   implemented (`global_terrain_test`); multi-tile streaming, DTED/GeoTIFF
-   ingestion, datum/geoid, and higher-fidelity polar coverage remain.
+2. **Global terrain:** geodetic sources, nearest/bilinear sampling,
+   coverage/NODATA status, surface normals/slope, optional GDAL
+   GeoTIFF/DTED/VRT ingestion, bounded caching, and frame-aware collision/event
+   queries are implemented (`global_terrain_test`); automatic spatial multi-tile
+   discovery/streaming, prefetch, datum/geoid, and higher-fidelity polar coverage
+   remain.
 3. **Failure/damage:** deterministic flags done (MVP, `failure_test`);
    probabilistic degradation, partial health, repair remain.
 4. **GNC fidelity:** lever arms, coning/sculling, earth-rate gyro done (MVP,
@@ -129,8 +132,9 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
 
 Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling (and
 CFD validation of the moment (cm)/lateral (β) coefficient tables), a full
-GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
-(trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and full multi-tile global terrain. The
+ GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
+(trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and automatic multi-tile global
+terrain discovery/streaming. The
 falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin
 effectiveness, lateral β side-force/stability for angled fins) are implemented
 and no longer deferred.
@@ -142,13 +146,13 @@ Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 
 The 2026-08-25 pre-restart audit recorded 5/7 workstreams with failures in control
 signs, aero authority, integration, events, seeker fidelity, and navigation; it is
-superseded by W1–W29 above. Historical measurements/commits remain in repository
+superseded by W1–W34 above. Historical measurements/commits remain in repository
 history and are not repeated here.
 
 ## 7. Conclusion
 
 StrikeEngine is a validated deterministic CPU simulation MVP (per-entity physics,
-GNC, terrain/wind callbacks, local-earth models, opt-in kernel ECEF truth). It is
-suitable for continued engineering development and regression testing, but not yet
-production-grade global geophysics, sensor, aero, or GPU-equivalent simulation
-until the backlog is addressed.
+GNC, terrain/wind callbacks, WGS84 terrain sources, local-earth models, opt-in
+kernel ECEF truth). It is suitable for continued engineering development and
+regression testing, but not yet production-grade global geophysics, sensor, aero,
+or GPU-equivalent simulation until the backlog is addressed.
