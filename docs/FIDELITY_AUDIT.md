@@ -1,7 +1,7 @@
 # StrikeEngine — Fidelity Audit
 
 **Audit date:** 2026-08-29<br>
-**Runtime checkpoint:** `3ba1424`<br>
+**Runtime checkpoint:** `8c8ce00`<br>
 **Validation result:** Release build, **36/36 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
@@ -55,6 +55,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W28 — Leftover-propellant dump + warhead falloff | Implemented / MVP | `staging_warhead_test`, `warhead_falloff_test`; dump lands mass on new floor, inertia rescale, `dumpedMassKg`; falloff band 1/linear/0, RNG draw only when `0 < p < 1`; SAM 50/50/90 m; 45.4 m miss |
 | W29 — Geometric fins (RocketPy port) | Implemented / MVP | `fins_test`; three shapes (trapezoidal/elliptical/free-form); Diederich planform lift slope + Prandtl–Glauert Mach correction; fin-number + interference corrections; per-shape CP; tail lever-arm sign convention (restoring); positive-cant roll forcing; ballistic flight on rocket_mvp with 4 tail fins — apogee 17.2 km, drift ~0 m; byte-identical fallback when `fins` absent |
 | W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
+| W31 — ECEF/geodetic states + J2 gravity | Implemented / MVP | `earth_test`, `earth_fixed_test`, `ecef_kernel_test`, `serialization_test`; explicit ENU/ECEF velocity conversion, pole/dateline round-trip, WGS84 J2 gravity, standalone propagator and truth/sensor/navigation consistency |
 
 ## 3. Subsystem fidelity assessment
 
@@ -67,7 +68,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Propulsion | Thrust curves, Isp, mass flow, dry-mass limit; ordered staging + leftover dump | **MVP:** `propellantMassKg` caps drawdown; no thrust vectoring or tank/engine failure |
 | Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
-| Earth and frames | WGS84, normal/spherical gravity, frames, Coriolis/centrifugal/transport, ECEF | **MVP:** no geoid, terrain streaming, polar/dateline, or complete earth-rate treatment |
+| Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF | **MVP:** no geoid, terrain streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
 | Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation |

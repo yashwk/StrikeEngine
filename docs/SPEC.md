@@ -97,26 +97,32 @@ ENU. Scenario authors MUST provide absolute ECEF states, normally via
 
 ### 4.4 Earth models
 
-Public earth headers provide: WGS84 geodetic/ECEF conversion; ECEF↔ENU, ECEF↔NED,
-ENU↔NED transforms; normal gravity (Somigliana formula + altitude/free-air
-correction); spherical point-mass gravity (WGS84 µ); local Coriolis, centrifugal,
-and moving-origin transport terms; a standalone rotating-Earth ECEF RK4
+Public earth headers provide: WGS84 geodetic/ECEF conversion; explicit
+geodetic-state (ENU velocity) ↔ ECEF-state (ECEF velocity) conversion;
+ECEF↔ENU, ECEF↔NED, ENU↔NED transforms; normal gravity (Somigliana formula +
+altitude/free-air correction); spherical point-mass gravity (WGS84 µ); optional
+central + J2 zonal-harmonic gravity; local Coriolis, centrifugal, and
+moving-origin transport terms; and a standalone rotating-Earth ECEF RK4
 propagator.
 
 | Option | Behavior |
 | --- | --- |
 | `useWgs84Gravity` | Latitude/altitude-dependent normal gravity. |
-| `useSphericalGravity` | Radial point-mass gravity in local ENU. |
+| `useSphericalGravity` | Radial point-mass gravity in local ENU/ECEF. |
+| `includeJ2Gravity` | Central + WGS84 J2 gravity; takes precedence over the other gravity models. |
 | `includeCoriolis` | `-2 Ω × v`. |
 | `includeCentrifugal` | `-Ω × (Ω × r)`. |
 | `includeTransportRate` | Moving-origin `-Ω_en × v`; ignored in ECEF truth. |
 | `useEcefTruth` | Absolute ECEF state and ECEF-aware consumers. |
 
-Both gravity flags → WGS84 wins. In ECEF truth, spherical is the fallback when
-normal gravity is off. All-options-false default: legacy constant `-9.80665 m/s²`
-in local Z. Not a complete geophysical model (no geoid separation, terrain
-streaming, polar/dateline policy, atmospheric rotation/wind coupling, or full
-moving-origin global propagator).
+`includeJ2Gravity` takes precedence over `useWgs84Gravity` and
+`useSphericalGravity` in the kernel and is also available as an option on the
+standalone rotating-Earth propagator. Without J2, both legacy gravity flags set
+→ WGS84 wins;
+in ECEF truth, spherical is the fallback when normal gravity is off. All-options-
+false default: legacy constant `-9.80665 m/s²` in local Z. Not a complete
+geophysical model (no geoid separation, terrain streaming, atmospheric
+rotation/wind coupling, or full moving-origin global propagator).
 
 ## 5. Kernel API contract
 

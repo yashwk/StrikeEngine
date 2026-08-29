@@ -3,7 +3,7 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-29
-**Runtime checkpoint:** `3ba1424`
+**Runtime checkpoint:** `8c8ce00`
 
 [`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
 measured evidence. This record maps behavior to files, build, execution order,
@@ -144,9 +144,12 @@ carries per-entity `stageIndex`/`stageCount`.
   propagation, servo dynamics; reads `motorFailed`/`actuatorFailed`. Fuel-depletion
   guard caps mass flow and scales thrust, so `T = ṁ·Isp·g0` holds at every instant
   (no free-thrust tail).
-- `EarthModel.hpp`: WGS84, normal gravity, Coriolis, curvature, transport.
-- `EarthFrames.hpp`: ECEF/ENU/NED transforms, local gravity, centrifugal.
-- `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4.
+- `EarthModel.hpp`: WGS84 position/state conversions, normal and optional J2
+  gravity, Coriolis, curvature, transport.
+- `EarthFrames.hpp`: ECEF/ENU/NED transforms, local normal/spherical/J2 gravity,
+  centrifugal.
+- `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4 with optional
+  J2 gravity.
 - `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid impact
   clamp, failure event vocabulary (`MotorFailure`/`ActuatorFailure`/
   `SensorFailure`/`StructuralFailure`/`CommunicationFailure`); `dumpedMassKg` on
@@ -220,9 +223,9 @@ binary reader implemented; richer telemetry future.
 | `integrator` | RK4/RK45 and impact interpolation |
 | `seeker`, `navigation`, `environment` | GNC and environment MVPs |
 | `seeker_rich`, `earth_rate_gyro`, `coning_sculling` | richer seekers; earth-rate gyro; coning/sculling |
-| `earth`, `earth_frames`, `earth_transport` | WGS84 conversion and local frames |
-| `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation |
-| `ecef_kernel` | kernel ECEF physics/events/sensors/navigation |
+| `earth`, `earth_frames`, `earth_transport` | WGS84 conversion/state helpers and local frames |
+| `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation, including J2 |
+| `ecef_kernel` | kernel ECEF physics/events/sensors/navigation, including J2 |
 | `guidance`, `scenario` | guidance and scenario contracts |
 | `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics and events |
@@ -254,6 +257,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W12 | spherical point-mass gravity | `a47d329` |
 | W13 | standalone rotating-Earth ECEF propagator | `5a8d0f9` |
 | W14 | opt-in kernel ECEF truth | `40af724` |
+| W31 | explicit ECEF/geodetic states, optional J2 gravity, pole/dateline validation | current |
 | W15 | frame-aware study reporting, versioned CSV | `d1bd26f` |
 | W16 | configurable CSV/binary output + status metadata | `1ff6d1e` |
 | W21 | flattened `VehicleConfig`, snake_case serialization | current |
