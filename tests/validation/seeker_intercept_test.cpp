@@ -200,6 +200,7 @@ int main()
     std::uint32_t lockLosses = 0;
     std::uint32_t lossCountSeen = 0;
     GuidancePhase phaseAtMinMiss = GuidancePhase::None;
+    bool sawMidcourse = false, sawAcquisition = false, sawTerminal = false;
     // Terminal-command activity within the first second after lock (assertion 8).
     double postLockCmdMax = 0.0;
     double postLockWindowEnd = -1.0;
@@ -296,14 +297,10 @@ int main()
         if (std::abs(dist - minMiss) < 1e-9) {
             phaseAtMinMiss = gb.phase[interceptorId];
         }
-        if (lockLosses > lossCountSeen) {
-            lossCountSeen = lockLosses;
-            std::printf("  [diag] seeker lock loss at t=%.2f s, range %.0f m, phase=%s\n",
-                        t, dist, phaseName(gb.phase[interceptorId]));
-        }
-        if (std::abs(dist - minMiss) < 1e-9) {
-            phaseAtMinMiss = gb.phase[interceptorId];
-        }
+        // Phase-sequence recorder (asserts Midcourse -> Acquisition -> Terminal).
+        if (gb.phase[interceptorId] == GuidancePhase::Midcourse) sawMidcourse = true;
+        if (gb.phase[interceptorId] == GuidancePhase::Acquisition) sawAcquisition = true;
+        if (gb.phase[interceptorId] == GuidancePhase::Terminal) sawTerminal = true;
 
         // Stop early once the target is dead.
         if (killTime > 0.0 && t > killTime + 2.0) break;
@@ -342,9 +339,10 @@ int main()
     // fail on repeated/pre-terminal losses.
     check(lockLosses <= 1, "at most one (post-pass) seeker lock loss");
     std::printf("  seeker lock losses: %u\n", lockLosses);
-    check(gb.law[interceptorId] != GuidanceLaw::None ||
-              killTime > 0.0 || minMissTime >= 0.0,
-          "guidance phase/law state was published");
+    check(sawMidcourse && sawAcquisition && sawTerminal,
+          "guidance progressed Midcourse -> Acquisition (blend) -> Terminal");
+    check(gb.law[interceptorId] != GuidanceLaw::None || !status.isAlive[targetId],
+          "guidance published a law (or the target was already killed)");
 
     check(warheadDetonated, "detonation event emitted");
     check(killTime > 0.0, "target no longer alive after detonation");

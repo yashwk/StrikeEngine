@@ -4,6 +4,7 @@
 // non-closing diagnostics, target-accelerations feed-forward availability,
 // and tgo output.
 #include <strikeengine/kernel/systems/GuidanceSystem.hpp>
+#include <strikeengine/kernel/systems/CommandProcessor.hpp>
 #include <strikeengine/models/guidance/GuidanceModels.hpp>
 
 #include <cmath>
@@ -48,6 +49,9 @@ GuidanceBlock makeBlock()
     g.lawInvalid = {false};
     g.nonClosing = {false};
     g.tgoSec = {0.0};
+    g.retainedAccelX = {0.0};
+    g.retainedAccelY = {0.0};
+    g.retainedAccelZ = {0.0};
     return g;
 }
 
@@ -241,6 +245,126 @@ int main()
         check(guidance.commandedAccelY[0] >= 3.475 &&
                   guidance.commandedAccelY[0] <= 7.0,
               "acquisition demand blends midcourse PN and terminal APN");
+    }
+
+    // --- Lock-loss retention: bounded predicted terminal command -------------
+    {
+        GuidanceBlock guidance = makeBlock();
+        guidance.mode = {GuidanceMode::ProportionalNavigation};
+        guidance.targetX = {1000.0}; guidance.targetY = {0.0}; guidance.targetZ = {0.0};
+        guidance.targetVx = {0.0}; guidance.targetVy = {10.0}; guidance.targetVz = {0.0};
+        guidance.handoffBlendTimeSec = {0.0};       // instant handoff
+        guidance.lockLossRetentionSec = {0.2};      // 0.2 s retention window
+        seeker.isLocked = {true};
+        seeker.lockedTargetId = {0};
+        seeker.targetRange = {900.0};
+        seeker.targetRangeRate = {-100.0};
+        seeker.targetAzimuthRate = {0.02};
+        seeker.targetElevationRate = {0.0};
+
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        check(guidance.phase[0] == GuidancePhase::Terminal &&
+                  std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
+              "locked terminal step commands APN demand");
+
+        // Drop the lock: within the retention window the bounded predicted
+        // terminal command (the last valid demand) is applied, phase Terminal.
+        seeker.isLocked = {false};
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        check(guidance.phase[0] == GuidancePhase::Terminal &&
+                  guidance.law[0] == GuidanceLaw::SeekerRateAPN &&
+                  std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
+              "retention window applies the bounded retained terminal command");
+        // 18 more unlocked steps reach trackAge 0.19 (inside the 0.2 s window).
+        for (int s = 0; s < 18; ++s) {
+            system.update(status, nav, seeker, guidance, control, 0.01);
+        }
+        check(guidance.phase[0] == GuidancePhase::Terminal,
+              "retention holds across the configured window");
+        check(guidance.lockLossCount[0] == 1,
+              "lock loss counted exactly once");
+        // Two more steps: retention expires -> LostTrack recovery via PN.
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        check(guidance.phase[0] == GuidancePhase::LostTrack &&
+                  guidance.law[0] == GuidanceLaw::PureProNav &&
+                  std::abs(guidance.commandedAccelY[0] - 3.5) < 1e-12,
+              "after retention expiry: LostTrack with midcourse PN recovery");
+
+        // Reacquisition: a fresh lock restarts the blend and reaches Terminal.
+        seeker.isLocked = {true};
+        guidance.handoffBlendTimeSec = {0.5};
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        check(guidance.phase[0] == GuidancePhase::Acquisition &&
+                  guidance.handoffWeight[0] > 0.0 && guidance.handoffWeight[0] < 1.0,
+              "reacquisition restarts the acquisition blend");
+        for (int s = 0; s < 50; ++s) {
+            system.update(status, nav, seeker, guidance, control, 0.01);
+        }
+        check(guidance.phase[0] == GuidancePhase::Terminal,
+              "reacquisition blend completes to Terminal");
+    }
+
+    // --- Waypoint law: explicit law + non-finite hardening -------------------
+    {
+        GuidanceBlock guidance = makeBlock();
+        guidance.mode = {GuidanceMode::Waypoint};
+        guidance.targetX = {500.0}; guidance.targetY = {0.0}; guidance.targetZ = {0.0};
+        seeker.type = {SeekerType::None};
+        seeker.isLocked = {false};
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        check(guidance.law[0] == GuidanceLaw::Waypoint &&
+                  std::abs(guidance.commandedAccelX[0] - 20.0) < 1e-9 &&
+                  guidance.phase[0] == GuidancePhase::Midcourse,
+              "waypoint reports GuidanceLaw::Waypoint and the point-seeking demand");
+
+        GuidanceBlock g2 = makeBlock();
+        g2.mode = {GuidanceMode::Waypoint};
+        g2.targetX = {std::numeric_limits<double>::infinity()};
+        system.update(status, nav, seeker, g2, control, 0.01);
+        check(g2.lawInvalid[0] && std::abs(g2.commandedAccelX[0]) < 1e-12,
+              "non-finite waypoint geometry: lawInvalid set, demand zeroed");
+    }
+
+    // --- Seeker APN: non-finite range must not produce a NaN tgo -------------
+    {
+        GuidanceBlock guidance = makeBlock();
+        seeker.type = {SeekerType::RF};
+        seeker.isLocked = {true};
+        seeker.lockedTargetId = {0};
+        seeker.targetRange = {std::numeric_limits<double>::infinity()};
+        seeker.targetRangeRate = {-100.0};
+        seeker.targetAzimuthRate = {0.0};
+        seeker.targetElevationRate = {0.0};
+        system.update(status, nav, seeker, guidance, control, 0.01);
+        check(guidance.lawInvalid[0] && std::isfinite(guidance.tgoSec[0]) &&
+                  std::abs(guidance.commandedAccelY[0]) < 1e-12,
+              "non-finite seeker range: lawInvalid set, finite tgo, zero demand");
+    }
+
+    // --- Public command input for target acceleration (augmented APN) --------
+    {
+        GuidanceBlock guidance = makeBlock();
+        CommandProcessor processor;
+        SimulationCommand cmd{};
+        cmd.entityId = 0;
+        cmd.mode = GuidanceMode::ProportionalNavigation;
+        cmd.targetX = 1000.0;
+        cmd.targetAccelY = 2.0;
+        cmd.targetAccelAvailable = true;
+        processor.enqueueCommand(cmd);
+        processor.process(guidance);
+        check(guidance.targetAccelY[0] == 2.0 && guidance.targetAccelAvailable[0],
+              "SimulationCommand target acceleration reaches the guidance block");
+
+        GuidanceBlock g2 = makeBlock();
+        SimulationCommand cmd2{};
+        cmd2.entityId = 0;
+        cmd2.mode = GuidanceMode::ProportionalNavigation;
+        processor.enqueueCommand(cmd2);
+        processor.process(g2);
+        check(!g2.targetAccelAvailable[0] && g2.targetAccelY[0] == 0.0,
+              "default command leaves feed-forward explicitly unavailable");
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

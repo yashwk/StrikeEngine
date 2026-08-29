@@ -62,7 +62,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W35 — GPS fusion robustness | Implemented / MVP | `navigation_test`, `serialization_test`; configurable scalar normalized-innovation gate rejects gross/non-finite fixes while preserving valid channels |
 | W36 — Configured PN authority | Implemented / MVP | `guidance_test`; kernel PN applies each entity's configured navigation constant rather than the model default |
 | W37 — Seeker APN frame mapping | Implemented / MVP | `guidance_test`, `designer_pipeline_test`; azimuth/elevation LOS rates map to the X-forward/Y-right/Z-down body frame, restoring the original 120 m/s² scenario and reducing miss from 52.5 m to 9.7 m |
-| W38 — Mode-aware guidance stack + seeker intercept | Implemented | `guidance_test` (head-on/crossing/non-closing/feed-forward-availability/blend ramp/body-signs), `seeker_intercept_test` (two explicit missiles, RF acquisition 3.6 km, blend 0.5 s, miss 3.70 m < 15 m lethal, detonation t=7.04 s vs closest approach 7.05 s, target kill, 1 post-pass lock loss reported, deterministic seed `0x5EEDF1A5u`); byte-identical legacy when blend=0 |
+| W38 — Mode-aware guidance stack + seeker intercept | Implemented | `guidance_test` (head-on/crossing/non-closing/feed-forward-availability/blend ramp/body-signs/retention+reacquisition/waypoint law+nanner/command inputs), `seeker_intercept_test` (two explicit missiles, RF acquisition 3.6 km, blend 0.5 s, miss 3.70 m < 15 m lethal, detonation t=7.04 s vs closest approach 7.05 s, target kill, 1 post-pass lock loss reported, deterministic seed `0x5EEDF1A5u`); retention replays the bounded retained terminal command; public target-accel inputs via `SimulationCommand`/scenario `initial_target_accel_*`; `GuidanceLaw::Waypoint` + non-finite hardening; byte-identical legacy when blend=0 |
 
 ## 3. Subsystem fidelity assessment
 
@@ -129,7 +129,7 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
    (`coefficient_table_test`, `serialization_test`, `profile_database_test`);
    the mode-aware guidance stack (phases, acquisition→terminal blend,
    lock-loss retention, APN feed-forward availability, per-entity diagnostics)
-   and seeker intercept are W36 (`guidance_test`, `seeker_intercept_test`);
+   and seeker intercept are W38 (`guidance_test`, `seeker_intercept_test`);
    CFD validation, Reynolds/nonlinear aero, trajectory/energy management,
    pursuit, LQR/MPC, and seeker-management blended handoff remain.
 7. **Backend parity:** validate Vulkan vs CPU, GPU ECEF, CUDA if required.
@@ -145,8 +145,9 @@ terrain discovery/streaming. The
 falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin
 effectiveness, lateral β side-force/stability for angled fins) are implemented
 and no longer deferred. The mode-aware guidance stack (phase/law state machine,
-acquisition→terminal blend, lock-loss retention, APN feed-forward availability,
-per-entity diagnostics) is W36 and no longer deferred.
+acquisition→terminal blend, bounded lock-loss retention, APN feed-forward
+availability + public `SimulationCommand`/scenario target-acceleration inputs,
+waypoint law hardening, per-entity diagnostics) is W38 and no longer deferred.
 Revived artifacts (`data/aero`, `data/motors`, `data/seekers`, `data/sensors`,
 `data/rcs`, `data/profiles`, `data/scenarios/intercept_test_01`,
 `data/schemas/seeker_schema.json`) are part of this layer.

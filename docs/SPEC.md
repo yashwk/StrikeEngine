@@ -168,7 +168,7 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
   5σ), IMU body-frame lever arm.
 - `GuidanceAutopilotConfig`: `navigationConstant`, `waypointGain`, gains
   `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
-  `servoTimeConstantSec`, `maxServoRateRadPerSec`. W36 phase/track keys
+  `servoTimeConstantSec`, `maxServoRateRadPerSec`. W38 phase/track keys
   `handoffBlendTimeSec` (default 0), `lockLossRetentionSec` (default 0), and
   `apnFeedforwardEnabled` (default false) are optional (§7.4).
 - `WarheadConfig`: `massKg`, `FusingType` (`Impact`/`Proximity`/`Timed`),
@@ -455,26 +455,33 @@ elevation → −Z; unchanged contract). Seeker-locked APN
 clamps commanded accel to per-entity `maxAccel`, matching PN/Waypoint.
 Autopilot translates world accel into bounded body fin demands.
 
-Phase selection is separated from law computation (§W36). Per entity the
+Phase selection is separated from law computation (§W38). Per entity the
 guidance system tracks an explicit `GuidancePhase`
 (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and a `GuidanceLaw`
-(`None`/`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`). A seeker lock moves the
+(`None`/`Waypoint`/`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`). A seeker lock moves the
 state `Midcourse → Acquisition → Terminal`: during `Acquisition` the terminal
 APN weight `handoffWeight` ramps 0 → 1 over the configured
 `handoffBlendTimeSec` (0 = the legacy instant override), blending midcourse PN
 with seeker-rate APN. On lock loss during `Acquisition`/`Terminal`, the layer
-keeps the track identity for up to `lockLossRetentionSec` (0 = none); once that
-retention expires it drops to `LostTrack` and recovers via midcourse PN on the
-commanded target. APN target-acceleration feed-forward is emitted only when
+retains the track identity and applies the bounded predicted terminal command
+(the last valid seeker-APN demand, already clamped by `maxAccel`) for up to
+`lockLossRetentionSec` (0 = none); once retention expires it drops to
+`LostTrack` and recovers via midcourse PN on the commanded target. APN
+target-acceleration feed-forward is emitted only when
 `apnFeedforwardEnabled && targetAccelAvailable`, and only when the target-
-acceleration inputs are finite; otherwise the law is pure PN. Non-finite
+acceleration inputs are finite; otherwise the law is pure PN. Target
+acceleration is supplied through `SimulationCommand` (`targetAccelX/Y/Z`,
+`targetAccelAvailable`) or scenario `initial_target_accel_*`. Non-finite
 guidance input, a zero/negative closing (`N ≤ 0`, `Vc ≤ 0`) marks the demand
-`lawInvalid`/`nonClosing` rather than emitting a spurious vector.
+`lawInvalid`/`nonClosing` rather than emitting a spurious vector. Waypoint mode
+reports `GuidanceLaw::Waypoint` and validates non-finite geometry the same way.
 
 Guidance publishes per-entity diagnostics on `GuidanceBlock`: `phase`, `law`,
 `trackId` (−1 none), `trackAgeSec`, `handoffWeight`, `lockLossCount`,
 `rawAccelX/Y/Z` (pre-clamp demand), `limitedByMaxAccel` (demand clamp),
-`lawInvalid`, `nonClosing`, and `tgoSec` (range / closing speed). Every demand
+`lawInvalid`, `nonClosing`, and `tgoSec` (range / closing speed), plus
+`retainedAccelX/Y/Z` (last valid post-clamp terminal demand, replayed during the
+lock-loss retention window). Every demand
 passes the per-entity `maxAccel` clamp and publishes the raw + limited flags.
 `ControlBlock` adds `pitchSaturated`/`yawSaturated`/`rollSaturated` autopilot
 fin-clamp diagnostics, distinct from guidance `limitedByMaxAccel`.
@@ -489,8 +496,9 @@ scenarios that omit the three keys still load.
 Constants per entity, read from config at creation: `navigationConstant`,
 `waypointGain`, gains (`kAccelP/kRateP/kAlphaP/kRollP/kRollD`), `maxDeflectionRad`
 (fin clamp, default 0.43 rad). Read from per-entity blocks, not class constants.
-Planned, not supported: trajectory management, pursuit, LQR/MPC, blended handoff,
-imaging IR, multi-target tracking, dynamic SARH illuminator tracking.
+Planned, not supported: trajectory management, pursuit, LQR/MPC, imaging IR,
+multi-target tracking, dynamic SARH illuminator tracking. (`Acquisition->Terminal`
+blended handoff is implemented and config-backed; see §7.4.)
 
 ## 8. Events and simulation tools
 

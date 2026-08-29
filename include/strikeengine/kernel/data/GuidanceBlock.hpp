@@ -23,6 +23,7 @@ namespace StrikeEngine::Kernel {
     // Active guidance law used to produce the current demand.
     enum class GuidanceLaw : uint8_t {
         None,
+        Waypoint,       // point-seeking proportional-to-range law
         PureProNav,     // N * Vc * (LOS-rate cross LOS)
         SeekerRateAPN,  // body-frame LOS-rate APN (seeker)
         AugmentedProNav // PN + target-acceleration feed-forward (0.5*N*a_t_perp)
@@ -81,6 +82,13 @@ namespace StrikeEngine::Kernel {
         std::vector<bool>   lawInvalid;
         std::vector<bool>   nonClosing;
         std::vector<double> tgoSec;                    // range / closing speed
+
+        // Last valid terminal (seeker-APN) demand, post-clamp. Used as the
+        // bounded predicted command during the lock-loss retention window
+        // (see GuidanceSystem.cpp); refreshed on every locked terminal step.
+        std::vector<double> retainedAccelX;
+        std::vector<double> retainedAccelY;
+        std::vector<double> retainedAccelZ;
     };
 
 } // namespace StrikeEngine::Kernel

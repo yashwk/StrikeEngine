@@ -247,7 +247,7 @@ binary reader implemented; richer telemetry future.
 | `earth`, `earth_frames`, `earth_transport` | WGS84 conversion/state helpers and local frames |
 | `spherical_gravity`, `earth_fixed` | gravity and standalone ECEF propagation, including J2 |
 | `ecef_kernel` | kernel ECEF physics/events/sensors/navigation, including J2 |
-| `guidance`, `scenario` | guidance phase/law state machine (head-on/crossing/non-closing, APN feed-forward availability, acquisition blend ramp, body-frame signs, tgo), non-finite input flag, configured PN gain wiring, scenario contracts |
+| `guidance`, `scenario` | guidance phase/law state machine (head-on/crossing/non-closing, APN feed-forward availability, acquisition blend ramp, body-frame signs, tgo, lock-loss retention replay + reacquisition, waypoint law + non-finite hardening, `SimulationCommand` target-accel input), non-finite input flag, configured PN gain wiring, scenario contracts |
 | `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics and events |
 | `propulsion` | strict profile validation, ignition/shutdown transients, TVC gimbal limits/servo, engine torque, engine/tank failures, serialization |
@@ -260,7 +260,7 @@ binary reader implemented; richer telemetry future.
 | `serialization` | config round-trip, scenario/design load-save, `designRef` override, four profile-id keys, legacy-compat |
 | `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
 | `designer_pipeline` | manifest→`designRef`→profile-id→intercept (9.7 m miss) + kill |
-| `seeker_intercept` | two explicit missiles: friendly RF-seeker interceptor (sa_missile_mk1 aero/motor profiles + 12 kW radar, 20° FOV half-angle, 65° gimbal, 0.5 s acquisition blend, proximity warhead 20/15/25 m) vs hostile coasting target missile (target_missile_rcs.json, 0.25 m² flat RCS); midcourse PN on explicit state, RF acquisition via radar equation + RCS + allegiance (no fake lock), terminal APN, detonation + kill; seed `0x5EEDF1A5u` |
+| `seeker_intercept` | two explicit missiles: friendly RF-seeker interceptor (sa_missile_mk1 aero/motor profiles + 12 kW radar, 20° FOV half-angle, 65° gimbal, 0.5 s acquisition blend, proximity warhead 20/15/25 m) vs hostile coasting target missile (target_missile_rcs.json, 0.25 m² flat RCS); midcourse PN on explicit state, RF acquisition via radar equation + RCS + allegiance (no fake lock), phase sequence Midcourse→Acquisition→Terminal asserted, terminal APN, detonation + kill; seed `0x5EEDF1A5u` |
 | `rocket_mvp` | WGS84 launch: T0 60000 N, flow 27.81 kg/s, init accel ~110 m/s², burnout Isp band [5.39, 6.13] s, cutoff vs Δv = Isp·g0·ln(m0/mdry), apogee, max-Q ~242 kPa |
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
@@ -300,7 +300,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W35 | configurable scalar GPS innovation gating and navigation rejection diagnostics (`navigation_test`, `serialization_test`) | current |
 | W36 | configured navigation constant applied by kernel PN (`guidance_test`) | current |
 | W37 | seeker APN azimuth/elevation rate mapping corrected for the X-forward/Y-right/Z-down body frame (`guidance_test`); original 120 m/s² pipeline scenario restored, 9.7 m miss | current |
-| W38 | traceable mode-aware guidance stack (phases, blend, retention, diagnostics, APN feed-forward availability) + seeker intercept regression (`seeker_intercept_test`, `guidance_test`) | current |
+| W38 | traceable mode-aware guidance stack (phases, blend, bounded lock-loss retention replays the retained terminal command, diagnostics, APN feed-forward availability + public command/scenario target-accel inputs, `GuidanceLaw::Waypoint` + non-finite hardening) + seeker intercept regression (`seeker_intercept_test`, `guidance_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 

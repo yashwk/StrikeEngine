@@ -17,6 +17,10 @@ namespace StrikeEngine::Kernel {
                 guidance.targetVy[cmd.entityId] = cmd.targetVy;
                 guidance.targetVz[cmd.entityId] = cmd.targetVz;
                 guidance.maxAccel[cmd.entityId] = cmd.maxAccel;
+                guidance.targetAccelX[cmd.entityId] = cmd.targetAccelX;
+                guidance.targetAccelY[cmd.entityId] = cmd.targetAccelY;
+                guidance.targetAccelZ[cmd.entityId] = cmd.targetAccelZ;
+                guidance.targetAccelAvailable[cmd.entityId] = cmd.targetAccelAvailable;
             }
         }
         commandQueue.clear();

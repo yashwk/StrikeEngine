@@ -20,6 +20,13 @@ namespace StrikeEngine::Kernel {
                                  // (0 = unlimited). Real guidance laws shape
                                  // commanded g; unbounded demands over-drive
                                  // the fins into saturation.
+        // Target acceleration for APN feed-forward (augmented PN). Consumed
+        // only when targetAccelAvailable is true; otherwise the law explicitly
+        // falls back to pure PN (never reads an uninitialized value).
+        double targetAccelX = 0.0;
+        double targetAccelY = 0.0;
+        double targetAccelZ = 0.0;
+        bool   targetAccelAvailable = false;
     };
 
     class CommandProcessor {

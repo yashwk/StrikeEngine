@@ -129,20 +129,24 @@ namespace StrikeEngine::Kernel {
         {
             LawResult out;
             const double N = guidance.navigationConstant[id];
-            double vc = std::abs(seeker.targetRangeRate[id]);
-            if (vc < 1.0) vc = 1.0;
-            const double dAz = seeker.targetAzimuthRate[id];
-            const double dEl = seeker.targetElevationRate[id];
-            out.nonClosing = seeker.targetRangeRate[id] > 0.0;
-            out.tgoSec = seeker.targetRange[id] / std::max(
-                std::abs(seeker.targetRangeRate[id]), 1.0);
+            const double range = seeker.targetRange[id];
+            const double rangeRate = seeker.targetRangeRate[id];
             if (!std::isfinite(N) || N <= 0.0 ||
-                !std::isfinite(vc) || !std::isfinite(dAz) || !std::isfinite(dEl))
+                !std::isfinite(range) || !std::isfinite(rangeRate) ||
+                !std::isfinite(seeker.targetAzimuthRate[id]) ||
+                !std::isfinite(seeker.targetElevationRate[id]))
             {
+                // Validate inputs BEFORE publishing diagnostics: a non-finite
+                // range or rate must not leak a NaN tgo.
                 out.lawInvalid = true;
                 out.valid = false;
                 return out;
             }
+            const double vc = std::max(std::abs(rangeRate), 1.0);
+            const double dAz = seeker.targetAzimuthRate[id];
+            const double dEl = seeker.targetElevationRate[id];
+            out.nonClosing = rangeRate > 0.0;
+            out.tgoSec = range / std::max(std::abs(rangeRate), 1.0);
             const double ayBody = N * vc * dAz;
             const double azBody = -N * vc * dEl;
             glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
@@ -231,6 +235,11 @@ namespace StrikeEngine::Kernel {
                     out.nonClosing = pn.nonClosing || apn.nonClosing;
                 }
                 applyDemand(i, out, guidance);
+                // Refresh the bounded retained terminal command (post-clamp)
+                // used during a lock-loss retention window.
+                guidance.retainedAccelX[i] = guidance.commandedAccelX[i];
+                guidance.retainedAccelY[i] = guidance.commandedAccelY[i];
+                guidance.retainedAccelZ[i] = guidance.commandedAccelZ[i];
                 continue;
             }
 
@@ -245,10 +254,21 @@ namespace StrikeEngine::Kernel {
                 }
                 const double retain = guidance.lockLossRetentionSec[i];
                 if (retain > 0.0 && guidance.trackAgeSec[i] <= retain) {
-                    phase = GuidancePhase::Terminal;  // retaining track identity
-                } else {
-                    phase = GuidancePhase::LostTrack; // recovery via midcourse PN
+                    // Retention window: apply the bounded predicted terminal
+                    // command (last valid seeker-APN demand, already clamped by
+                    // maxAccel) while the track identity/age is retained.
+                    phase = GuidancePhase::Terminal;
+                    law = GuidanceLaw::SeekerRateAPN;
+                    LawResult retained;
+                    retained.ax = guidance.retainedAccelX[i];
+                    retained.ay = guidance.retainedAccelY[i];
+                    retained.az = guidance.retainedAccelZ[i];
+                    retained.valid = isFinite3(retained.ax, retained.ay, retained.az);
+                    retained.tgoSec = guidance.tgoSec[i];  // last valid tgo
+                    applyDemand(i, retained, guidance);
+                    continue;
                 }
+                phase = GuidancePhase::LostTrack; // recovery via midcourse PN
             }
 
             auto mode = guidance.mode[i];
@@ -272,14 +292,22 @@ namespace StrikeEngine::Kernel {
                 applyDemand(i, computeMidcourse(i, nav, guidance), guidance);
             } else if (mode == GuidanceMode::Waypoint) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
-                law = GuidanceLaw::None;
+                law = GuidanceLaw::Waypoint;
                 double rx = guidance.targetX[i] - nav.estPx[i];
                 double ry = guidance.targetY[i] - nav.estPy[i];
                 double rz = guidance.targetZ[i] - nav.estPz[i];
-                double rMag = std::sqrt(rx * rx + ry * ry + rz * rz);
-                if (rMag < 1.0) rMag = 1.0;
                 const double k = guidance.waypointGain[i];
                 LawResult wp;
+                if (!isFinite3(rx, ry, rz) || !std::isfinite(k)) {
+                    // Non-finite waypoint geometry must not produce an invalid
+                    // acceleration command; mark it explicitly and zero it.
+                    wp.lawInvalid = true;
+                    wp.valid = false;
+                    applyDemand(i, wp, guidance);
+                    continue;
+                }
+                double rMag = std::sqrt(rx * rx + ry * ry + rz * rz);
+                if (rMag < 1.0) rMag = 1.0;
                 wp.ax = k * (rx / rMag);
                 wp.ay = k * (ry / rMag);
                 wp.az = k * (rz / rMag);

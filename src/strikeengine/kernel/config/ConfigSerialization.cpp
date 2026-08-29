@@ -623,6 +623,13 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
     j["initial_target_vy"] = e.initialTargetVy;
     j["initial_target_vz"] = e.initialTargetVz;
     j["initial_max_accel"] = e.initialMaxAccel;
+    // W38: APN feed-forward target acceleration (optional; legacy default off).
+    if (e.initialTargetAccelAvailable) {
+        j["initial_target_accel_x"] = e.initialTargetAccelX;
+        j["initial_target_accel_y"] = e.initialTargetAccelY;
+        j["initial_target_accel_z"] = e.initialTargetAccelZ;
+        j["initial_target_accel_available"] = true;
+    }
 }
 
 void from_json(const json& j, ScenarioEntityConfig& e) {
@@ -636,6 +643,11 @@ void from_json(const json& j, ScenarioEntityConfig& e) {
     e.initialTargetVy = j.at("initial_target_vy").get<double>();
     e.initialTargetVz = j.at("initial_target_vz").get<double>();
     e.initialMaxAccel = j.at("initial_max_accel").get<double>();
+    // Optional (legacy scenario files omit them).
+    e.initialTargetAccelX = j.value("initial_target_accel_x", 0.0);
+    e.initialTargetAccelY = j.value("initial_target_accel_y", 0.0);
+    e.initialTargetAccelZ = j.value("initial_target_accel_z", 0.0);
+    e.initialTargetAccelAvailable = j.value("initial_target_accel_available", false);
 
     e.designRef = j.value("design_ref", std::string(""));
     if (!e.designRef.empty()) {

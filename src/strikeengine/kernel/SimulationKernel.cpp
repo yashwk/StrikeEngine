@@ -220,6 +220,9 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.lawInvalid.push_back(false);
             guidanceBlock.nonClosing.push_back(false);
             guidanceBlock.tgoSec.push_back(0.0);
+            guidanceBlock.retainedAccelX.push_back(0);
+            guidanceBlock.retainedAccelY.push_back(0);
+            guidanceBlock.retainedAccelZ.push_back(0);
 
             statusBlock.type.push_back(EntityType::Missile);
             statusBlock.allegiance.push_back(Allegiance::Friendly);
@@ -327,6 +330,9 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.lawInvalid[id] = false;
         guidanceBlock.nonClosing[id] = false;
         guidanceBlock.tgoSec[id] = 0.0;
+        guidanceBlock.retainedAccelX[id] = 0;
+        guidanceBlock.retainedAccelY[id] = 0;
+        guidanceBlock.retainedAccelZ[id] = 0;
 
         controlBlock.pitchSaturated[id] = false;
         controlBlock.yawSaturated[id] = false;

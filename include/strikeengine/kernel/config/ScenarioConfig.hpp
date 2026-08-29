@@ -33,6 +33,13 @@ namespace StrikeEngine::Kernel {
         double initialTargetVy = 0.0;
         double initialTargetVz = 0.0;
         double initialMaxAccel = 0.0;
+
+        // Target acceleration for APN feed-forward (augmented PN). Used only
+        // when initialTargetAccelAvailable is true; see SimulationCommand.
+        double initialTargetAccelX = 0.0;
+        double initialTargetAccelY = 0.0;
+        double initialTargetAccelZ = 0.0;
+        bool   initialTargetAccelAvailable = false;
     };
 
     struct ScenarioConfig {
@@ -73,6 +80,10 @@ namespace StrikeEngine::Kernel {
                     cmd.targetVy = entityCfg.initialTargetVy;
                     cmd.targetVz = entityCfg.initialTargetVz;
                     cmd.maxAccel = entityCfg.initialMaxAccel;
+                    cmd.targetAccelX = entityCfg.initialTargetAccelX;
+                    cmd.targetAccelY = entityCfg.initialTargetAccelY;
+                    cmd.targetAccelZ = entityCfg.initialTargetAccelZ;
+                    cmd.targetAccelAvailable = entityCfg.initialTargetAccelAvailable;
                     kernel.queueCommand(cmd);
                 }
             }
