@@ -3,7 +3,7 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-29
-**Runtime checkpoint:** `0a1bfef`
+**Runtime checkpoint:** `1645355`
 
 [`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
 measured evidence. This record maps behavior to files, build, execution order,
