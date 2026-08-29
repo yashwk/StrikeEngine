@@ -74,6 +74,18 @@ int main()
     check(std::abs(kernel.getSensors().gpsPosX[0]) > 1.0e6,
           "GPS measurements remain in the selected ECEF frame");
 
+    auto j2Environment = ecefEnvironment();
+    j2Environment.earth.includeJ2Gravity = true;
+    j2Environment.earth.useSphericalGravity = false;
+    j2Environment.earth.useWgs84Gravity = true;
+    SimulationKernel j2Kernel;
+    j2Kernel.setEnvironment(j2Environment);
+    j2Kernel.createVehicle(makeVehicle(launchPosition), vacuumConfig());
+    j2Kernel.step(0.1);
+    check(j2Kernel.getPhysics().px[0] < launchPosition.x &&
+              std::abs(j2Kernel.getPhysics().py[0]) < 1e-3,
+          "ECEF truth applies opt-in J2 gravity consistently with WGS84 position");
+
     SimulationKernel impactKernel;
     impactKernel.setEnvironment(ecefEnvironment());
     const auto impactPosition = geodeticToEcef({0.0, 0.0, 10.0});

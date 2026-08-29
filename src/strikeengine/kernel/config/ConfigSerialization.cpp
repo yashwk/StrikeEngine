@@ -476,6 +476,7 @@ void to_json(json& j, const EarthEnvironmentConfig& e) {
     j["use_ecef_truth"] = e.useEcefTruth;
     j["use_wgs84_gravity"] = e.useWgs84Gravity;
     j["use_spherical_gravity"] = e.useSphericalGravity;
+    j["include_j2_gravity"] = e.includeJ2Gravity;
     j["include_coriolis"] = e.includeCoriolis;
     j["include_centrifugal"] = e.includeCentrifugal;
     j["include_transport_rate"] = e.includeTransportRate;
@@ -488,6 +489,8 @@ void from_json(const json& j, EarthEnvironmentConfig& e) {
     e.useEcefTruth = j.at("use_ecef_truth").get<bool>();
     e.useWgs84Gravity = j.at("use_wgs84_gravity").get<bool>();
     e.useSphericalGravity = j.at("use_spherical_gravity").get<bool>();
+    // Optional for compatibility with pre-J2 environment documents.
+    e.includeJ2Gravity = j.value("include_j2_gravity", false);
     e.includeCoriolis = j.at("include_coriolis").get<bool>();
     e.includeCentrifugal = j.at("include_centrifugal").get<bool>();
     e.includeTransportRate = j.at("include_transport_rate").get<bool>();

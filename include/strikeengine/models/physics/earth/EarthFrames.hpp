@@ -162,6 +162,19 @@ namespace StrikeEngine::Models {
                 gravityEcef);
         }
 
+        /**
+         * @brief J2 gravity expressed in the local ENU frame.
+         */
+        inline Vector3 localJ2GravityAcceleration(
+            const GeodeticCoordinate& position)
+        {
+            const auto gravityEcef = toVector(
+                j2GravityAccelerationEcef(geodeticToEcef(position)));
+            return multiply(
+                ecefToEnuRotation(position.latitudeRad, position.longitudeRad),
+                gravityEcef);
+        }
+
         inline Vector3 ecefNormalGravityAcceleration(
             const GeodeticCoordinate& position)
         {

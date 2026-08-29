@@ -20,6 +20,9 @@ namespace StrikeEngine::Kernel {
         bool useEcefTruth = false;
         bool useWgs84Gravity = false;
         bool useSphericalGravity = false;
+        // Opt-in central + J2 zonal-harmonic gravity. Takes precedence over
+        // normal/spherical gravity and is expressed in ECEF or local ENU.
+        bool includeJ2Gravity = false;
         bool includeCoriolis = false;
         bool includeCentrifugal = false;
         bool includeTransportRate = false;

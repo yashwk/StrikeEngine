@@ -67,6 +67,38 @@ int main()
               std::abs(roundTrip.altitudeM - original.altitudeM) < 1e-5,
           "ECEF and geodetic conversion round-trip preserves position");
 
+    const GeodeticState originalState{
+        original, {12.0, -7.0, 3.5}};
+    const auto ecefState = geodeticToEcefState(originalState);
+    const auto stateRoundTrip = ecefToGeodeticState(ecefState);
+    check(std::abs(stateRoundTrip.position.latitudeRad - original.latitudeRad) < 1e-11 &&
+              std::abs(stateRoundTrip.position.longitudeRad - original.longitudeRad) < 1e-11 &&
+              std::abs(stateRoundTrip.position.altitudeM - original.altitudeM) < 1e-5 &&
+              std::abs(stateRoundTrip.velocityEnu[0] - 12.0) < 1e-10 &&
+              std::abs(stateRoundTrip.velocityEnu[1] + 7.0) < 1e-10 &&
+              std::abs(stateRoundTrip.velocityEnu[2] - 3.5) < 1e-10,
+          "explicit geodetic/ECEF state conversion round-trips ENU velocity");
+
+    const double pi = std::acos(-1.0);
+    const auto nearDateline = ecefToGeodetic(geodeticToEcef({
+        0.5 * pi - 1e-8, pi - 1e-10, 250.0}));
+    check(std::abs(nearDateline.latitudeRad - (0.5 * pi - 1e-8)) < 1e-11 &&
+              std::abs(nearDateline.longitudeRad - (pi - 1e-10)) < 1e-11 &&
+              std::abs(nearDateline.altitudeM - 250.0) < 1e-5,
+          "WGS84 conversion remains accurate near the pole and dateline");
+
+    const auto equatorJ2 = j2GravityAccelerationEcef(equator);
+    const auto equatorPointMass = sphericalGravityAccelerationEcef(equator);
+    check(equatorJ2.x < equatorPointMass.x &&
+              std::abs(equatorJ2.y) < 1e-15 &&
+              std::abs(equatorJ2.z) < 1e-15,
+          "J2 gravity increases equatorial inward acceleration");
+
+    const auto poleJ2 = j2GravityAccelerationEcef(pole);
+    const auto polePointMass = sphericalGravityAccelerationEcef(pole);
+    check(poleJ2.z > polePointMass.z && poleJ2.z < 0.0,
+          "J2 gravity reduces polar inward acceleration with the expected sign");
+
     check(normalGravity(0.0) < normalGravity(0.5 * std::acos(-1.0) / 2.0) &&
               normalGravity(0.0, 1000.0) < normalGravity(0.0),
           "normal gravity varies with latitude and decreases with altitude");
@@ -91,6 +123,16 @@ int main()
     wgs84Kernel.step(0.1);
     check(wgs84Kernel.getPhysics().vz[0] > flatKernel.getPhysics().vz[0],
           "opt-in WGS84 gravity changes CPU truth acceleration");
+
+    EnvironmentConfig j2Environment;
+    j2Environment.earth.includeJ2Gravity = true;
+    j2Environment.earth.referenceLatitudeRad = 0.5 * pi;
+    SimulationKernel j2Kernel;
+    j2Kernel.setEnvironment(j2Environment);
+    j2Kernel.createVehicle(makeVehicle(0.0, 1000.0), vacuum);
+    j2Kernel.step(0.1);
+    check(j2Kernel.getPhysics().az[0] < -9.0,
+          "opt-in local J2 gravity contributes downward acceleration");
 
     EnvironmentConfig coriolisEnvironment;
     coriolisEnvironment.earth.includeCoriolis = true;

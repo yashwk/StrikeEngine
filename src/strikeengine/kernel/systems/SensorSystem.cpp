@@ -101,7 +101,11 @@ namespace StrikeEngine::Kernel {
             if (environment.earth.useEcefTruth) {
                 const auto position = Models::ecefToGeodetic({
                     physics.px[i], physics.py[i], physics.pz[i]});
-                if (environment.earth.useWgs84Gravity) {
+                if (environment.earth.includeJ2Gravity) {
+                    gravity = Models::EarthFrames::toVector(
+                        Models::j2GravityAccelerationEcef({
+                            physics.px[i], physics.py[i], physics.pz[i]}));
+                } else if (environment.earth.useWgs84Gravity) {
                     gravity = Models::EarthFrames::ecefNormalGravityAcceleration(
                         position);
                 } else {
@@ -109,6 +113,14 @@ namespace StrikeEngine::Kernel {
                         Models::sphericalGravityAccelerationEcef(
                             {physics.px[i], physics.py[i], physics.pz[i]}));
                 }
+            } else if (environment.earth.includeJ2Gravity) {
+                const Models::GeodeticCoordinate reference{
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad,
+                    0.0};
+                gravity = Models::EarthFrames::localJ2GravityAcceleration(
+                    Models::EarthFrames::enuToGeodetic(
+                        {physics.px[i], physics.py[i], physics.pz[i]}, reference));
             } else if (environment.earth.useWgs84Gravity) {
                 gravity[2] = -Models::normalGravity(
                     environment.earth.referenceLatitudeRad, physics.pz[i]);

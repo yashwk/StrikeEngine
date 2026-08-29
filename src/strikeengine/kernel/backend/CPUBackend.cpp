@@ -184,8 +184,11 @@ namespace StrikeEngine::Kernel
             std::array<double, 3> earthFrameAcceleration{0.0, 0.0, 0.0};
             if (ecefTruth) {
                 // ECEF truth defaults to radial spherical gravity unless the
-                // caller explicitly selects WGS84 normal gravity.
-                if (environment.earth.useWgs84Gravity) {
+                // caller explicitly selects WGS84 normal or J2 gravity.
+                if (environment.earth.includeJ2Gravity) {
+                    gravity = Models::EarthFrames::toVector(
+                        Models::j2GravityAccelerationEcef(ecefPosition));
+                } else if (environment.earth.useWgs84Gravity) {
                     gravity = Models::EarthFrames::ecefNormalGravityAcceleration(
                         earthPosition);
                 } else {
@@ -200,6 +203,14 @@ namespace StrikeEngine::Kernel
                      environment.earth.includeCoriolis,
                      environment.earth.includeCentrifugal});
                 earthFrameAcceleration = Models::EarthFrames::toVector(rotating);
+            } else if (environment.earth.includeJ2Gravity) {
+                const Models::GeodeticCoordinate reference{
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad,
+                    0.0};
+                const auto position = Models::EarthFrames::enuToGeodetic(
+                    {s.px[i], s.py[i], s.pz[i]}, reference);
+                gravity = Models::EarthFrames::localJ2GravityAcceleration(position);
             } else if (environment.earth.useWgs84Gravity) {
                 gravity[2] = -Models::normalGravity(
                     environment.earth.referenceLatitudeRad, altitude);

@@ -23,6 +23,18 @@ int main()
               std::abs(rotatingAcceleration.z) < 1e-12,
           "rotating ECEF gravity and centrifugal terms point radially inward");
 
+    EcefDynamicsOptions j2Options;
+    j2Options.includeCoriolis = false;
+    j2Options.includeCentrifugal = false;
+    j2Options.includeJ2Gravity = true;
+    const auto j2Acceleration = EarthFixed::acceleration(
+        equator, {}, {}, j2Options);
+    const auto pointMassAcceleration = sphericalGravityAccelerationEcef(equator);
+    check(j2Acceleration.x < pointMassAcceleration.x &&
+              std::abs(j2Acceleration.y) < 1e-12 &&
+              std::abs(j2Acceleration.z) < 1e-12,
+          "standalone ECEF propagator supports opt-in J2 gravity");
+
     EcefDynamicsOptions noEarthTerms;
     noEarthTerms.includeGravity = false;
     noEarthTerms.includeCoriolis = false;

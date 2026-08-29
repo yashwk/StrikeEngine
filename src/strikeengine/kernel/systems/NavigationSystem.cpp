@@ -197,7 +197,10 @@ namespace StrikeEngine::Kernel {
             const Models::EcefCoordinate position{
                 nav.estPx[id], nav.estPy[id], nav.estPz[id]};
             const auto geodetic = Models::ecefToGeodetic(position);
-            if (environment.earth.useWgs84Gravity) {
+            if (environment.earth.includeJ2Gravity) {
+                gravity = Models::EarthFrames::toVector(
+                    Models::j2GravityAccelerationEcef(position));
+            } else if (environment.earth.useWgs84Gravity) {
                 gravity = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
             } else {
                 gravity = Models::EarthFrames::toVector(
@@ -211,6 +214,14 @@ namespace StrikeEngine::Kernel {
                     {false,
                      environment.earth.includeCoriolis,
                      environment.earth.includeCentrifugal}));
+        } else if (environment.earth.includeJ2Gravity) {
+            const Models::GeodeticCoordinate reference{
+                environment.earth.referenceLatitudeRad,
+                environment.earth.referenceLongitudeRad,
+                0.0};
+            gravity = Models::EarthFrames::localJ2GravityAcceleration(
+                Models::EarthFrames::enuToGeodetic(
+                    {nav.estPx[id], nav.estPy[id], nav.estPz[id]}, reference));
         } else if (environment.earth.useWgs84Gravity) {
             gravity[2] = -Models::normalGravity(
                 environment.earth.referenceLatitudeRad, nav.estPz[id]);

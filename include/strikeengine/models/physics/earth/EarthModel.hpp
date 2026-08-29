@@ -24,6 +24,22 @@ namespace StrikeEngine::Models {
         double z = 0.0;
     };
 
+    /**
+     * @brief WGS84 geodetic position with velocity expressed in local ENU.
+     */
+    struct GeodeticState {
+        GeodeticCoordinate position{};
+        std::array<double, 3> velocityEnu{0.0, 0.0, 0.0};
+    };
+
+    /**
+     * @brief ECEF position with velocity expressed in ECEF.
+     */
+    struct EcefState {
+        EcefCoordinate position{};
+        EcefCoordinate velocity{};
+    };
+
     namespace EarthModel {
 
         inline constexpr double semiMajorAxisM = 6378137.0;
@@ -34,6 +50,7 @@ namespace StrikeEngine::Models {
         inline constexpr double earthRotationRateRadPerSec = 7.2921150e-5;
         inline constexpr double standardGravitationalParameterM3PerSec2 =
             3.986004418e14;
+        inline constexpr double secondZonalHarmonic = 1.08262668e-3;
 
         inline double primeVerticalRadiusM(double latitudeRad)
         {
@@ -66,6 +83,36 @@ namespace StrikeEngine::Models {
                 (radius + geodetic.altitudeM) * cosLatitude * sinLongitude,
                 (radius * (1.0 - eccentricitySquared) + geodetic.altitudeM)
                     * sinLatitude};
+        }
+
+        /**
+         * @brief Convert a geodetic position and local ENU velocity to ECEF.
+         *
+         * The velocity is a coordinate-frame conversion only; transport and
+         * Earth-rotation terms are not added implicitly.
+         */
+        inline EcefState geodeticToEcefState(const GeodeticState& geodetic)
+        {
+            const double latitude = geodetic.position.latitudeRad;
+            const double longitude = geodetic.position.longitudeRad;
+            const double sinLatitude = std::sin(latitude);
+            const double cosLatitude = std::cos(latitude);
+            const double sinLongitude = std::sin(longitude);
+            const double cosLongitude = std::cos(longitude);
+            const auto& enu = geodetic.velocityEnu;
+
+            return {
+                geodeticToEcef(geodetic.position),
+                {
+                    -sinLongitude * enu[0]
+                        - sinLatitude * cosLongitude * enu[1]
+                        + cosLatitude * cosLongitude * enu[2],
+                    cosLongitude * enu[0]
+                        - sinLatitude * sinLongitude * enu[1]
+                        + cosLatitude * sinLongitude * enu[2],
+                    cosLatitude * enu[1] + sinLatitude * enu[2]
+                }
+            };
         }
 
         /**
@@ -109,6 +156,37 @@ namespace StrikeEngine::Models {
             const double radius = primeVerticalRadiusM(latitude);
             altitude = horizontal / std::cos(latitude) - radius;
             return {latitude, longitude, altitude};
+        }
+
+        /**
+         * @brief Convert an ECEF position and velocity to geodetic + ENU.
+         *
+         * The returned longitude follows atan2's [-pi, pi] convention and
+         * the velocity is the local ENU velocity at the returned position.
+         */
+        inline GeodeticState ecefToGeodeticState(const EcefState& ecef)
+        {
+            const auto geodetic = ecefToGeodetic(ecef.position);
+            const double latitude = geodetic.latitudeRad;
+            const double longitude = geodetic.longitudeRad;
+            const double sinLatitude = std::sin(latitude);
+            const double cosLatitude = std::cos(latitude);
+            const double sinLongitude = std::sin(longitude);
+            const double cosLongitude = std::cos(longitude);
+            const auto& velocity = ecef.velocity;
+
+            return {
+                geodetic,
+                {
+                    -sinLongitude * velocity.x + cosLongitude * velocity.y,
+                    -sinLatitude * cosLongitude * velocity.x
+                        - sinLatitude * sinLongitude * velocity.y
+                        + cosLatitude * velocity.z,
+                    cosLatitude * cosLongitude * velocity.x
+                        + cosLatitude * sinLongitude * velocity.y
+                        + sinLatitude * velocity.z
+                }
+            };
         }
 
         /**
@@ -159,6 +237,38 @@ namespace StrikeEngine::Models {
             const double scale = -standardGravitationalParameterM3PerSec2 /
                 (radius * radius * radius);
             return {scale * position.x, scale * position.y, scale * position.z};
+        }
+
+        /**
+         * @brief ECEF gravity using the central term plus the WGS84 J2 term.
+         *
+         * This is an axisymmetric zonal-harmonic upgrade over point-mass
+         * gravity. It is intentionally separate from normal gravity: callers
+         * can opt in when a position-dependent ECEF gravity vector is needed.
+         */
+        inline EcefCoordinate j2GravityAccelerationEcef(
+            const EcefCoordinate& position)
+        {
+            const double radiusSquared = position.x * position.x
+                + position.y * position.y + position.z * position.z;
+            if (radiusSquared <= 0.0) return {};
+
+            const double radius = std::sqrt(radiusSquared);
+            const double zOverRadius = position.z / radius;
+            const double radiusRatio = semiMajorAxisM / radius;
+            const double j2Factor = 1.5 * secondZonalHarmonic
+                * radiusRatio * radiusRatio;
+            const double centralFactor =
+                -standardGravitationalParameterM3PerSec2 / (radiusSquared * radius);
+
+            return {
+                centralFactor * position.x
+                    * (1.0 - j2Factor * (5.0 * zOverRadius * zOverRadius - 1.0)),
+                centralFactor * position.y
+                    * (1.0 - j2Factor * (5.0 * zOverRadius * zOverRadius - 1.0)),
+                centralFactor * position.z
+                    * (1.0 - j2Factor * (5.0 * zOverRadius * zOverRadius - 3.0))
+            };
         }
 
         /**
@@ -226,7 +336,10 @@ namespace StrikeEngine::Models {
     } // namespace EarthModel
 
     using EarthModel::ecefToGeodetic;
+    using EarthModel::ecefToGeodeticState;
     using EarthModel::geodeticToEcef;
+    using EarthModel::geodeticToEcefState;
+    using EarthModel::j2GravityAccelerationEcef;
     using EarthModel::localCoriolisAcceleration;
     using EarthModel::localTransportAcceleration;
     using EarthModel::localTransportRateEnu;

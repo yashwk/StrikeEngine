@@ -6,20 +6,13 @@
 namespace StrikeEngine::Models {
 
     /**
-     * @brief Position and velocity expressed in the rotating ECEF frame.
-     */
-    struct EcefState {
-        EcefCoordinate position{};
-        EcefCoordinate velocity{};
-    };
-
-    /**
      * @brief Terms included by the rotating-Earth ECEF equations.
      */
     struct EcefDynamicsOptions {
         bool includeGravity = true;
         bool includeCoriolis = true;
         bool includeCentrifugal = true;
+        bool includeJ2Gravity = false;
     };
 
     namespace EarthFixed {
@@ -64,9 +57,9 @@ namespace StrikeEngine::Models {
             EcefCoordinate result = externalAcceleration;
             const auto omega = earthRotationVector();
             if (options.includeGravity) {
-                result = add(
-                    result,
-                    sphericalGravityAccelerationEcef(position));
+                result = add(result, options.includeJ2Gravity
+                    ? j2GravityAccelerationEcef(position)
+                    : sphericalGravityAccelerationEcef(position));
             }
             if (options.includeCoriolis) {
                 result = add(result, scale(cross(omega, velocity), -2.0));

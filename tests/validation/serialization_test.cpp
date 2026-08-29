@@ -254,6 +254,7 @@ int main()
         env.earth.useEcefTruth = true;
         env.earth.useWgs84Gravity = true;
         env.earth.includeEarthRateGyro = true;
+        env.earth.includeJ2Gravity = true;
         env.earth.referenceLatitudeRad = 0.5;
         env.earth.referenceLongitudeRad = 0.25;
         std::string text;
@@ -268,7 +269,7 @@ int main()
         check(serializeEnvironment(env2) == text,
               "Environment string round-trip is byte-identical");
         check(env2.earth.useEcefTruth && env2.earth.useWgs84Gravity &&
-                  env2.earth.includeEarthRateGyro,
+                  env2.earth.includeEarthRateGyro && env2.earth.includeJ2Gravity,
               "earth flags survive");
         check(env2.earth.referenceLatitudeRad == 0.5 &&
                   env2.earth.referenceLongitudeRad == 0.25,
