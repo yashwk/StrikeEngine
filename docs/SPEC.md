@@ -42,7 +42,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **37/37 CTest tests passing** in Release.
+Current validated checkpoint: **38/38 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
@@ -121,7 +121,7 @@ standalone rotating-Earth propagator. Without J2, both legacy gravity flags set
 → WGS84 wins;
 in ECEF truth, spherical is the fallback when normal gravity is off. All-options-
 false default: legacy constant `-9.80665 m/s²` in local Z. Not a complete
-geophysical model (no geoid separation, terrain streaming, atmospheric
+geophysical model (no geoid separation, multi-tile terrain streaming, atmospheric
 rotation/wind coupling, or full moving-origin global propagator).
 
 ## 5. Kernel API contract
@@ -201,7 +201,19 @@ not a throttle interface; callers MUST NOT expect it to change motor output.
 `terrainElevation(x, y)` returns metres; local x/y are world horizontal coords,
 ECEF-truth x/y are ENU displacement from the reference. `windVelocity(x, y, z,
 time)` returns world/ECEF air-mass velocity; truth subtracts it before aero
-evaluation. Null callbacks → zero wind/terrain.
+evaluation. `EnvironmentConfig::globalTerrain` optionally supplies a WGS84
+geodetic raster (`GlobalTerrain`) sampled by latitude/longitude. It takes
+precedence over the local callback and is used in both local ENU and absolute
+ECEF truth modes. Null callbacks/database → zero wind/terrain.
+
+`GlobalTerrain` stores south-to-north, west-to-east cell-center elevations in
+metres above the WGS84 ellipsoid and returns bilinearly interpolated values.
+Out-of-coverage and all-NODATA samples return 0 m; partial NODATA neighborhoods
+renormalize valid interpolation weights. Longitude is normalized across the
+dateline, and full-width rasters may wrap periodically. The dependency-free
+loader accepts ESRI/ArcInfo ASCII Grid files, reversing their north-first row
+order and recognizing `xllcorner`/`xllcenter`, `yllcorner`/`yllcenter`,
+`cellsize`, and `NODATA_value`.
 
 ### 5.5 Configuration serialization and design interchange
 
@@ -210,7 +222,8 @@ Public API operates on JSON text; nlohmann/json never exposed in public headers.
 
 - `serializeVehicleConfig`/`deserializeVehicleConfig`: full `VehicleConfig`.
 - `serializeEnvironment`/`deserializeEnvironment`: `earth` block only; on load
-  terrain/wind callbacks reset to flat/zero.
+  terrain/wind callbacks and the non-serializable `globalTerrain` pointer reset
+  to flat/zero.
 - `serializeScenario`/`deserializeScenario`, `ScenarioConfig::save(path)` (false
   if unopenable), static `ScenarioConfig::load(path)` (throws `std::runtime_error`
   on missing/malformed).
@@ -483,6 +496,7 @@ not yet in the supported contract.
 
 Implemented or MVP: CPU SoA kernel; per-entity physics; 6-DOF rigid body; ISA1976
 atmosphere; aero/propulsion; RK4/RK45/Euler/Symplectic; terrain/wind callbacks;
+geodetic global terrain rasters with ESRI ASCII loading and bilinear sampling;
 impact events; deterministic failure/damage (motor, actuator, sensor, structural,
 communication) with events; sensors; navigation EKF; RF/IR/SARH/PassiveRF seekers
 with chaff/flare; PN/APN/waypoint guidance; autopilot; WGS84/ECEF/local-earth
@@ -502,7 +516,8 @@ burnout velocity vs `Δv = Isp·g0·ln(m0/mdry)`), confirming `T = ṁ·Isp·g0`
 Planned or partial: CFD validation and higher-order aero (Reynolds dependence,
 nonlinear stall/post-stall, body/fin interference, flexible-body effects);
 probabilistic failure degradation; partial health/repair;
-advanced atmosphere; global terrain/DEM; geoid models; imaging IR; multi-target
+advanced atmosphere; streamed multi-tile terrain, DTED/GeoTIFF ingestion and
+geoid models; imaging IR; multi-target
 tracking; dynamic SARH illuminator tracking; band-resolved extinction; sensor
 fusion; trajectory/energy management; pursuit; LQR/MPC; richer telemetry; parallel
 CPU; CUDA; production GPU backend. Optional ECS/editor mapping,

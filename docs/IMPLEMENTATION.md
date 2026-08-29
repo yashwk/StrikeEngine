@@ -3,7 +3,7 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-29
-**Runtime checkpoint:** `4e27580`
+**Runtime checkpoint:** `049ef76`
 
 [`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
 measured evidence. This record maps behavior to files, build, execution order,
@@ -14,7 +14,7 @@ validation, and remaining work.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **37/37 CTest tests pass**.
+- Release validation: **38/38 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -100,8 +100,9 @@ carries per-entity `stageIndex`/`stageCount`.
   `std::runtime_error` naming the file), `processStaging` (leftover dump, dry-mass
   drop, post-dump inertia rescale, `dumpedMassKg`), `processWarheads` (impact/
   proximity/timed fusing, falloff band, RNG draw only when `0 < p < 1`).
-- `EnvironmentConfig.hpp`: terrain/wind callbacks; earth options (`useEcefTruth`,
-  gravity, Coriolis, centrifugal, transport).
+- `EnvironmentConfig.hpp`: local terrain/wind callbacks, optional geodetic
+  `GlobalTerrain` database; earth options (`useEcefTruth`, gravity, Coriolis,
+  centrifugal, transport).
 - `ScenarioConfig.hpp`: scenario metadata, environment, entities, target, kernel
   loading, `save`/`load`, per-entity `designRef` override.
 - `VehicleConfig.hpp`: flattened view (`type` = `EntityType`, `initialMass`,
@@ -152,8 +153,11 @@ carries per-entity `stageIndex`/`stageCount`.
   centrifugal.
 - `EarthFixedPropagator.hpp`: standalone rotating-Earth ECEF RK4 with optional
   J2 gravity.
+- `GlobalTerrain.hpp/.cpp`: dependency-free geodetic raster database with
+  bilinear interpolation, NODATA renormalization, dateline normalization, and
+  ESRI ASCII Grid loading.
 - `EventSystem.cpp`: local terrain views, geodetic altitude, ellipsoid impact
-  clamp, failure event vocabulary (`MotorFailure`/`EngineFailure`/`TankFailure`/
+  clamp, global-geodetic terrain queries in local/ECEF truth, failure event vocabulary (`MotorFailure`/`EngineFailure`/`TankFailure`/
   `ActuatorFailure`/`SensorFailure`/`StructuralFailure`/`CommunicationFailure`); `dumpedMassKg` on
   `StageSeparation` (0.0 on exhaustion burnouts).
 
@@ -232,6 +236,7 @@ binary reader implemented; richer telemetry future.
 | `kernel_lifecycle` | freed-slot reuse reset; non-positive-timestep rejection |
 | `failure` | deterministic failure/damage semantics and events |
 | `propulsion` | strict profile validation, ignition/shutdown transients, TVC gimbal limits/servo, engine torque, engine/tank failures, serialization |
+| `global_terrain` | raster sampling, ESRI ASCII loading, NODATA handling, dateline normalization, local/ECEF terrain impact |
 | `lever_arm` | per-entity IMU lever-arm correction (α×l + ω×(ω×l)) |
 | `reporting` | versioned local/ECEF output, field selection, binary record/read |
 | `config_wiring` | per-entity sensor enablement, guidance/autopilot gain wiring |
@@ -274,6 +279,7 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W29 | geometric fins (RocketPy trapezoidal/elliptical/free-form) (`fins_test`) | current |
 | W30 | static moment/lateral aero tables (`coefficient_table_test`, `serialization_test`, `profile_database_test`) | current |
 | W32 | strict propulsion validation, ignition/shutdown transients, two-axis TVC + engine torque, engine/tank failures (`propulsion_test`) | current |
+| W33 | geodetic terrain raster, ESRI ASCII loader, dateline-safe sampling, local/ECEF impact integration (`global_terrain_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -296,7 +302,8 @@ Tracked so these are not mistaken for missing docs or current guarantees:
 
 - **Physics/environment:** CFD-validated coefficient data, `AeroForces`,
   Reynolds-dependent/nonlinear stall and post-stall behavior, advanced
-  atmosphere/weather, DEM/DTED loading + streaming, datum/geoid, polar/dateline.
+  atmosphere/weather, multi-tile terrain streaming, DTED/GeoTIFF ingestion,
+  datum/geoid, and higher-fidelity polar coverage.
   (static cd/cl/cm/cy/cn/cl tables implemented — W27/W30; geometric fins
   implemented — W29.)
 - **Navigation/sensing:** sensor fusion, magnetometer, barometer, radar altimeter,
@@ -315,8 +322,8 @@ Tracked so these are not mistaken for missing docs or current guarantees:
 ## 10. Known limitations and prioritized backlog
 
 Consolidated with §9.2 and FIDELITY §5 — highest-value gaps: study-output
-telemetry (binary reader done); global terrain (DEM/DTED ingestion, streaming,
-datum/geoid, dateline/polar); probabilistic failure degradation/partial
+telemetry (binary reader done); global terrain multi-tile streaming, DTED/GeoTIFF
+ingestion, datum/geoid, and higher-fidelity polar coverage; probabilistic failure degradation/partial
 health/repair (deterministic flags done, MVP); GNC depth (imaging IR, multi-target,
 dynamic illuminator, band-resolved extinction, multi-rate timestamp
 interpolation); guidance/aero depth (trajectory management, pursuit, LQR/MPC,

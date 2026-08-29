@@ -1,8 +1,8 @@
 # StrikeEngine — Fidelity Audit
 
 **Audit date:** 2026-08-29<br>
-**Runtime checkpoint:** `4e27580`<br>
-**Validation result:** Release build, **37/37 CTest tests passed**
+**Runtime checkpoint:** `049ef76`<br>
+**Validation result:** Release build, **38/38 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -57,6 +57,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W30 — Static moment/lateral aero tables | Implemented / MVP | `coefficient_table_test`, `serialization_test`, `profile_database_test`; Cm(M,α), Cy(M,β), Cn(M,β), rolling Cl(M,β), finite/strict-grid validation, bilinear interpolation, scalar fallback |
 | W31 — ECEF/geodetic states + J2 gravity | Implemented / MVP | `earth_test`, `earth_fixed_test`, `ecef_kernel_test`, `serialization_test`; explicit ENU/ECEF velocity conversion, pole/dateline round-trip, WGS84 J2 gravity, standalone propagator and truth/sensor/navigation consistency |
 | W32 — Propulsion transients, TVC, and feed failures | Implemented / MVP | `propulsion_test`; strict curve/config validation, ignition delay/ramp, shutdown ramp, two-axis achieved-gimbal limits, engine-position torque, explicit engine/tank failure flags/events, legacy motor-failure compatibility |
+| W33 — Geodetic global terrain raster | Implemented / MVP | `global_terrain_test`; in-memory bilinear raster, ESRI ASCII Grid loading, NODATA handling, dateline normalization, local ENU and ECEF terrain impact/clamping |
 
 ## 3. Subsystem fidelity assessment
 
@@ -69,13 +70,13 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Propulsion | Validated thrust curves, pressure-interpolated Isp, fuel-limited mass flow, ignition/shutdown transients, two-axis TVC with achieved servo state and engine torque, ordered staging + leftover dump, engine/tank failures | **MVP:** deterministic no-leak tank failure; no pressure-fed turbomachinery, grain regression, mixture-ratio, thermal, or probabilistic degradation model |
 | Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
-| Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF | **MVP:** no geoid, terrain streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
+| Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF, geodetic terrain raster queries | **MVP:** no geoid, multi-tile terrain streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
 | Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |
 | Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
 | Guidance | Stateless PN/APN, waypoint, seeker handoff, per-entity gains | **MVP:** no trajectory manager, pursuit, LQR/MPC, blended handoff |
-| Events and terrain | Terrain/wind callbacks, real impact deactivation, failure/damage events | **MVP:** no DEM/DTED database, streaming, datum/geoid, probabilistic failure |
+| Events and terrain | Local callbacks plus geodetic raster database, real local/ECEF impact deactivation and clamping | **MVP:** ESRI ASCII single-raster loader only; no multi-tile streaming, DTED/GeoTIFF, datum/geoid, or probabilistic failure |
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
 | Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
 | Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, batch; versioned CSV/binary + reader | **MVP:** richer telemetry/streaming remain; some optimizer paths primary-entity oriented |
@@ -83,7 +84,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **37/37 tests passed** at the checkpoint above.
+- Release CTest suite green: **38/38 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **45.4 m minimum miss** at t≈11.5 s with a
@@ -104,8 +105,9 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
 
 1. **Study output:** binary reader done; richer telemetry, streaming sinks, output
    selection remain.
-2. **Global terrain:** DEM/DTED ingestion, streaming, datum/geoid, dateline/polar,
-   frame-aware collision queries.
+2. **Global terrain:** basic geodetic raster and frame-aware collision queries are
+   implemented (`global_terrain_test`); multi-tile streaming, DTED/GeoTIFF
+   ingestion, datum/geoid, and higher-fidelity polar coverage remain.
 3. **Failure/damage:** deterministic flags done (MVP, `failure_test`);
    probabilistic degradation, partial health, repair remain.
 4. **GNC fidelity:** lever arms, coning/sculling, earth-rate gyro done (MVP,
@@ -128,7 +130,7 @@ Prioritized gaps (details in IMPLEMENTATION §9.2):
 Still deferred: power/comms/ECM models, StrikeCEM/StrikeCFD coupling (and
 CFD validation of the moment (cm)/lateral (β) coefficient tables), a full
 GPS-only positioning mode (current GPS-only aiding is not one), guidance depth
-(trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and full global terrain. The
+(trajectory/pursuit/LQR/MPC), Vulkan/CPU parity, and full multi-tile global terrain. The
 falloff band, leftover-propellant dump, and geometric fins (Mach-scaled fin
 effectiveness, lateral β side-force/stability for angled fins) are implemented
 and no longer deferred.
