@@ -2,7 +2,7 @@
 
 **Status:** authoritative normative specification
 **Version:** 0.1.0
-**Verified:** 2026-08-26
+**Verified:** 2026-08-29
 **Repository:** StrikeEngine
 
 Requirements use **MUST / MUST NOT / SHOULD / MAY** in their usual normative

@@ -1,7 +1,7 @@
 # StrikeEngine — Fidelity Audit
 
 **Audit date:** 2026-08-29<br>
-**Runtime checkpoint:** `049ef76`<br>
+**Runtime checkpoint:** `eb4983c`<br>
 **Validation result:** Release build, **38/38 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
