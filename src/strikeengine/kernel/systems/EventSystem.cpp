@@ -44,25 +44,37 @@ namespace StrikeEngine::Kernel {
             environment.earth.referenceLatitudeRad,
             environment.earth.referenceLongitudeRad,
             0.0};
-        const auto localPosition = [&](double x, double y, double z) {
-            if (!ecefTruth) return std::array<double, 3>{x, y, z};
+        struct TerrainLocation {
+            std::array<double, 3> local{};
+            Models::GeodeticCoordinate geodetic{};
+        };
+        const auto location = [&](double x, double y, double z) {
+            if (!ecefTruth) {
+                const auto geodetic = Models::EarthFrames::enuToGeodetic(
+                    {x, y, 0.0}, reference);
+                return TerrainLocation{{x, y, z}, geodetic};
+            }
             const Models::EcefCoordinate ecef{x, y, z};
             const auto geodetic = Models::ecefToGeodetic(ecef);
             const auto enu = Models::EarthFrames::ecefToEnu(ecef, reference);
-            return std::array<double, 3>{enu[0], enu[1], geodetic.altitudeM};
+            return TerrainLocation{{enu[0], enu[1], geodetic.altitudeM}, geodetic};
         };
 
         for (std::size_t i = 0; i < physics.size; ++i) {
             if (!physics.active[i] || !status.isAlive[i]) continue;
 
-            const auto terrain = [&environment](double x, double y) {
+            const auto terrain = [&environment](const TerrainLocation& point) {
+                if (environment.globalTerrain) {
+                    return environment.globalTerrain->elevationM(
+                        point.geodetic.latitudeRad, point.geodetic.longitudeRad);
+                }
                 return environment.terrainElevation
-                    ? environment.terrainElevation(x, y) : 0.0;
+                    ? environment.terrainElevation(point.local[0], point.local[1]) : 0.0;
             };
-            const auto currentLocal = localPosition(
+            const auto currentLocal = location(
                 physics.px[i], physics.py[i], physics.pz[i]);
-            const double currentGround = terrain(currentLocal[0], currentLocal[1]);
-            const double currentHeight = currentLocal[2] - currentGround;
+            const double currentGround = terrain(currentLocal);
+            const double currentHeight = currentLocal.local[2] - currentGround;
 
             // Continuous ground check against the configured terrain surface.
             if (currentHeight <= 0.0) {
@@ -75,11 +87,10 @@ namespace StrikeEngine::Kernel {
                     i < previousPz.size();
                 double impactTime = currentTime;
                 if (hasCrossingData) {
-                    const auto previousLocal = localPosition(
+                    const auto previousLocal = location(
                         previousPx[i], previousPy[i], previousPz[i]);
-                    const double previousGround = terrain(
-                        previousLocal[0], previousLocal[1]);
-                    const double previousHeight = previousLocal[2] - previousGround;
+                    const double previousGround = terrain(previousLocal);
+                    const double previousHeight = previousLocal.local[2] - previousGround;
                     if (previousHeight > 0.0 && currentHeight < 0.0) {
                         const double fraction = previousHeight /
                             (previousHeight - currentHeight);

@@ -2,6 +2,9 @@
 
 #include <array>
 #include <functional>
+#include <memory>
+
+#include <strikeengine/models/terrain/GlobalTerrain.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -48,6 +51,11 @@ namespace StrikeEngine::Kernel {
 
         std::function<double(double x, double y)> terrainElevation =
             [](double, double) { return 0.0; };
+
+        // Optional geodetic terrain database. When present it takes
+        // precedence over terrainElevation and is sampled at the vehicle's
+        // WGS84 latitude/longitude in both local and ECEF truth modes.
+        std::shared_ptr<const Models::GlobalTerrain> globalTerrain;
 
         std::function<std::array<double, 3>(double x, double y, double z, double time)>
             windVelocity = [](double, double, double, double) {
