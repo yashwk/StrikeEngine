@@ -58,6 +58,10 @@ namespace StrikeEngine::Kernel
         derivBuffer.qw.assign(n, 0.0); derivBuffer.qx.assign(n, 0.0); derivBuffer.qy.assign(n, 0.0); derivBuffer.qz.assign(n, 0.0);
         derivBuffer.wx.assign(n, 0.0); derivBuffer.wy.assign(n, 0.0); derivBuffer.wz.assign(n, 0.0);
         derivBuffer.alphax.assign(n, 0.0); derivBuffer.alphay.assign(n, 0.0); derivBuffer.alphaz.assign(n, 0.0);
+        derivBuffer.mach.assign(n, 0.0);
+        derivBuffer.dynamicPressure.assign(n, 0.0);
+        derivBuffer.airDensity.assign(n, 0.0);
+        derivBuffer.localSpeedOfSound.assign(n, 0.0);
         derivBuffer.Ixx.assign(n, 0.0); derivBuffer.Iyy.assign(n, 0.0); derivBuffer.Izz.assign(n, 0.0);
         derivBuffer.mass.assign(n, 0.0);
         derivBuffer.massDry.assign(n, 0.0);
@@ -93,6 +97,8 @@ namespace StrikeEngine::Kernel
             d.qw[i] = 0.0; d.qx[i] = 0.0; d.qy[i] = 0.0; d.qz[i] = 0.0;
             d.wx[i] = 0.0; d.wy[i] = 0.0; d.wz[i] = 0.0;
             d.alphax[i] = 0.0; d.alphay[i] = 0.0; d.alphaz[i] = 0.0;
+            d.mach[i] = 0.0; d.dynamicPressure[i] = 0.0;
+            d.airDensity[i] = 0.0; d.localSpeedOfSound[i] = 0.0;
             d.mass[i] = 0.0;
             d.gimbalPitch[i] = 0.0; d.gimbalYaw[i] = 0.0;
             d.finPitch[i] = 0.0; d.finYaw[i] = 0.0; d.finRoll[i] = 0.0;
@@ -144,6 +150,16 @@ namespace StrikeEngine::Kernel
                 s.finPitch[i], s.finYaw[i], s.finRoll[i],  // achieved deflections
                 atm.density, atm.speedOfSound,
                 params);
+
+            // Ambient truth mirrors: the same airspeed / atmosphere the aero
+            // model above consumed, exposed to consumers via the post-step
+            // refresh in step(). Airspeed is wind-relative (matches the
+            // force computation), so Mach and q are the true flight values.
+            const double vAirMag = std::sqrt(u * u + v * v + w * w);
+            d.mach[i] = (atm.speedOfSound > 0.0) ? vAirMag / atm.speedOfSound : 0.0;
+            d.dynamicPressure[i] = 0.5 * atm.density * vAirMag * vAirMag;
+            d.airDensity[i] = atm.density;
+            d.localSpeedOfSound[i] = atm.speedOfSound;
 
             // 4. Propulsion (per-entity motor, fuel-limited)
             double thrustBodyX = 0.0;
@@ -402,6 +418,10 @@ namespace StrikeEngine::Kernel
             physics.alphax[i] = derivBuffer.alphax[i];
             physics.alphay[i] = derivBuffer.alphay[i];
             physics.alphaz[i] = derivBuffer.alphaz[i];
+            physics.mach[i] = derivBuffer.mach[i];
+            physics.dynamicPressure[i] = derivBuffer.dynamicPressure[i];
+            physics.airDensity[i] = derivBuffer.airDensity[i];
+            physics.localSpeedOfSound[i] = derivBuffer.localSpeedOfSound[i];
         }
     }
 

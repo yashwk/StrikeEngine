@@ -33,6 +33,16 @@ struct PhysicsBlock {
 	std::vector<double> wx, wy, wz;        // BODY angular rates (rad/s)
 	std::vector<double> alphax, alphay, alphaz; // BODY angular accel (cache)
 
+	// Ambient truth mirrors (cache, refreshed in the same post-step pass as
+	// ax/ay/az): the air-relative Mach / dynamic pressure / air density /
+	// local speed of sound that the aerodynamics actually integrated with at
+	// the end of the step. Read-only for consumers (sensors, telemetry,
+	// dashboards) — never treated as integrated state.
+	std::vector<double> mach;              // air-relative Mach (V_airspeed / a)
+	std::vector<double> dynamicPressure;   // q = 0.5 * rho * V_airspeed^2 (Pa)
+	std::vector<double> airDensity;        // kg/m^3 (truth atmosphere at entity)
+	std::vector<double> localSpeedOfSound; // m/s (truth atmosphere at entity)
+
 	// Mass properties
 	std::vector<double> Ixx, Iyy, Izz;     // principal moments of inertia (body)
 	std::vector<double> mass;              // total mass (kg)

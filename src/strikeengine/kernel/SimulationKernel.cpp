@@ -172,6 +172,10 @@ namespace StrikeEngine::Kernel {
             physicsBlock.enginePositionX.push_back(0.0);
             physicsBlock.enginePositionY.push_back(0.0);
             physicsBlock.enginePositionZ.push_back(0.0);
+            physicsBlock.mach.push_back(0.0);
+            physicsBlock.dynamicPressure.push_back(0.0);
+            physicsBlock.airDensity.push_back(0.0);
+            physicsBlock.localSpeedOfSound.push_back(0.0);
             physicsBlock.active.push_back(true);
             physicsBlock.motorFailed.push_back(false);
             physicsBlock.engineFailed.push_back(false);
@@ -418,6 +422,11 @@ namespace StrikeEngine::Kernel {
         physicsBlock.qw[id] = init.qw; physicsBlock.qx[id] = init.qx; physicsBlock.qy[id] = init.qy; physicsBlock.qz[id] = init.qz;
         physicsBlock.wx[id] = init.wx; physicsBlock.wy[id] = init.wy; physicsBlock.wz[id] = init.wz;
         physicsBlock.alphax[id] = 0.0; physicsBlock.alphay[id] = 0.0; physicsBlock.alphaz[id] = 0.0;
+        // Ambient mirrors are populated by the first post-step refresh.
+        physicsBlock.mach[id] = 0.0;
+        physicsBlock.dynamicPressure[id] = 0.0;
+        physicsBlock.airDensity[id] = 0.0;
+        physicsBlock.localSpeedOfSound[id] = 0.0;
         physicsBlock.Ixx[id] = config.Ixx; physicsBlock.Iyy[id] = config.Iyy; physicsBlock.Izz[id] = config.Izz;
 
         // Multi-stage propulsion: register every stage with a non-empty thrust
