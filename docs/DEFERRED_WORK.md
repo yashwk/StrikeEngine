@@ -41,16 +41,24 @@ implemented MVP features, not deferred work.
 
 ## Guidance and control
 
-- Trajectory management.
-- Energy-aware guidance and energy management.
+- Trajectory optimization and full trajectory management. W40's
+  trajectory-aware midcourse predictor and acceleration-feasibility gate are
+  implemented; optimization remains deferred.
+- Energy-aware guidance, energy corridors, and energy management.
 - Advanced pursuit guidance.
 - LQR and MPC control laws.
 - Seeker-management handoff beyond the implemented acquisition-to-terminal
   blend.
 
-The next planned milestone is trajectory/energy-aware guidance consuming the
-W39 `TrackBlock`, with deterministic tests for prediction, feasibility,
-dropout, reacquisition, and actuator/energy limits.
+W40 is complete: trajectory-aware midcourse guidance consumes the W39
+`TrackBlock`, provides predicted intercept/tgo/required-acceleration
+diagnostics, handles dropout/reacquisition, and preserves seeker-lock and
+legacy fallbacks. Its constant-speed predictor is not an energy or drag/thrust
+optimizer.
+
+The next guidance milestone is W41: trajectory optimization and energy-aware
+guidance with deterministic tests for energy limits, actuator limits, and
+feasible target interception.
 
 ## Execution and platform support
 

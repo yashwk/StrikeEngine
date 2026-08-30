@@ -8,7 +8,8 @@
 Requirements use **MUST / MUST NOT / SHOULD / MAY** in their usual normative
 sense. [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the companion implementation
 record; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is measured evidence and does
-not override this specification.
+not override this specification. [`STRIKEDESIGNER_INTEGRATION.md`](STRIKEDESIGNER_INTEGRATION.md)
+defines the downstream Designer handoff.
 
 ## 1. Product boundary
 
@@ -42,7 +43,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **36/36 CTest tests passing** in Release.
+Current validated checkpoint: **37/37 CTest tests passing** in Release.
 
 ## 3. Global contracts
 

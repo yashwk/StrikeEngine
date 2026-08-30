@@ -3,18 +3,19 @@
 **Status:** authoritative implementation record
 **Companion specification:** [`SPEC.md`](SPEC.md)
 **Verified:** 2026-08-29
-**Runtime checkpoint:** `1645355`
+**Runtime checkpoint:** `5849963`
 
 [`SPEC.md`](SPEC.md) is normative; [`FIDELITY_AUDIT.md`](FIDELITY_AUDIT.md) is
 measured evidence. This record maps behavior to files, build, execution order,
-validation, and remaining work.
+validation, and remaining work. [`STRIKEDESIGNER_INTEGRATION.md`](STRIKEDESIGNER_INTEGRATION.md)
+defines the Designer-facing export boundary.
 
 ## 1. Verified state
 
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **36/36 CTest tests pass**.
+- Release validation: **37/37 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).

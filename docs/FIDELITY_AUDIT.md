@@ -90,7 +90,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **36/36 tests passed** at the checkpoint above.
+- Release CTest suite green: **37/37 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **9.7 m minimum miss** at t≈11.5 s with a
