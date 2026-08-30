@@ -275,11 +275,64 @@ static void flightChecks()
     check(driftSqE < 4.0, "elliptical vertical launch stays vertical (<2 m)");
 }
 
+static void controlPolarityChecks()
+{
+    std::printf("\n-- control polarity (tail fins) --\n");
+    // The guidance loop is tuned to the documented+abstract convention: a
+    // positive pitch deflection command produces a nose-UP moment (+torque_y)
+    // and a positive yaw command produces a nose-RIGHT moment (+torque_z).
+    // The geometric-fin control terms must reproduce exactly that response so
+    // the closed loop has the same polarity with or without fins (a previous
+    // inversion here put aft-fin vehicles into positive feedback -> hard-over
+    // dive). Stability keeps its restoring sign (alpha>0 -> nose-DOWN).
+    auto tail = buildFinsGeometry(FinShape::Trapezoidal, 4,
+        0.5, 0.35, 0.25, 0.15, -1.5, 0.0, {}, kRefAreaRadius01, nullptr);
+    if (!tail) return;
+    AeroParams p;
+    p.referenceArea = kRefAreaRadius01;
+    p.referenceLength = 0.2;
+    p.cd = 0.0; p.clAlpha = 0.0; p.clFin = 0.0; p.clMax = 2.0;
+    p.fins = tail;
+    BasicAeroModel m;
+    const double V = 100.0;
+
+    {   // zero alpha/beta, +pitch command -> nose-UP
+        auto w = m.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                 0.05, 0.0, 0.0, 1.225, 340.0, p);
+        check(w.torque_y > 0.0, "+finPitch -> nose-UP (+torque_y)");
+        auto w2 = m.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                  -0.05, 0.0, 0.0, 1.225, 340.0, p);
+        check(w2.torque_y < 0.0, "-finPitch -> nose-DOWN (-torque_y)");
+    }
+    {   // zero alpha/beta, +yaw command -> nose-RIGHT
+        auto w = m.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                 0.0, 0.05, 0.0, 1.225, 340.0, p);
+        check(w.torque_z > 0.0, "+finYaw -> nose-RIGHT (+torque_z)");
+        auto w2 = m.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                  0.0, -0.05, 0.0, 1.225, 340.0, p);
+        check(w2.torque_z < 0.0, "-finYaw -> nose-LEFT (-torque_z)");
+    }
+    {   // stability restored beyond the control check: +alpha, no command
+        auto w = m.computeWrench(V, 0.0, 5.0, 0.0, 0.0, 0.0,
+                                 0.0, 0.0, 0.0, 1.225, 340.0, p);
+        check(w.torque_y < 0.0, "stability: +alpha (nose up) -> nose-DOWN torque");
+        auto w2 = m.computeWrench(V, 4.0, 0.0, 0.0, 0.0, 0.0,
+                                  0.0, 0.0, 0.0, 1.225, 340.0, p);
+        check(w2.torque_z < 0.0, "stability: +beta (wind from right) -> nose-LEFT torque");
+    }
+    {   // a nose-up command at small positive alpha still commands nose-up
+        auto w = m.computeWrench(V, 0.0, 2.0, 0.0, 0.0, 0.0,
+                                 0.08, 0.0, 0.0, 1.225, 340.0, p);
+        check(w.torque_y > 0.0, "nose-up command dominates the small restoring term");
+    }
+}
+
 int main()
 {
     std::printf("=== fins: RocketPy geometric fin model (trapezoidal/elliptical/free-form) ===\n");
     geometryChecks();
     machAndSignChecks();
+    controlPolarityChecks();
     serializationChecks();
     validationChecks();
     flightChecks();

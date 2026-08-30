@@ -210,10 +210,20 @@ namespace StrikeEngine::Models {
                                     * (p.fins->cantRad + finRoll)
                                 - qS * l * l * 0.5 * p.fins->rollDampingCoeff(mach) * wx,
                                 -maxControlMoment, maxControlMoment);
-                ty = std::clamp(qS * xcp * clFin * (alpha + finPitch),
+                ty = std::clamp(qS * xcp * clFin * (alpha - finPitch),
                                 -maxControlMoment, maxControlMoment);
-                tz = std::clamp(-qS * xcp * clFin * (beta + finYaw),
+                tz = std::clamp(qS * xcp * clFin * (beta - finYaw),
                                 -maxControlMoment, maxControlMoment);
+
+                // Control-term polarity matches the documented + tuned
+                // convention (positive deflection -> nose-UP / nose-RIGHT, the
+                // same response the abstract CM_delta path gives), so the
+                // guidance loop behaves identically with or without geometric
+                // fins. The angle terms keep their restoring sign for tail
+                // fins (negative xcp): alpha>0 (nose up) -> nose-DOWN
+                // command-free torque; beta>0 (wind from right) -> nose-LEFT.
+                // (Previously the control terms were inverted here, which put
+                // an aft-fin vehicle into positive feedback -> hard-over dive.)
 
                 // A supplied table adds validated body static coefficients to
                 // the geometry-derived fin contribution. Without a table the
