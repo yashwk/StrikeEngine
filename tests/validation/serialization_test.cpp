@@ -26,6 +26,7 @@ VehicleConfig makeRichConfig()
     cfg.initialMass = 1200.0;
     cfg.massDry = 900.0;
     cfg.Ixx = 40.0; cfg.Iyy = 800.0; cfg.Izz = 800.0;
+    cfg.Ixy = 1.2;  cfg.Ixz = 2.3;   cfg.Iyz = 3.4;
 
     cfg.aero.referenceArea = 1.4;
     cfg.aero.referenceLength = 1.2;
@@ -127,6 +128,10 @@ VehicleConfig makeRichConfig()
     cfg.guidanceAutopilot.maxDeflectionRad = 0.5;
     cfg.guidanceAutopilot.servoTimeConstantSec = 0.03;
     cfg.guidanceAutopilot.maxServoRateRadPerSec = 6.0;
+    cfg.guidanceAutopilot.gainSchedulingEnabled = true;
+    cfg.guidanceAutopilot.refDynamicPressurePa = 45000.0;
+    cfg.guidanceAutopilot.minDynamicPressurePa = 3000.0;
+    cfg.guidanceAutopilot.maxDynamicPressurePa = 250000.0;
 
     cfg.warhead.massKg = 25.0;
     cfg.warhead.fusing = FusingType::Proximity;
@@ -168,8 +173,9 @@ int main()
         check(cfg2.type == EntityType::Aircraft, "type survives as Aircraft");
         check(cfg2.initialMass == 1200.0 && cfg2.massDry == 900.0,
               "structural mass fields survive");
-        check(cfg2.Ixx == 40.0 && cfg2.Iyy == 800.0 && cfg2.Izz == 800.0,
-              "inertia values survive");
+        check(cfg2.Ixx == 40.0 && cfg2.Iyy == 800.0 && cfg2.Izz == 800.0 &&
+              cfg2.Ixy == 1.2 && cfg2.Ixz == 2.3 && cfg2.Iyz == 3.4,
+              "inertia values (including products of inertia) survive");
         check(cfg2.aero.cd == 0.35 && cfg2.aero.clAlpha == 3.0 &&
                   cfg2.aero.clFin == 1.5 && cfg2.aero.clMax == 1.9,
               "aero coefficients survive");
@@ -208,8 +214,12 @@ int main()
               "sensor noise/bias/lever-arm fields survive");
         check(cfg2.guidanceAutopilot.navigationConstant == 4.0 &&
                   cfg2.guidanceAutopilot.kAccelP == 0.05 &&
-                  cfg2.guidanceAutopilot.maxServoRateRadPerSec == 6.0,
-              "guidance/autopilot gains survive");
+                  cfg2.guidanceAutopilot.maxServoRateRadPerSec == 6.0 &&
+                  cfg2.guidanceAutopilot.gainSchedulingEnabled &&
+                  cfg2.guidanceAutopilot.refDynamicPressurePa == 45000.0 &&
+                  cfg2.guidanceAutopilot.minDynamicPressurePa == 3000.0 &&
+                  cfg2.guidanceAutopilot.maxDynamicPressurePa == 250000.0,
+              "guidance/autopilot gains and dynamic pressure scheduling survive");
         check(cfg2.warhead.fusing == FusingType::Proximity &&
                   cfg2.warhead.proximityTriggerM == 8.0 &&
                   cfg2.warhead.lethalRadiusM == 15.0,

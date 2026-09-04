@@ -35,6 +35,13 @@ namespace StrikeEngine::Kernel {
         // for ProportionalNavigation (W36 precedence).
         double trajectoryMinSpeedMps = 30.0;           // own est-speed floor for an intercept prediction
         double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
+
+        // Dynamic pressure (q) gain scheduling: scales feed-forward fin command
+        // by sqrt(q_ref / q) to prevent max-Q control flutter and high-altitude sluggishness.
+        bool   gainSchedulingEnabled = false;
+        double refDynamicPressurePa = 50000.0; // Reference dynamic pressure (Pa)
+        double minDynamicPressurePa = 2000.0;  // Floor dynamic pressure (Pa)
+        double maxDynamicPressurePa = 300000.0; // Ceiling dynamic pressure (Pa)
     };
 
 } // namespace StrikeEngine::Kernel

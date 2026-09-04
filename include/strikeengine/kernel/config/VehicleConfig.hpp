@@ -32,6 +32,7 @@ namespace StrikeEngine::Kernel {
         double initialMass = -1.0;   // kg; <0 => launch mass = init.mass
         double massDry     = -1.0;   // kg; <0 => dry mass == launch mass (no fuel)
         double Ixx = 1.0, Iyy = 10.0, Izz = 10.0;
+        double Ixy = 0.0, Ixz = 0.0, Iyz = 0.0;
 
         AeroConfig       aero;
         PropulsionConfig propulsion;

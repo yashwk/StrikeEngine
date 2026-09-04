@@ -146,6 +146,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.wx.push_back(0); physicsBlock.wy.push_back(0); physicsBlock.wz.push_back(0);
             physicsBlock.alphax.push_back(0); physicsBlock.alphay.push_back(0); physicsBlock.alphaz.push_back(0);
             physicsBlock.Ixx.push_back(1.0); physicsBlock.Iyy.push_back(10.0); physicsBlock.Izz.push_back(10.0);
+            physicsBlock.Ixy.push_back(0.0); physicsBlock.Ixz.push_back(0.0); physicsBlock.Iyz.push_back(0.0);
             physicsBlock.mass.push_back(1.0);
             physicsBlock.massDry.push_back(1.0);
             physicsBlock.referenceArea.push_back(0.1);
@@ -198,6 +199,10 @@ namespace StrikeEngine::Kernel {
             controlBlock.kRollP.push_back(0.10);
             controlBlock.kRollD.push_back(0.05);
             controlBlock.maxDeflectionRad.push_back(0.43);
+            controlBlock.gainSchedulingEnabled.push_back(false);
+            controlBlock.refDynamicPressurePa.push_back(50000.0);
+            controlBlock.minDynamicPressurePa.push_back(2000.0);
+            controlBlock.maxDynamicPressurePa.push_back(300000.0);
             controlBlock.pitchSaturated.push_back(false);
             controlBlock.yawSaturated.push_back(false);
             controlBlock.rollSaturated.push_back(false);
@@ -336,6 +341,10 @@ namespace StrikeEngine::Kernel {
         controlBlock.kRollP[id] = config.guidanceAutopilot.kRollP;
         controlBlock.kRollD[id] = config.guidanceAutopilot.kRollD;
         controlBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
+        controlBlock.gainSchedulingEnabled[id] = config.guidanceAutopilot.gainSchedulingEnabled;
+        controlBlock.refDynamicPressurePa[id] = config.guidanceAutopilot.refDynamicPressurePa;
+        controlBlock.minDynamicPressurePa[id] = config.guidanceAutopilot.minDynamicPressurePa;
+        controlBlock.maxDynamicPressurePa[id] = config.guidanceAutopilot.maxDynamicPressurePa;
         physicsBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
         physicsBlock.servoTimeConstantSec[id] = config.guidanceAutopilot.servoTimeConstantSec;
         physicsBlock.maxServoRateRadPerSec[id] = config.guidanceAutopilot.maxServoRateRadPerSec;
@@ -429,6 +438,7 @@ namespace StrikeEngine::Kernel {
         physicsBlock.airDensity[id] = 0.0;
         physicsBlock.localSpeedOfSound[id] = 0.0;
         physicsBlock.Ixx[id] = config.Ixx; physicsBlock.Iyy[id] = config.Iyy; physicsBlock.Izz[id] = config.Izz;
+        physicsBlock.Ixy[id] = config.Ixy; physicsBlock.Ixz[id] = config.Ixz; physicsBlock.Iyz[id] = config.Iyz;
 
         // Multi-stage propulsion: register every stage with a non-empty thrust
         // curve in the backend pool and wire the first stage. Separable dry
@@ -737,6 +747,9 @@ namespace StrikeEngine::Kernel {
             physicsBlock.Ixx[i] *= ratio;
             physicsBlock.Iyy[i] *= ratio;
             physicsBlock.Izz[i] *= ratio;
+            physicsBlock.Ixy[i] *= ratio;
+            physicsBlock.Ixz[i] *= ratio;
+            physicsBlock.Iyz[i] *= ratio;
 
             // Ignite the next stage.
             ++physicsBlock.stageIndex[i];

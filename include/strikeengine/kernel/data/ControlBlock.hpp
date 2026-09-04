@@ -20,6 +20,12 @@ struct ControlBlock {
 	std::vector<double> kRollD;           // rad per (rad/s)
 	std::vector<double> maxDeflectionRad; // fin clamp (rad)
 
+	// Dynamic pressure gain scheduling
+	std::vector<bool>   gainSchedulingEnabled;
+	std::vector<double> refDynamicPressurePa;
+	std::vector<double> minDynamicPressurePa;
+	std::vector<double> maxDynamicPressurePa;
+
 	// W36 diagnostics: true when the commanded deflection hit the fin clamp.
 	std::vector<bool> pitchSaturated;
 	std::vector<bool> yawSaturated;

@@ -71,10 +71,10 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Area | Current implementation | Assessment and limit |
 | --- | --- | --- |
 | Translational truth | World-frame force rotation ÷ mass + gravity/earth terms | **MVP:** cd/cl/cy data-driven when present; no CFD-backed or nonlinear aero model |
-| Rotational truth | Diagonal inertia, gyroscopic coupling, quaternion, bounded fins | **MVP:** no inertia-tensor or flexible-body model |
+| Rotational truth | Full 3x3 symmetric inertia tensor (Ixx, Iyy, Izz, Ixy, Ixz, Iyz), gyroscopic coupling, analytical inverse, quaternion, bounded fins | **Implemented / MVP:** analytical 3x3 solve with diagonal fast path; energy conserved (<0.05%); no flexible-body model |
 | Atmosphere | Layered ISA1976 through 86 km | **Implemented for stated envelope:** no weather model |
 | Aerodynamics | Drag/AoA-lift/fin/side-force/stability/damping; optional cd/cl/cm/cy/cn/rolling-cl tables; geometric fins (trapezoidal/elliptical/free-form); multi-fin sets (canards + tails) with steerability | **MVP:** static tables authoritative with scalar fallback; fins implement Mach-scaled fin effectiveness + lateral (β) side-force/stability for angled fins; multi-fin sets composited with signed CP arms; tables are not yet CFD-validated and omit Reynolds/nonlinear stall/post-stall effects |
-| Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains | **MVP:** fixed gains; no scheduling/failure/advanced control |
+| Actuators and control | World→body demand, bounded fins, servo lag, rate limit, per-entity gains, dynamic pressure (q) gain scheduling | **Implemented / MVP:** dynamic pressure feed-forward scheduling via sqrt(q_ref / q) anti-flutter scaling; no LQR/MPC |
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
 | Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF, geodetic terrain sources | **MVP:** no geoid, automatic spatial multi-tile discovery/streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
 | Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |

@@ -369,6 +369,11 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     // W40 trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
+    // Dynamic pressure gain scheduling keys (optional with defaults).
+    j["gainSchedulingEnabled"] = g.gainSchedulingEnabled;
+    j["refDynamicPressurePa"] = g.refDynamicPressurePa;
+    j["minDynamicPressurePa"] = g.minDynamicPressurePa;
+    j["maxDynamicPressurePa"] = g.maxDynamicPressurePa;
 }
 
 void from_json(const json& j, GuidanceAutopilotConfig& g) {
@@ -390,6 +395,10 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackLossTimeoutSec = j.value("trackLossTimeoutSec", 2.0);
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
+    g.gainSchedulingEnabled = j.value("gainSchedulingEnabled", false);
+    g.refDynamicPressurePa = j.value("refDynamicPressurePa", 50000.0);
+    g.minDynamicPressurePa = j.value("minDynamicPressurePa", 2000.0);
+    g.maxDynamicPressurePa = j.value("maxDynamicPressurePa", 300000.0);
 }
 
 // --- StageConfig / PropulsionConfig ----------------------------------------
@@ -535,6 +544,9 @@ void to_json(json& j, const VehicleConfig& v) {
     j["inertia_xx"] = v.Ixx;
     j["inertia_yy"] = v.Iyy;
     j["inertia_zz"] = v.Izz;
+    j["inertia_xy"] = v.Ixy;
+    j["inertia_xz"] = v.Ixz;
+    j["inertia_yz"] = v.Iyz;
     j["aero"] = v.aero;
     j["propulsion"] = v.propulsion;
     j["seeker"] = v.seeker;
@@ -557,6 +569,9 @@ void from_json(const json& j, VehicleConfig& v) {
     v.Ixx = j.at("inertia_xx").get<double>();
     v.Iyy = j.at("inertia_yy").get<double>();
     v.Izz = j.at("inertia_zz").get<double>();
+    v.Ixy = j.value("inertia_xy", 0.0);
+    v.Ixz = j.value("inertia_xz", 0.0);
+    v.Iyz = j.value("inertia_yz", 0.0);
     v.aero = j.at("aero").get<AeroConfig>();
     v.propulsion = j.at("propulsion").get<PropulsionConfig>();
     v.seeker = j.at("seeker").get<SeekerConfig>();

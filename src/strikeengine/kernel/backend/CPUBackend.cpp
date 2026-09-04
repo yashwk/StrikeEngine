@@ -63,6 +63,7 @@ namespace StrikeEngine::Kernel
         derivBuffer.airDensity.assign(n, 0.0);
         derivBuffer.localSpeedOfSound.assign(n, 0.0);
         derivBuffer.Ixx.assign(n, 0.0); derivBuffer.Iyy.assign(n, 0.0); derivBuffer.Izz.assign(n, 0.0);
+        derivBuffer.Ixy.assign(n, 0.0); derivBuffer.Ixz.assign(n, 0.0); derivBuffer.Iyz.assign(n, 0.0);
         derivBuffer.mass.assign(n, 0.0);
         derivBuffer.massDry.assign(n, 0.0);
         derivBuffer.referenceArea.assign(n, 0.0);
@@ -304,6 +305,7 @@ namespace StrikeEngine::Kernel
 
             // 6. Body-frame rotational dynamics (W2): I*w_dot + w x (I w) = tau
             const double Ixx = s.Ixx[i], Iyy = s.Iyy[i], Izz = s.Izz[i];
+            const double Ixy = s.Ixy[i], Ixz = s.Ixz[i], Iyz = s.Iyz[i];
             const double wx = s.wx[i], wy = s.wy[i], wz = s.wz[i];
             const double propulsionTorqueX = s.enginePositionY[i] * thrustBodyZ -
                 s.enginePositionZ[i] * thrustBodyY;
@@ -311,12 +313,67 @@ namespace StrikeEngine::Kernel
                 s.enginePositionX[i] * thrustBodyZ;
             const double propulsionTorqueZ = s.enginePositionX[i] * thrustBodyY -
                 s.enginePositionY[i] * thrustBodyX;
-            const double alphaX = (aeroWrench.torque_x + propulsionTorqueX -
-                (Izz - Iyy) * wy * wz) / Ixx;
-            const double alphaY = (aeroWrench.torque_y + propulsionTorqueY -
-                (Ixx - Izz) * wz * wx) / Iyy;
-            const double alphaZ = (aeroWrench.torque_z + propulsionTorqueZ -
-                (Iyy - Ixx) * wx * wy) / Izz;
+
+            const double totalMx = aeroWrench.torque_x + propulsionTorqueX;
+            const double totalMy = aeroWrench.torque_y + propulsionTorqueY;
+            const double totalMz = aeroWrench.torque_z + propulsionTorqueZ;
+
+            double alphaX = 0.0, alphaY = 0.0, alphaZ = 0.0;
+            if (Ixy == 0.0 && Ixz == 0.0 && Iyz == 0.0) {
+                // Diagonal fast path (zero off-diagonal cross-coupling)
+                alphaX = (totalMx - (Izz - Iyy) * wy * wz) / Ixx;
+                alphaY = (totalMy - (Ixx - Izz) * wz * wx) / Iyy;
+                alphaZ = (totalMz - (Iyy - Ixx) * wx * wy) / Izz;
+            } else {
+                // Full 3x3 symmetric inertia tensor:
+                // [  Ixx  -Ixy  -Ixz ]
+                // [ -Ixy   Iyy  -Iyz ]
+                // [ -Ixz  -Iyz   Izz ]
+                const double M00 = Ixx,  M01 = -Ixy, M02 = -Ixz;
+                const double             M11 =  Iyy, M12 = -Iyz;
+                const double                         M22 =  Izz;
+
+                // Angular momentum H = I * w
+                const double Hx = M00 * wx + M01 * wy + M02 * wz;
+                const double Hy = M01 * wx + M11 * wy + M12 * wz;
+                const double Hz = M02 * wx + M12 * wy + M22 * wz;
+
+                // Gyroscopic cross-coupling torque: w x H
+                const double gyroX = wy * Hz - wz * Hy;
+                const double gyroY = wz * Hx - wx * Hz;
+                const double gyroZ = wx * Hy - wy * Hx;
+
+                const double tauEffX = totalMx - gyroX;
+                const double tauEffY = totalMy - gyroY;
+                const double tauEffZ = totalMz - gyroZ;
+
+                // Analytical cofactor matrix for symmetric 3x3
+                const double c00 = M11 * M22 - M12 * M12;
+                const double c01 = M02 * M12 - M01 * M22;
+                const double c02 = M01 * M12 - M02 * M11;
+                const double c11 = M00 * M22 - M02 * M02;
+                const double c12 = M01 * M02 - M00 * M12;
+                const double c22 = M00 * M11 - M01 * M01;
+
+                const double det = M00 * c00 + M01 * c01 + M02 * c02;
+                if (std::abs(det) > 1e-12) {
+                    const double invDet = 1.0 / det;
+                    const double inv00 = c00 * invDet;
+                    const double inv01 = c01 * invDet;
+                    const double inv02 = c02 * invDet;
+                    const double inv11 = c11 * invDet;
+                    const double inv12 = c12 * invDet;
+                    const double inv22 = c22 * invDet;
+
+                    alphaX = inv00 * tauEffX + inv01 * tauEffY + inv02 * tauEffZ;
+                    alphaY = inv01 * tauEffX + inv11 * tauEffY + inv12 * tauEffZ;
+                    alphaZ = inv02 * tauEffX + inv12 * tauEffY + inv22 * tauEffZ;
+                } else {
+                    alphaX = (totalMx - (Izz - Iyy) * wy * wz) / Ixx;
+                    alphaY = (totalMy - (Ixx - Izz) * wz * wx) / Iyy;
+                    alphaZ = (totalMz - (Iyy - Ixx) * wx * wy) / Izz;
+                }
+            }
 
             d.wx[i] = alphaX;
             d.wy[i] = alphaY;

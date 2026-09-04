@@ -45,6 +45,7 @@ struct PhysicsBlock {
 
 	// Mass properties
 	std::vector<double> Ixx, Iyy, Izz;     // principal moments of inertia (body)
+	std::vector<double> Ixy, Ixz, Iyz;     // products of inertia (body)
 	std::vector<double> mass;              // total mass (kg)
 	std::vector<double> massDry;           // dry mass (kg); fuel = mass - massDry
 

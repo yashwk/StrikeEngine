@@ -1,5 +1,6 @@
 #include <strikeengine/kernel/systems/AutopilotSystem.hpp>
 #include <strikeengine/kernel/math/Quaternion.hpp>
+#include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -24,6 +25,12 @@ namespace StrikeEngine::Kernel {
             control.pitchSaturated.assign(nav.size, false);
             control.yawSaturated.assign(nav.size, false);
             control.rollSaturated.assign(nav.size, false);
+        }
+        if (control.gainSchedulingEnabled.size() < nav.size) {
+            control.gainSchedulingEnabled.resize(nav.size, false);
+            control.refDynamicPressurePa.resize(nav.size, 50000.0);
+            control.minDynamicPressurePa.resize(nav.size, 2000.0);
+            control.maxDynamicPressurePa.resize(nav.size, 300000.0);
         }
 
         for (std::size_t i = 0; i < nav.size; ++i) {
@@ -78,14 +85,40 @@ namespace StrikeEngine::Kernel {
         const double alpha = std::atan2(wb, ub);
         const double beta  = std::atan2(vb, ub);
 
+        // Dynamic pressure (q) gain scheduling: scales feed-forward fin command
+        // by sqrt(q_ref / q) to prevent max-Q control flutter and high-altitude sluggishness.
+        double sqScale = 1.0;
+        if (id < control.gainSchedulingEnabled.size() && control.gainSchedulingEnabled[id]) {
+            const double vx = nav.estVx[id];
+            const double vy = nav.estVy[id];
+            const double vz = nav.estVz[id];
+            const double speedSq = vx * vx + vy * vy + vz * vz;
+            const double alt = std::max(0.0, nav.estPz[id]);
+
+            static const Models::ISA1976 isa;
+            const auto atmos = isa.evaluate(alt);
+            const double qEst = 0.5 * atmos.density * speedSq;
+
+            const double qRef = (id < control.refDynamicPressurePa.size() && control.refDynamicPressurePa[id] > 0.0)
+                ? control.refDynamicPressurePa[id] : 50000.0;
+            const double qMin = (id < control.minDynamicPressurePa.size() && control.minDynamicPressurePa[id] > 0.0)
+                ? control.minDynamicPressurePa[id] : 2000.0;
+            const double qMax = (id < control.maxDynamicPressurePa.size() && control.maxDynamicPressurePa[id] >= qMin)
+                ? control.maxDynamicPressurePa[id] : 300000.0;
+
+            const double qClamped = std::clamp(qEst, qMin, qMax);
+            sqScale = std::clamp(std::sqrt(qRef / qClamped), 0.2, 5.0);
+        }
+
         // Positive body-Z specific force is down and requires nose-down
         // (negative wy / fin); positive body-Y force requires nose-right
         // (positive wz / fin). The signs below match AeroModel's documented
         // X-forward/Y-right/Z-down convention.
+        const double effectiveKAccel = control.kAccelP[id] * sqScale;
         const double pitchFeedForward = std::clamp(
-            -control.kAccelP[id] * azSpecificCmd, -0.35, 0.35);
+            -effectiveKAccel * azSpecificCmd, -0.35, 0.35);
         const double yawFeedForward = std::clamp(
-            control.kAccelP[id] * aySpecificCmd, -0.35, 0.35);
+            effectiveKAccel * aySpecificCmd, -0.35, 0.35);
         const double pitchRateDamping = std::clamp(
             -control.kRateP[id] * nav.estWy[id], -0.20, 0.20);
         const double yawRateDamping = std::clamp(

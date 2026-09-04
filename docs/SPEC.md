@@ -153,9 +153,9 @@ signature profile IDs, emitter EIRP, and principal inertias moved to
 `VehicleConfig`.
 
 `VehicleConfig` is the flattened per-vehicle view: structural summary (`type`, an
-`EntityType` defaulting to `Missile`, `initialMass`, `massDry`, `Ixx/Iyy/Izz`)
-plus subsystem structs `aero`, `propulsion`, `seeker`, `sensor`,
-`guidanceAutopilot`, `warhead`, the profile-id fields `aeroProfileId`/
+`EntityType` defaulting to `Missile`, `initialMass`, `massDry`, `Ixx/Iyy/Izz` and
+optional products of inertia `Ixy/Ixz/Iyz`) plus subsystem structs `aero`, `propulsion`,
+`seeker`, `sensor`, `guidanceAutopilot`, `warhead`, the profile-id fields `aeroProfileId`/
 `motorProfileId`/`seekerProfileId`/`sensorProfileId` (default `""`), and signature
 fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
 
@@ -169,7 +169,10 @@ fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
   5σ), IMU body-frame lever arm.
 - `GuidanceAutopilotConfig`: `navigationConstant`, `waypointGain`, gains
   `kAccelP/kRateP/kAlphaP/kRollP/kRollD`, `maxDeflectionRad`,
-  `servoTimeConstantSec`, `maxServoRateRadPerSec`. W38 phase/track keys
+  `servoTimeConstantSec`, `maxServoRateRadPerSec`. Dynamic pressure gain scheduling keys
+  `gainSchedulingEnabled` (default false), `refDynamicPressurePa` (default 50000 Pa),
+  `minDynamicPressurePa` (default 2000 Pa), and `maxDynamicPressurePa` (default 300000 Pa)
+  scale the feedforward acceleration gain to prevent max-Q control flutter (§6.3). W38 phase/track keys
   `handoffBlendTimeSec` (default 0), `lockLossRetentionSec` (default 0), and
   `apnFeedforwardEnabled` (default false) are optional (§7.4). W39 track-manager
   keys `trackConfirmations` (default 3), `trackCoastTimeoutSec` (default 0.5),
@@ -346,10 +349,22 @@ validation: `count` <3, or a free-form with <3 points, throws.
 
 ### 6.3 Rotation and actuators
 
-CPU truth integrates diagonal inertia with gyroscopic coupling, body rates,
-body-to-world quaternion. Autopilot transforms world accel demands to body axes
-and supplies bounded fin commands; fins follow via first-order servo lag and a
-rate limit; integrator clamps final deflection.
+CPU truth integrates the full $3\times3$ symmetric rigid-body inertia tensor
+$\mathbf{I}$ (`Ixx`, `Iyy`, `Izz`, `Ixy`, `Ixz`, `Iyz`) with dynamic gyroscopic
+cross-coupling $\vec{M} = \mathbf{I}\dot{\vec{\omega}} + \vec{\omega}\times(\mathbf{I}\vec{\omega})$.
+Angular acceleration is resolved via closed-form analytical $3\times3$ matrix inversion
+$\dot{\vec{\omega}} = \mathbf{I}^{-1}(\vec{M} - \vec{\omega}\times(\mathbf{I}\vec{\omega}))$,
+with a zero-divergence diagonal fast path when products of inertia are zero.
+Quaternion propagation ensures exact unit-norm integration.
+
+Autopilot transforms world acceleration demands from guidance into aerospace body axes
+(X forward, Y right, Z down) and produces bounded fin commands. When dynamic pressure
+gain scheduling is enabled (`gainSchedulingEnabled = true`), feed-forward acceleration
+gains are scaled by $S_q = \text{clamp}\left(\sqrt{q_{\text{ref}} / \text{clamp}(q_{\text{est}}, q_{\text{min}}, q_{\text{max}})}, 0.2, 5.0\right)$
+using estimated dynamic pressure $q_{\text{est}} = \frac{1}{2}\rho(h)V^2$ evaluated
+via the ISA-1976 atmosphere. This prevents max-Q control saturation and flutter while
+maintaining responsiveness at high altitude. Fins follow via first-order servo lag
+and a rate limit; the integrator clamps final deflection.
 
 ### 6.4 Integration
 
@@ -366,9 +381,9 @@ mass + sum of separable dry masses of all stages except the last.
 
 Each physics step the staging pass detects active-stage burnout (last positive-
 thrust curve time); on burnout it jettisons leftover (unburned) propellant, drops
-the spent stage's `dryMassKg` from mass and `massDry`, rescales `Ixx/Iyy/Izz` by
-the post-dump current:new mass ratio, advances to the next stage, resets ignition
-time, dispatches timestamped `StageSeparation`.
+the spent stage's `dryMassKg` from mass and `massDry`, rescales `Ixx/Iyy/Izz` and
+products of inertia `Ixy/Ixz/Iyz` by the post-dump current:new mass ratio, advances
+to the next stage, resets ignition time, dispatches timestamped `StageSeparation`.
 
 A stage with `propellantMassKg > 0` burns only its declared propellant (mass-flow
 floor = `massDry` + later-stage reserves), separating on exhaustion or curve end;

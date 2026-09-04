@@ -126,6 +126,66 @@ int main() {
         check(gained, "nose-up rotation results in a climb (world +Z)");
     }
 
+    // ---- Part C: Full 3x3 inertia tensor cross-coupling & energy conservation ----
+    // When products of inertia are non-zero (e.g. Ixz != 0), a multi-axis spin
+    // precesses with coupled Euler dynamics, and torque-free rotational
+    // kinetic energy E = 0.5 * w^T * I * w is conserved.
+    {
+        SimulationKernel kernel;
+        kernel.setRandomSeed(0x5678u);
+        VehicleInitState init{};
+        init.px = 0; init.py = 0; init.pz = 100000.0; // vacuum
+        init.vx = 0; init.vy = 0; init.vz = 0;
+        init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
+        init.wx = 4.0; init.wy = 3.0; init.wz = 2.0; // multi-axis spin
+        init.mass = 50.0;
+
+        VehicleConfig cfg;
+        cfg.Ixx = 8.0; cfg.Iyy = 15.0; cfg.Izz = 20.0;
+        cfg.Ixy = 0.5; cfg.Ixz = 1.2;  cfg.Iyz = 0.8; // full 3x3 tensor
+        cfg.aero.cd = 0.0;
+
+        const auto id = kernel.createVehicle(init, cfg);
+        auto& phys = kernel.getPhysics();
+
+        auto computeRotEnergy = [](double wx, double wy, double wz,
+                                   double Ixx, double Iyy, double Izz,
+                                   double Ixy, double Ixz, double Iyz) {
+            return 0.5 * (Ixx * wx * wx + Iyy * wy * wy + Izz * wz * wz
+                          - 2.0 * Ixy * wx * wy
+                          - 2.0 * Ixz * wx * wz
+                          - 2.0 * Iyz * wy * wz);
+        };
+
+        const double E0 = computeRotEnergy(init.wx, init.wy, init.wz,
+                                           cfg.Ixx, cfg.Iyy, cfg.Izz,
+                                           cfg.Ixy, cfg.Ixz, cfg.Iyz);
+
+        double maxNormErr = 0.0;
+        constexpr double dt = 0.005;
+        for (int step = 0; step < 2000; ++step) { // 10 s
+            kernel.step(dt);
+            const double qn = std::sqrt(phys.qw[id]*phys.qw[id] + phys.qx[id]*phys.qx[id] +
+                                        phys.qy[id]*phys.qy[id] + phys.qz[id]*phys.qz[id]);
+            maxNormErr = std::max(maxNormErr, std::abs(qn - 1.0));
+        }
+
+        const double E1 = computeRotEnergy(phys.wx[id], phys.wy[id], phys.wz[id],
+                                           phys.Ixx[id], phys.Iyy[id], phys.Izz[id],
+                                           phys.Ixy[id], phys.Ixz[id], phys.Iyz[id]);
+
+        const double relEnergyErr = std::abs(E1 - E0) / E0;
+        std::printf("  Part C: full 3x3 rot energy drift: %.3e (%.3e -> %.3e)\n", relEnergyErr, E0, E1);
+        std::printf("  Part C: full 3x3 quat norm error: %.3e\n", maxNormErr);
+
+        check(relEnergyErr < 5e-3,
+              "full 3x3 inertia tensor conserves rotational energy (<0.5%)");
+        check(maxNormErr < 1e-9,
+              "full 3x3 quaternion stays unit-normalized (<1e-9)");
+        check(phys.Ixy[id] == 0.5 && phys.Ixz[id] == 1.2 && phys.Iyz[id] == 0.8,
+              "products of inertia properly preserved in PhysicsBlock");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

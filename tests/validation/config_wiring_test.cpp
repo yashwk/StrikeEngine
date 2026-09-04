@@ -118,6 +118,71 @@ int main() {
         check(maxFinRoll  <= 0.1 + 1e-9, "achieved finRoll respects the configurable achieved clamp");
     }
 
+    // ---- Part C: Dynamic pressure gain scheduling wiring & command scaling ----
+    {
+        SimulationKernel kernel;
+        kernel.setRandomSeed(42u);
+
+        // Vehicle 1: Gain scheduling disabled (constant kAccelP)
+        VehicleConfig cfg1;
+        cfg1.guidanceAutopilot.gainSchedulingEnabled = false;
+        cfg1.guidanceAutopilot.kAccelP = 0.030;
+        cfg1.guidanceAutopilot.maxDeflectionRad = 0.40;
+        auto init1 = makeInit();
+        init1.px = 0.0; init1.py = 0.0; init1.pz = 100.0; // sea level (dense air, rho~1.21)
+        init1.vx = 600.0; init1.vy = 0.0; init1.vz = 0.0; // high speed (q ~ 218 kPa >> qRef 50 kPa)
+        const auto id1 = kernel.createVehicle(init1, cfg1);
+
+        // Vehicle 2: Gain scheduling enabled
+        VehicleConfig cfg2;
+        cfg2.guidanceAutopilot.gainSchedulingEnabled = true;
+        cfg2.guidanceAutopilot.refDynamicPressurePa = 50000.0;
+        cfg2.guidanceAutopilot.minDynamicPressurePa = 2000.0;
+        cfg2.guidanceAutopilot.maxDynamicPressurePa = 300000.0;
+        cfg2.guidanceAutopilot.kAccelP = 0.030;
+        cfg2.guidanceAutopilot.maxDeflectionRad = 0.40;
+        auto init2 = makeInit();
+        init2.px = 0.0; init2.py = 0.0; init2.pz = 100.0;
+        init2.vx = 600.0; init2.vy = 0.0; init2.vz = 0.0;
+        const auto id2 = kernel.createVehicle(init2, cfg2);
+
+        check(!kernel.getControl().gainSchedulingEnabled[id1], "gainSchedulingEnabled=false wired to ControlBlock");
+        check(kernel.getControl().gainSchedulingEnabled[id2],  "gainSchedulingEnabled=true wired to ControlBlock");
+        check(kernel.getControl().refDynamicPressurePa[id2] == 50000.0, "refDynamicPressurePa wired to ControlBlock");
+
+        // Issue identical mild climb waypoint command (small demand so neither saturates)
+        SimulationCommand cmd1{};
+        cmd1.entityId = id1;
+        cmd1.mode = GuidanceMode::Waypoint;
+        cmd1.targetX = 1000.0; cmd1.targetY = 0.0; cmd1.targetZ = 200.0;
+        cmd1.maxAccel = 10.0;
+        kernel.queueCommand(cmd1);
+
+        SimulationCommand cmd2{};
+        cmd2.entityId = id2;
+        cmd2.mode = GuidanceMode::Waypoint;
+        cmd2.targetX = 1000.0; cmd2.targetY = 0.0; cmd2.targetZ = 200.0;
+        cmd2.maxAccel = 10.0;
+        kernel.queueCommand(cmd2);
+
+        // Step 1 iteration
+        kernel.step(0.01);
+
+        const double cmdPitchUnscheduled = std::abs(kernel.getControl().pitchCommand[id1]);
+        const double cmdPitchScheduled   = std::abs(kernel.getControl().pitchCommand[id2]);
+
+        std::printf("  Part C: unscheduled pitchCmd=%.4f rad, scheduled pitchCmd=%.4f rad\n",
+                    cmdPitchUnscheduled, cmdPitchScheduled);
+
+        // At q ~ 218 kPa > 50 kPa, scheduled fin deflection should be significantly smaller (around sqrt(50/218) ~ 0.48x)
+        check(cmdPitchUnscheduled > 0.01, "unscheduled entity produces positive pitch command");
+        check(cmdPitchScheduled < cmdPitchUnscheduled,
+              "gain-scheduled entity scales down fin command at high dynamic pressure (anti-flutter)");
+        const double ratio = cmdPitchScheduled / cmdPitchUnscheduled;
+        std::printf("  Part C: scaling ratio: %.3f (expected ~0.45 - 0.55)\n", ratio);
+        check(ratio > 0.35 && ratio < 0.65, "gain scheduling matches theoretical sqrt(q_ref/q) scaling");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

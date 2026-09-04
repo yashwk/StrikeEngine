@@ -111,8 +111,8 @@ carries per-entity `stageIndex`/`stageCount`.
 - `ScenarioConfig.hpp`: scenario metadata, environment, entities, target, kernel
   loading, `save`/`load`, per-entity `designRef` override.
 - `VehicleConfig.hpp`: flattened view (`type` = `EntityType`, `initialMass`,
-  `massDry`, `Ixx/Iyy/Izz`, `aero`, `propulsion`, `seeker`, `sensor`,
-  `guidanceAutopilot`, `warhead`, profile IDs, signature IDs, EIRP).
+  `massDry`, `Ixx/Iyy/Izz`, products of inertia `Ixy/Ixz/Iyz`, `aero`, `propulsion`,
+  `seeker`, `sensor`, `guidanceAutopilot`, `warhead`, profile IDs, signature IDs, EIRP).
 - `config/*.hpp`: per-subsystem structs; `WarheadConfig` carries optional
   `falloffRadiusM` (0.0 or `<= lethalRadiusM` = flat law).
 - `config/ConfigSerialization.cpp`: snake_case JSON, enums as strings, `save`/`load`,
@@ -149,10 +149,13 @@ carries per-entity `stageIndex`/`stageCount`.
 - `PropulsionModel.hpp`/`ThrustCurve.hpp`: validated thrust interpolation, Isp,
   mass flow, ignition/shutdown transients, two-axis gimballed thrust, and
   effective burn duration.
-- `CPUBackend.cpp`: stage-re-evaluated forces, body Euler dynamics, quaternion
-  propagation, fin/TVC servo dynamics, engine-position thrust torque; reads
-  motor/engine/tank and actuator flags. Fuel-depletion guard caps mass flow and
-  scales thrust, so `T = ṁ·Isp·g0` holds at every instant (no free-thrust tail).
+- `CPUBackend.cpp`: stage-re-evaluated forces, body Euler dynamics with full $3\times3$
+  symmetric inertia tensor ($\mathbf{I}$ with analytical matrix inversion and
+  gyroscopic cross-coupling $\vec{\omega}\times(\mathbf{I}\vec{\omega})$, plus a
+  zero-overhead diagonal fast path), quaternion propagation, fin/TVC servo dynamics,
+  engine-position thrust torque; reads motor/engine/tank and actuator flags.
+  Fuel-depletion guard caps mass flow and scales thrust, so `T = ṁ·Isp·g0` holds at
+  every instant (no free-thrust tail).
 - `EarthModel.hpp`: WGS84 position/state conversions, normal and optional J2
   gravity, Coriolis, curvature, transport.
 - `EarthFrames.hpp`: ECEF/ENU/NED transforms, local normal/spherical/J2 gravity,
@@ -222,7 +225,10 @@ carries per-entity `stageIndex`/`stageCount`.
   `NavigationBlock::estAx/estAy/estAz`; W40 config keys on `GuidanceAutopilotConfig`
   (`trajectoryMinSpeedMps` 30.0, `trajectoryFeasibilityAccelFactor` 0.95).
 - `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
-  + `maxDeflectionRad`; publishes `pitchSaturated`/`yawSaturated`/
+  + `maxDeflectionRad`; implements dynamic pressure ($q$) gain scheduling: scales
+  outer-loop feed-forward acceleration demand by $S_q = \text{clamp}\left(\sqrt{q_{\text{ref}} / \text{clamp}(q_{\text{est}}, q_{\text{min}}, q_{\text{max}})}, 0.2, 5.0\right)$
+  derived from navigation state via the ISA-1976 atmosphere model, mitigating
+  max-Q fin saturation and high-frequency flutter; publishes `pitchSaturated`/`yawSaturated`/
   `rollSaturated` fin-clamp diagnostics.
 - `EntityStatusBlock.hpp`: health, alive state, deterministic failure flags;
   structural failure = `isAlive=false` + `health=0`.
