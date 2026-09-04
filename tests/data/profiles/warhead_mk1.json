@@ -1,0 +1,8 @@
+{
+  "mass_kg": 25.0,
+  "fusing": "proximity",
+  "proximity_trigger_m": 8.5,
+  "timed_delay_sec": 0.0,
+  "lethal_radius_m": 12.0,
+  "falloff_radius_m": 25.0
+}

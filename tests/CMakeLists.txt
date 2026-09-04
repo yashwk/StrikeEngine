@@ -125,6 +125,9 @@ target_link_libraries(designer_pipeline_test PRIVATE strikeengine)
 target_compile_definitions(designer_pipeline_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+add_executable(multithread_test validation/multithread_test.cpp)
+target_link_libraries(multithread_test PRIVATE strikeengine)
+
 add_test(NAME rigidbody COMMAND rigidbody_test)
 set_tests_properties(rigidbody PROPERTIES TIMEOUT 120)
 
@@ -235,3 +238,6 @@ set_tests_properties(profile_database PROPERTIES TIMEOUT 120)
 
 add_test(NAME designer_pipeline COMMAND designer_pipeline_test)
 set_tests_properties(designer_pipeline PROPERTIES TIMEOUT 120)
+
+add_test(NAME multithread COMMAND multithread_test)
+set_tests_properties(multithread PROPERTIES TIMEOUT 120)

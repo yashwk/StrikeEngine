@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-29<br>
 **Runtime checkpoint:** `5849963`<br>
-**Validation result:** Release build, **37/37 CTest tests passed**
+**Validation result:** Release build, **38/38 CTest tests passed**
 
 [`SPEC.md`](SPEC.md) is the normative contract;
 [`IMPLEMENTATION.md`](IMPLEMENTATION.md) is the source-to-feature map. This audit
@@ -46,7 +46,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W15 — Frame-aware study reporting | MVP / partial | `reporting_test` |
 | W16 — Structured study output | MVP / partial | `reporting_test`; CSV/binary + reader |
 | W21 — Subsystem config and serialization | Implemented / MVP | `serialization_test`; `VehicleConfig`, snake_case round-trip (four profile-id keys, legacy-compat), `designRef` override |
-| W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; fail-fast loaders, profile-wins resolution |
+| W24 — Profile-id database layer | Implemented / MVP | `profile_database_test`; fail-fast loaders (aero, motor, seeker, sensor, guidance, warhead), profile-wins resolution |
 | W22 — Sensor enablement and gain wiring | Implemented / MVP | `config_wiring_test`; IMU freeze, GPS schedule, gain wiring |
 | W23 — Staging and warhead fusing | MVP / partial | `staging_warhead_test`; two-stage separation + fusing |
 | W25 — Designer→engine pipeline | Implemented / MVP | `designer_pipeline_test`; 9.7 m miss < 50 m at t≈11.5 s + kill after terminal APN frame correction; seed `0xDEADBEEF`, pipeline demo not a performance claim |
@@ -65,6 +65,8 @@ deterministic regression evidence; a present-but-bounded feature stays
 | W38 — Mode-aware guidance stack + seeker intercept | Implemented | `guidance_test` (head-on/crossing/non-closing/feed-forward-availability/blend ramp/body-signs/retention+reacquisition/waypoint law+nanner/command inputs), `seeker_intercept_test` (two explicit missiles, RF acquisition 3.6 km, blend 0.5 s, miss 3.70 m < 15 m lethal, detonation t=7.04 s vs closest approach 7.05 s, target kill, 1 post-pass lock loss reported, deterministic seed `0x5EEDF1A5u`); retention replays the bounded retained terminal command; public target-accel inputs via `SimulationCommand`/scenario `initial_target_accel_*`; `GuidanceLaw::Waypoint` + non-finite hardening; byte-identical legacy when blend=0 |
 | W39 — Persistent target-track manager | Implemented | `track_manager_test`; command+seeker fusion into one per-entity track (identity, pos/vel/optional accel, measurement timestamp + age, quality/covariance model), Acquire->Maintain->Coast->Lost->Reacquire, multi-rate prediction between measurements, track-based midcourse PN aim with legacy external-command fallback, no physics-truth coupling; `seeker_intercept_test` evidence unchanged (3.70 m, lock 5.13 s @ 3606 m, kill 7.04 s) |
 | W40 — Trajectory-aware midcourse guidance | Implemented / MVP | `trajectory_test`; explicit `GuidanceMode::Trajectory` (midcourse-only; seeker lock still overrides to terminal APN); `Models::predictIntercept` acceleration-aware intercept predictor (PIP + tgo + required-accel, target-accel and own-accel terms with Newton-Raphson axial boost/drag kinematics, VelocityLow/NoIntercept/NonFinite); track/command aim-source precedence with Coast-prediction streaming and Lost/bare-seed command fallback; `maxAccel`-budget feasibility gate (`trajectoryReason` AccelLimited + clamp); `GuidanceBlock` PIP/tgo/required-accel/aim-source/reason diagnostics; legacy PN/Waypoint/None and `seeker_intercept_test` evidence byte-identical; deterministic (bit-identical repeats); energy management remains deferred (W41) |
+| W41 — Full 3×3 inertia tensor + dynamic pressure gain scheduling | Implemented / MVP | `rigidbody_test`, `guidance_test`; analytical cofactor 3×3 inertia inverse with gyroscopic cross-coupling, dynamic pressure q gain-scheduled autopilot |
+| W42 — Multi-threaded CPU execution + guidance/warhead profile databases | Implemented | `multithread_test`, `profile_database_test`; CPUBackend persistent WorkerPool with parallel derivative and cache refresh, GuidanceProfileDatabase and WarheadProfileDatabase JSON profile loaders with fail-fast validation |
 
 ## 3. Subsystem fidelity assessment
 
@@ -78,7 +80,7 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Integration | Euler/RK4/RK45/Symplectic, adaptive, interpolated impact | **MVP:** no multirate or full event-aware adaptive policy |
 | Earth and frames | WGS84, normal/spherical/J2 gravity, explicit state conversion, frames, Coriolis/centrifugal/transport, ECEF, geodetic terrain sources | **MVP:** no geoid, automatic spatial multi-tile discovery/streaming, atmospheric rotation/wind coupling, or full moving-origin global propagator |
 | Sensors | IMU/GPS with lever arm, earth-rate gyro, per-entity enablement | **MVP:** IMU-disable = GPS-only aiding, not a full GPS-only mode; timing contract open |
-| Profile database layer | Aero/motor/seek/sensor loaders, `createVehicle` resolution | **Implemented / MVP:** guidance/autopilot, warhead, mass/inertia, RCS/IR/emitter NOT profile-resolved; one profile per file |
+| Profile database layer | Aero/motor/seeker/sensor/guidance/warhead loaders, `createVehicle` resolution | **Implemented / MVP:** mass/inertia and RCS/IR/emitter NOT profile-resolved on `VehicleConfig` (RCS resolved via `RCSDatabase`); one profile per file |
 | Navigation | Alignment, strapdown INS, 15-state EKF, estimated world acceleration, scalar GPS innovation gating and diagnostics | **MVP:** earth-rate gyro ECEF-only; no multi-rate timestamp interpolation or broader sensor fusion |
 | Seekers | RF/SARH/PassiveRF/IR, FOV/gimbal, hysteresis, LOS rates, latency, decoys | **MVP:** no imaging IR, multi-target, dynamic illuminator, band-resolved extinction |
 | Guidance | Stateless PN/APN, waypoint, phase/law state machine (Midcourse→Acquisition blend→Terminal, LostTrack recovery), lock-loss retention, APN feed-forward availability, per-entity gains; publishes phase/law/track/limit/invalid/non-closing/tgo diagnostics; persistent single target-track manager (W39) fused from command seeds + seeker LOS fixes (Acquire→Maintain→Coast→Lost→Reacquire, multi-rate prediction, quality/covariance), track-based midcourse aim with legacy external-command fallback; trajectory-aware midcourse guidance (W40) — acceleration-aware intercept predictor (PIP/tgo/required-accel) with Newton-Raphson axial boost/drag refinement over track/command aim, `maxAccel`-budget feasibility gate + `trajectoryReason`/`trajectoryAimSource` diagnostics, midcourse-only with seeker-lock override | **MVP:** multi-target tracking deferred; trajectory optimization and energy management deferred (W41); pursuit, LQR/MPC deferred; blended handoff beyond the seeker acquisition blend remains |
@@ -86,11 +88,11 @@ deterministic regression evidence; a present-but-bounded feature stays
 | Warhead and fusing | Impact/proximity/timed fusing; flat or linear falloff; `StageSeparation` | **MVP:** linear band; `lethalRadiusM <= 0` inert; `falloff < lethal` rejected |
 | Failure and damage | Deterministic motor/engine/tank flags → thrust/feed cut, fin freeze, sensor dropout, ballistic comms, structural | **MVP:** deterministic no-leak feed failure only; partial health no effect; no repair |
 | Study wrappers and outputs | Single run, sweep, Monte Carlo, optimizer, batch; versioned CSV/binary + reader | **MVP:** richer telemetry/streaming remain; some optimizer paths primary-entity oriented |
-| Backends and packaging | Deterministic CPU/static library, CMake packaging, optional Vulkan | **MVP:** Vulkan parity not validated, no GPU ECEF/CUDA |
+| Backends and packaging | Multi-threaded CPU execution (`WorkerPool`), deterministic single-thread fallback, CMake packaging, optional Vulkan | **MVP:** Vulkan parity not validated, no GPU ECEF/CUDA |
 
 ## 4. Quantitative validation evidence
 
-- Release CTest suite green: **37/37 tests passed** at the checkpoint above.
+- Release CTest suite green: **38/38 tests passed** at the checkpoint above.
 - Control regression: **0.76 m minimum miss** (MVP control path; not a general
   accuracy guarantee).
 - Designer→engine pipeline: **9.7 m minimum miss** at t≈11.5 s with a

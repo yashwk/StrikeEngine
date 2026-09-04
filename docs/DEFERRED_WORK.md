@@ -62,11 +62,12 @@ and feasible target interception.
 
 ## Execution and platform support
 
-- Parallel CPU execution.
 - Validated Vulkan/CPU parity.
 - GPU ECEF support.
 - CUDA support, if required.
 - Production GPU backend.
+
+Parallel CPU execution is implemented: multi-threaded `CPUBackend` with persistent `WorkerPool`, parallelizing derivative evaluation and acceleration cache refresh across entities with configurable worker count (`setThreadCount`) and bit-identical single-thread fallback (`multithread_test`). Guidance and Warhead profile database loaders are also implemented, completing the subsystem profile-id database suite.
 
 ## Telemetry, tooling, and integration
 

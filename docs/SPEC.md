@@ -43,7 +43,7 @@ Boundaries:
 | Planned | Recorded as desired; not part of the supported runtime contract. |
 | Unsupported | Callers MUST NOT rely on it; no silent fallback is promised. |
 
-Current validated checkpoint: **37/37 CTest tests passing** in Release.
+Current validated checkpoint: **38/38 CTest tests passing** in Release.
 
 ## 3. Global contracts
 
@@ -156,8 +156,8 @@ signature profile IDs, emitter EIRP, and principal inertias moved to
 `EntityType` defaulting to `Missile`, `initialMass`, `massDry`, `Ixx/Iyy/Izz` and
 optional products of inertia `Ixy/Ixz/Iyz`) plus subsystem structs `aero`, `propulsion`,
 `seeker`, `sensor`, `guidanceAutopilot`, `warhead`, the profile-id fields `aeroProfileId`/
-`motorProfileId`/`seekerProfileId`/`sensorProfileId` (default `""`), and signature
-fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
+`motorProfileId`/`seekerProfileId`/`sensorProfileId`/`guidanceProfileId`/`warheadProfileId`
+(default `""`), and signature fields `rcsProfileId`, `irProfileId`, `emitterEirpW`.
 
 - `AeroConfig`: `referenceArea` (JSON `reference_area`)/length, drag/lift
   coefficients, optional `aero_tables` (§6.2), optional `fins` (§6.2).
@@ -189,14 +189,16 @@ gimbal angles and apply thrust torque about the configured engine position.
 Staging §6.5, transient/TVC details §6.6, failure details §8.
 
 Profile-id resolution: `aeroProfileId`/`motorProfileId`/`seekerProfileId`/
-`sensorProfileId` (JSON keys `aero_profile_id`/`motor_profile_id`/
-`seeker_profile_id`/`sensor_profile_id`; RCS key `rcs_profile_id`) may name a JSON
-profile. On `createVehicle`, a non-empty id loads the file and its parsed config
+`sensorProfileId`/`guidanceProfileId`/`warheadProfileId` (JSON keys
+`aero_profile_id`/`motor_profile_id`/`seeker_profile_id`/`sensor_profile_id`/
+`guidance_profile_id`/`warhead_profile_id`; RCS key `rcs_profile_id`) may name
+a JSON profile. On `createVehicle`, a non-empty id loads the file and its parsed config
 REPLACES the inline sub-config (profile authoritative, per the `designRef`
 precedent); empty id leaves inline untouched. An unloadable profile (missing file,
 malformed JSON, missing required key, wrong-typed field) makes `createVehicle`
-throw `std::runtime_error` naming the file. Guidance/autopilot, warhead,
-mass/inertia, and RCS/IR/emitter signature fields are NOT profile-resolved.
+throw `std::runtime_error` naming the file. Structural summary (mass/inertia) and
+RCS/IR/emitter signature fields remain non-profile-resolved on `VehicleConfig`
+(RCS tables are resolved via `RCSDatabase`).
 
 ### 5.3 Commands and guidance state
 
@@ -290,6 +292,16 @@ default from the struct.
 CPU backend rotates body aero/thrust force to the world frame, divides by current
 mass, adds configured gravity and rotating-earth terms. Position derivative is
 world-frame velocity.
+
+### 6.1.1 Multi-threaded CPUBackend parallel execution
+
+`CPUBackend` supports multi-threaded evaluation across entities via an internal persistent
+`WorkerPool`. Derivative evaluation (`evaluateDerivative`) and post-step acceleration cache
+refreshing partition the active entity population into disjoint index ranges evaluated in parallel.
+Worker thread counts can be configured at runtime via `SimulationKernel::setThreadCount(std::size_t)`
+and queried via `threadCount()`. When configured with `threads <= 1` (the default), execution executes
+directly on the calling thread with zero thread-synchronization or allocation overhead, ensuring
+strictly bit-identical determinism with single-threaded baselines.
 
 ### 6.2 Aerodynamics
 
@@ -739,7 +751,8 @@ dropout/reacquisition response — midcourse only, seeker-lock override retained
 designer manifests
 (`data/profiles`) and scenarios (`data/scenarios`) consumed end-to-end via
 `designer_pipeline_test`; profile-id database layer (aero/motor/seeker/sensor/
-RCS); data-driven static cd(M,α)/cl(M,α)/cm(M,α)/cy(M,β)/cn(M,β)/cl(M,β)
+guidance/warhead/RCS); multi-threaded CPUBackend parallel execution (`WorkerPool`);
+data-driven static cd(M,α)/cl(M,α)/cm(M,α)/cy(M,β)/cn(M,β)/cl(M,β)
 tables (`aero_tables`, bilinear + clamped, scalar fallback); geometric fins
 (trapezoidal/elliptical/free-form, RocketPy port, Mach-dependent lift/stability/
 roll). `rocket_mvp_test` cross-checks propulsion/ballistic truth
@@ -755,7 +768,7 @@ coverage; imaging IR; multi-target
 tracking; dynamic SARH illuminator tracking; band-resolved extinction; sensor
 fusion; trajectory optimization and energy management (W40 implemented the
 trajectory-core predictor + feasibility gate only); pursuit; LQR/MPC; richer
-telemetry; parallel CPU; CUDA; production GPU backend. Optional ECS/editor mapping,
+telemetry; CUDA; production GPU backend. Optional ECS/editor mapping,
 visualization/plotting/analysis/scenario tooling, and an API server are
 integration/tooling ideas, not kernel features.
 

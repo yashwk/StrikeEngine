@@ -7,6 +7,8 @@
 #include <strikeengine/kernel/profiles/MotorProfileDatabase.hpp>
 #include <strikeengine/kernel/profiles/SeekerProfileDatabase.hpp>
 #include <strikeengine/kernel/profiles/SensorProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/GuidanceProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/WarheadProfileDatabase.hpp>
 
 #include <cstdio>
 #include <fstream>
@@ -117,6 +119,46 @@ int main() {
                   sn.imuLeverArmY == 0.2 &&
                   sn.imuLeverArmZ == 0.3,
               "SensorProfileDatabase parses all SensorConfig fields");
+
+        GuidanceProfileDatabase guidance;
+        check(guidance.loadProfile(kFixtures + "guidance_mk1.json"),
+              "GuidanceProfileDatabase loads guidance_mk1.json");
+        const auto& ga = guidance.guidanceAutopilot();
+        check(ga.navigationConstant == 4.5 &&
+                  ga.waypointGain == 25.0 &&
+                  ga.kAccelP == 0.045 &&
+                  ga.kRateP == 1.25 &&
+                  ga.kAlphaP == 0.35 &&
+                  ga.kRollP == 0.15 &&
+                  ga.kRollD == 0.08 &&
+                  ga.maxDeflectionRad == 0.52 &&
+                  ga.servoTimeConstantSec == 0.015 &&
+                  ga.maxServoRateRadPerSec == 6.28 &&
+                  ga.handoffBlendTimeSec == 0.2 &&
+                  ga.lockLossRetentionSec == 0.5 &&
+                  ga.apnFeedforwardEnabled == true &&
+                  ga.trackConfirmations == 4 &&
+                  ga.trackCoastTimeoutSec == 0.8 &&
+                  ga.trackLossTimeoutSec == 2.5 &&
+                  ga.trajectoryMinSpeedMps == 35.0 &&
+                  ga.trajectoryFeasibilityAccelFactor == 0.90 &&
+                  ga.gainSchedulingEnabled == true &&
+                  ga.refDynamicPressurePa == 45000.0 &&
+                  ga.minDynamicPressurePa == 3000.0 &&
+                  ga.maxDynamicPressurePa == 250000.0,
+              "GuidanceProfileDatabase parses all GuidanceAutopilotConfig fields");
+
+        WarheadProfileDatabase warhead;
+        check(warhead.loadProfile(kFixtures + "warhead_mk1.json"),
+              "WarheadProfileDatabase loads warhead_mk1.json");
+        const auto& wh = warhead.warhead();
+        check(wh.massKg == 25.0 &&
+                  wh.fusing == FusingType::Proximity &&
+                  wh.proximityTriggerM == 8.5 &&
+                  wh.timedDelaySec == 0.0 &&
+                  wh.lethalRadiusM == 12.0 &&
+                  wh.falloffRadiusM == 25.0,
+              "WarheadProfileDatabase parses all WarheadConfig fields");
     }
 
     // ---- 1.5 Shipped production example profiles also parse ----
@@ -214,6 +256,8 @@ int main() {
         cfg.motorProfileId = kFixtures + "motor_mk1.json";
         cfg.seekerProfileId = kFixtures + "seeker_mk1.json";
         cfg.sensorProfileId = kFixtures + "sensor_mk1.json";
+        cfg.guidanceProfileId = kFixtures + "guidance_mk1.json";
+        cfg.warheadProfileId = kFixtures + "warhead_mk1.json";
 
         // Conflicting inline values: the profiles must win.
         cfg.aero.cd = 0.99;
@@ -227,8 +271,6 @@ int main() {
         cfg.sensor.imuEnabled = true;
         cfg.sensor.gpsUpdateRateHz = 1.0;
         cfg.sensor.accelNoiseStdDev = 0.1;
-
-        // Non-profile-resolved subsystems still come from the inline config.
         cfg.guidanceAutopilot.navigationConstant = 7.7;
         cfg.warhead.lethalRadiusM = 3.3;
 
@@ -269,10 +311,13 @@ int main() {
                   sn.imuLeverArmZ[id] == 0.3,
               "sensor profile replaces inline sensor config in SensorBlock");
 
-        check(kernel.getGuidance().navigationConstant[id] == 7.7 &&
-                  kernel.getControl().kAccelP[id] ==
-                      cfg.guidanceAutopilot.kAccelP,
-              "guidance/autopilot are NOT profile-resolved (inline still used)");
+        check(kernel.getGuidance().navigationConstant[id] == 4.5 &&
+                  kernel.getControl().kAccelP[id] == 0.045 &&
+                  kernel.getControl().gainSchedulingEnabled[id] == true &&
+                  kernel.getControl().refDynamicPressurePa[id] == 45000.0,
+              "guidance profile replaces inline guidance config in GuidanceBlock & ControlBlock");
+        check(kernel.getGuidance().navigationConstant[id] != 7.7,
+              "inline guidance config was overridden by guidance profile");
     }
 
     // ---- 3.5 Empty profile ids keep using inline config (regression) ----
@@ -282,12 +327,15 @@ int main() {
         cfg.aero.cd = 0.77;
         cfg.sensor.gpsUpdateRateHz = 2.5;
         cfg.seeker.type = SeekerType::IR;
+        cfg.guidanceAutopilot.navigationConstant = 7.7;
+        cfg.warhead.lethalRadiusM = 3.3;
         const auto id = kernel.createVehicle(makeInit(), cfg);
         const auto& phys = kernel.getPhysics();
         const auto& sn = kernel.getSensors();
         const auto& sk = kernel.getSeekers();
+        const auto& gd = kernel.getGuidance();
         check(phys.cd[id] == 0.77 && sn.gpsUpdateRateHz[id] == 2.5 &&
-                  sk.type[id] == SeekerType::IR,
+                  sk.type[id] == SeekerType::IR && gd.navigationConstant[id] == 7.7,
               "empty profile ids leave inline sub-configs untouched");
     }
 
@@ -332,6 +380,26 @@ int main() {
         } catch (const std::runtime_error&) { threw = true; }
         catch (const std::exception&) { threw = false; }
         check(threw, "sensor missing profile also throws std::runtime_error");
+
+        threw = false;
+        SimulationKernel kernel5;
+        VehicleConfig cfg5;
+        cfg5.guidanceProfileId = kFixtures + "does_not_exist.json";
+        try {
+            (void)kernel5.createVehicle(makeInit(), cfg5);
+        } catch (const std::runtime_error&) { threw = true; }
+        catch (const std::exception&) { threw = false; }
+        check(threw, "guidance missing profile also throws std::runtime_error");
+
+        threw = false;
+        SimulationKernel kernel6;
+        VehicleConfig cfg6;
+        cfg6.warheadProfileId = kFixtures + "does_not_exist.json";
+        try {
+            (void)kernel6.createVehicle(makeInit(), cfg6);
+        } catch (const std::runtime_error&) { threw = true; }
+        catch (const std::exception&) { threw = false; }
+        check(threw, "warhead missing profile also throws std::runtime_error");
     }
 
     // ---- 4.5 Schema-broken (valid JSON) profile -> runtime_error naming the file ----
@@ -345,6 +413,16 @@ int main() {
         {
             std::ofstream f(brokenSeeker);
             f << R"({"type":"submarine"})";
+        }
+        const std::string brokenGuidance = "profile_database_test_broken_guidance.json";
+        {
+            std::ofstream f(brokenGuidance);
+            f << R"({"navigation_constant":"not-a-number"})";
+        }
+        const std::string brokenWarhead = "profile_database_test_broken_warhead.json";
+        {
+            std::ofstream f(brokenWarhead);
+            f << R"({"fusing":"plasma_cannon"})";
         }
 
         SimulationKernel kernel;
@@ -374,8 +452,32 @@ int main() {
         check(threw,
               "schema-broken seeker profile (unknown type) throws std::runtime_error");
 
+        threw = false;
+        SimulationKernel kernel3;
+        VehicleConfig cfg3;
+        cfg3.guidanceProfileId = brokenGuidance;
+        try {
+            (void)kernel3.createVehicle(makeInit(), cfg3);
+        } catch (const std::runtime_error&) { threw = true; }
+        catch (const std::exception&) { threw = false; }
+        check(threw,
+              "schema-broken guidance profile throws std::runtime_error");
+
+        threw = false;
+        SimulationKernel kernel4;
+        VehicleConfig cfg4;
+        cfg4.warheadProfileId = brokenWarhead;
+        try {
+            (void)kernel4.createVehicle(makeInit(), cfg4);
+        } catch (const std::runtime_error&) { threw = true; }
+        catch (const std::exception&) { threw = false; }
+        check(threw,
+              "schema-broken warhead profile (unknown fusing) throws std::runtime_error");
+
         std::remove(brokenAero.c_str());
         std::remove(brokenSeeker.c_str());
+        std::remove(brokenGuidance.c_str());
+        std::remove(brokenWarhead.c_str());
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

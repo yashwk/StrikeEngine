@@ -36,6 +36,16 @@ namespace StrikeEngine::Kernel
         environment = environmentConfig;
     }
 
+    void CPUBackend::setThreadCount(std::size_t threads)
+    {
+        threadPool.resize(threads);
+    }
+
+    std::size_t CPUBackend::threadCount() const
+    {
+        return threadPool.size();
+    }
+
     void CPUBackend::initialize(
         PhysicsBlock&,
         ControlBlock&)
@@ -83,15 +93,15 @@ namespace StrikeEngine::Kernel
         derivBuffer.size = n;
     }
 
-    void CPUBackend::evaluateDerivative(
+    void CPUBackend::evaluateDerivativeChunk(
         const PhysicsBlock& s,
         const ControlBlock& c,
         double t,
-        PhysicsBlock& d)
+        PhysicsBlock& d,
+        std::size_t start,
+        std::size_t end)
     {
-        const std::size_t n = s.size;
-
-        for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t i = start; i < end; ++i)
         {
             d.px[i] = 0.0; d.py[i] = 0.0; d.pz[i] = 0.0;
             d.vx[i] = 0.0; d.vy[i] = 0.0; d.vz[i] = 0.0;
@@ -440,6 +450,17 @@ namespace StrikeEngine::Kernel
         }
     }
 
+    void CPUBackend::evaluateDerivative(
+        const PhysicsBlock& s,
+        const ControlBlock& c,
+        double t,
+        PhysicsBlock& d)
+    {
+        threadPool.parallelFor(s.size, [this, &s, &c, t, &d](std::size_t start, std::size_t end) {
+            evaluateDerivativeChunk(s, c, t, d, start, end);
+        });
+    }
+
     void CPUBackend::step(
         PhysicsBlock& physics,
         ControlBlock& control,
@@ -469,21 +490,23 @@ namespace StrikeEngine::Kernel
         // readouts see the true accelerations at the end of the step.
         evaluateDerivative(physics, control, currentTime + dt, derivBuffer);
         const std::size_t n = physics.size;
-        for (std::size_t i = 0; i < n; ++i)
-        {
-            if (!physics.active[i])
-                continue;
-            physics.ax[i] = derivBuffer.ax[i];
-            physics.ay[i] = derivBuffer.ay[i];
-            physics.az[i] = derivBuffer.az[i];
-            physics.alphax[i] = derivBuffer.alphax[i];
-            physics.alphay[i] = derivBuffer.alphay[i];
-            physics.alphaz[i] = derivBuffer.alphaz[i];
-            physics.mach[i] = derivBuffer.mach[i];
-            physics.dynamicPressure[i] = derivBuffer.dynamicPressure[i];
-            physics.airDensity[i] = derivBuffer.airDensity[i];
-            physics.localSpeedOfSound[i] = derivBuffer.localSpeedOfSound[i];
-        }
+        threadPool.parallelFor(n, [this, &physics](std::size_t start, std::size_t end) {
+            for (std::size_t i = start; i < end; ++i)
+            {
+                if (!physics.active[i])
+                    continue;
+                physics.ax[i] = derivBuffer.ax[i];
+                physics.ay[i] = derivBuffer.ay[i];
+                physics.az[i] = derivBuffer.az[i];
+                physics.alphax[i] = derivBuffer.alphax[i];
+                physics.alphay[i] = derivBuffer.alphay[i];
+                physics.alphaz[i] = derivBuffer.alphaz[i];
+                physics.mach[i] = derivBuffer.mach[i];
+                physics.dynamicPressure[i] = derivBuffer.dynamicPressure[i];
+                physics.airDensity[i] = derivBuffer.airDensity[i];
+                physics.localSpeedOfSound[i] = derivBuffer.localSpeedOfSound[i];
+            }
+        });
     }
 
 } // namespace StrikeEngine::Kernel

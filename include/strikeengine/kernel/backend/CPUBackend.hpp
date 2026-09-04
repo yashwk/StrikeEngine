@@ -7,6 +7,7 @@
 #include <strikeengine/models/physics/atmosphere/AtmosphereModel.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
+#include <strikeengine/kernel/backend/WorkerPool.hpp>
 #include <memory>
 #include <vector>
 
@@ -34,6 +35,8 @@ namespace StrikeEngine::Kernel
 		int registerPropulsion(std::shared_ptr<const Models::PropulsionModel> model) override;
 
 		void setEnvironment(const EnvironmentConfig& environment) override;
+		void setThreadCount(std::size_t threads) override;
+		[[nodiscard]] std::size_t threadCount() const override;
 
 		void initialize(
 			PhysicsBlock& physics,
@@ -55,6 +58,14 @@ namespace StrikeEngine::Kernel
 			double t,
 			PhysicsBlock& d);
 
+		void evaluateDerivativeChunk(
+			const PhysicsBlock& state,
+			const ControlBlock& control,
+			double t,
+			PhysicsBlock& d,
+			std::size_t start,
+			std::size_t end);
+
 		void ensureDerivCapacity(const PhysicsBlock& state);
 
 		std::unique_ptr<Integrator> integrator;
@@ -67,6 +78,7 @@ namespace StrikeEngine::Kernel
 		// Per-entity propulsion pool (W1); entities reference by index.
 		std::vector<std::shared_ptr<const Models::PropulsionModel>> propulsionPool;
 
+		WorkerPool threadPool;
 		PhysicsBlock derivBuffer;   // scratch for cache refresh + stage reuse
 	};
 

@@ -5,6 +5,8 @@
 #include <strikeengine/kernel/profiles/MotorProfileDatabase.hpp>
 #include <strikeengine/kernel/profiles/SeekerProfileDatabase.hpp>
 #include <strikeengine/kernel/profiles/SensorProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/GuidanceProfileDatabase.hpp>
+#include <strikeengine/kernel/profiles/WarheadProfileDatabase.hpp>
 #include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
@@ -57,6 +59,16 @@ namespace StrikeEngine::Kernel {
     void SimulationKernel::setEnvironment(const EnvironmentConfig& environmentConfig) {
         environment = environmentConfig;
         backend->setEnvironment(environment);
+    }
+
+    void SimulationKernel::setThreadCount(std::size_t threads) {
+        if (backend) {
+            backend->setThreadCount(threads);
+        }
+    }
+
+    std::size_t SimulationKernel::threadCount() const {
+        return backend ? backend->threadCount() : 1;
     }
 
     void SimulationKernel::reset() {
@@ -116,6 +128,22 @@ namespace StrikeEngine::Kernel {
                                          config.sensorProfileId + "'");
             }
             resolved.sensor = sensorDb.sensor();
+        }
+        if (!config.guidanceProfileId.empty()) {
+            GuidanceProfileDatabase guidanceDb;
+            if (!guidanceDb.loadProfile(config.guidanceProfileId)) {
+                throw std::runtime_error("GuidanceProfileDatabase could not load profile '" +
+                                         config.guidanceProfileId + "'");
+            }
+            resolved.guidanceAutopilot = guidanceDb.guidanceAutopilot();
+        }
+        if (!config.warheadProfileId.empty()) {
+            WarheadProfileDatabase warheadDb;
+            if (!warheadDb.loadProfile(config.warheadProfileId)) {
+                throw std::runtime_error("WarheadProfileDatabase could not load profile '" +
+                                         config.warheadProfileId + "'");
+            }
+            resolved.warhead = warheadDb.warhead();
         }
 
         std::string propulsionError;
@@ -335,19 +363,19 @@ namespace StrikeEngine::Kernel {
         controlBlock.rollCommand[id] = 0;
         controlBlock.thrustVectorPitchCommand[id] = 0;
         controlBlock.thrustVectorYawCommand[id] = 0;
-        controlBlock.kAccelP[id] = config.guidanceAutopilot.kAccelP;
-        controlBlock.kRateP[id] = config.guidanceAutopilot.kRateP;
-        controlBlock.kAlphaP[id] = config.guidanceAutopilot.kAlphaP;
-        controlBlock.kRollP[id] = config.guidanceAutopilot.kRollP;
-        controlBlock.kRollD[id] = config.guidanceAutopilot.kRollD;
-        controlBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
-        controlBlock.gainSchedulingEnabled[id] = config.guidanceAutopilot.gainSchedulingEnabled;
-        controlBlock.refDynamicPressurePa[id] = config.guidanceAutopilot.refDynamicPressurePa;
-        controlBlock.minDynamicPressurePa[id] = config.guidanceAutopilot.minDynamicPressurePa;
-        controlBlock.maxDynamicPressurePa[id] = config.guidanceAutopilot.maxDynamicPressurePa;
-        physicsBlock.maxDeflectionRad[id] = config.guidanceAutopilot.maxDeflectionRad;
-        physicsBlock.servoTimeConstantSec[id] = config.guidanceAutopilot.servoTimeConstantSec;
-        physicsBlock.maxServoRateRadPerSec[id] = config.guidanceAutopilot.maxServoRateRadPerSec;
+        controlBlock.kAccelP[id] = resolved.guidanceAutopilot.kAccelP;
+        controlBlock.kRateP[id] = resolved.guidanceAutopilot.kRateP;
+        controlBlock.kAlphaP[id] = resolved.guidanceAutopilot.kAlphaP;
+        controlBlock.kRollP[id] = resolved.guidanceAutopilot.kRollP;
+        controlBlock.kRollD[id] = resolved.guidanceAutopilot.kRollD;
+        controlBlock.maxDeflectionRad[id] = resolved.guidanceAutopilot.maxDeflectionRad;
+        controlBlock.gainSchedulingEnabled[id] = resolved.guidanceAutopilot.gainSchedulingEnabled;
+        controlBlock.refDynamicPressurePa[id] = resolved.guidanceAutopilot.refDynamicPressurePa;
+        controlBlock.minDynamicPressurePa[id] = resolved.guidanceAutopilot.minDynamicPressurePa;
+        controlBlock.maxDynamicPressurePa[id] = resolved.guidanceAutopilot.maxDynamicPressurePa;
+        physicsBlock.maxDeflectionRad[id] = resolved.guidanceAutopilot.maxDeflectionRad;
+        physicsBlock.servoTimeConstantSec[id] = resolved.guidanceAutopilot.servoTimeConstantSec;
+        physicsBlock.maxServoRateRadPerSec[id] = resolved.guidanceAutopilot.maxServoRateRadPerSec;
 
         guidanceBlock.mode[id] = GuidanceMode::None;
         guidanceBlock.targetX[id] = 0; guidanceBlock.targetY[id] = 0; guidanceBlock.targetZ[id] = 0;
@@ -356,12 +384,12 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.targetAccelAvailable[id] = false;
         guidanceBlock.commandedAccelX[id] = 0; guidanceBlock.commandedAccelY[id] = 0; guidanceBlock.commandedAccelZ[id] = 0;
         guidanceBlock.maxAccel[id] = 0.0;
-        guidanceBlock.navigationConstant[id] = config.guidanceAutopilot.navigationConstant;
-        guidanceBlock.waypointGain[id] = config.guidanceAutopilot.waypointGain;
+        guidanceBlock.navigationConstant[id] = resolved.guidanceAutopilot.navigationConstant;
+        guidanceBlock.waypointGain[id] = resolved.guidanceAutopilot.waypointGain;
         // W36 phase-manager config (defaults preserve the legacy path).
-        guidanceBlock.handoffBlendTimeSec[id] = config.guidanceAutopilot.handoffBlendTimeSec;
-        guidanceBlock.lockLossRetentionSec[id] = config.guidanceAutopilot.lockLossRetentionSec;
-        guidanceBlock.apnFeedforwardEnabled[id] = config.guidanceAutopilot.apnFeedforwardEnabled;
+        guidanceBlock.handoffBlendTimeSec[id] = resolved.guidanceAutopilot.handoffBlendTimeSec;
+        guidanceBlock.lockLossRetentionSec[id] = resolved.guidanceAutopilot.lockLossRetentionSec;
+        guidanceBlock.apnFeedforwardEnabled[id] = resolved.guidanceAutopilot.apnFeedforwardEnabled;
         // W36 state/diagnostics reset (fresh and reused slots).
         guidanceBlock.phase[id] = GuidancePhase::None;
         guidanceBlock.law[id] = GuidanceLaw::None;
@@ -378,8 +406,8 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.retainedAccelY[id] = 0;
         guidanceBlock.retainedAccelZ[id] = 0;
         // W40 trajectory-core config + state/diagnostics reset (fresh and reused).
-        guidanceBlock.trajectoryMinSpeedMps[id] = config.guidanceAutopilot.trajectoryMinSpeedMps;
-        guidanceBlock.trajectoryFeasibilityAccelFactor[id] = config.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
+        guidanceBlock.trajectoryMinSpeedMps[id] = resolved.guidanceAutopilot.trajectoryMinSpeedMps;
+        guidanceBlock.trajectoryFeasibilityAccelFactor[id] = resolved.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
         guidanceBlock.predictedInterceptX[id] = 0;
         guidanceBlock.predictedInterceptY[id] = 0;
         guidanceBlock.predictedInterceptZ[id] = 0;
@@ -394,9 +422,9 @@ namespace StrikeEngine::Kernel {
         controlBlock.rollSaturated[id] = false;
 
         // W39 track config + state reset (fresh and reused slots).
-        trackBlock.confirmations[id] = config.guidanceAutopilot.trackConfirmations;
-        trackBlock.coastTimeoutSec[id] = config.guidanceAutopilot.trackCoastTimeoutSec;
-        trackBlock.lossTimeoutSec[id] = config.guidanceAutopilot.trackLossTimeoutSec;
+        trackBlock.confirmations[id] = resolved.guidanceAutopilot.trackConfirmations;
+        trackBlock.coastTimeoutSec[id] = resolved.guidanceAutopilot.trackCoastTimeoutSec;
+        trackBlock.lossTimeoutSec[id] = resolved.guidanceAutopilot.trackLossTimeoutSec;
         trackBlock.state[id] = TrackState::None;
         trackBlock.trackId[id] = -1;
         trackBlock.posX[id] = 0; trackBlock.posY[id] = 0; trackBlock.posZ[id] = 0;
@@ -570,19 +598,19 @@ namespace StrikeEngine::Kernel {
         statusBlock.emitterEirpW[id] = config.emitterEirpW;
 
         // Warhead state (fusing + lethality handled by processWarheads()).
-        if (config.warhead.falloffRadiusM > 0.0 &&
-            config.warhead.falloffRadiusM < config.warhead.lethalRadiusM) {
+        if (resolved.warhead.falloffRadiusM > 0.0 &&
+            resolved.warhead.falloffRadiusM < resolved.warhead.lethalRadiusM) {
             throw std::runtime_error("SimulationKernel: warhead falloff_radius_m (" +
-                                     std::to_string(config.warhead.falloffRadiusM) +
+                                     std::to_string(resolved.warhead.falloffRadiusM) +
                                      " m) is below lethal_radius_m (" +
-                                     std::to_string(config.warhead.lethalRadiusM) + " m)");
+                                     std::to_string(resolved.warhead.lethalRadiusM) + " m)");
         }
         warheads[id] = WarheadState{};
-        warheads[id].lethalRadiusM = config.warhead.lethalRadiusM;
-        warheads[id].falloffRadiusM = config.warhead.falloffRadiusM;
-        warheads[id].fusing = config.warhead.fusing;
-        warheads[id].proximityTriggerM = config.warhead.proximityTriggerM;
-        warheads[id].timedDelaySec = config.warhead.timedDelaySec;
+        warheads[id].lethalRadiusM = resolved.warhead.lethalRadiusM;
+        warheads[id].falloffRadiusM = resolved.warhead.falloffRadiusM;
+        warheads[id].fusing = resolved.warhead.fusing;
+        warheads[id].proximityTriggerM = resolved.warhead.proximityTriggerM;
+        warheads[id].timedDelaySec = resolved.warhead.timedDelaySec;
         warheads[id].launchTime = time.currentTime();
         warheads[id].detonated = false;
 

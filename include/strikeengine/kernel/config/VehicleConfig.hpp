@@ -47,6 +47,8 @@ namespace StrikeEngine::Kernel {
         std::string motorProfileId = "";
         std::string seekerProfileId = "";
         std::string sensorProfileId = "";
+        std::string guidanceProfileId = "";
+        std::string warheadProfileId = "";
         double emitterEirpW = 0.0;
     };
 

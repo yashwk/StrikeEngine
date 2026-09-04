@@ -15,7 +15,7 @@ defines the Designer-facing export boundary.
 - Version `0.1.0`; C++23; CMake ≥ 3.23.
 - Default build: static `strikeengine` library, CPU backend.
 - Optional `strikeengine_vulkan` via `STRIKEENGINE_WITH_VULKAN=ON`.
-- Release validation: **37/37 CTest tests pass**.
+- Release validation: **38/38 CTest tests pass**.
 - Default local frame and constant-gravity behavior remain backward-compatible.
 - `.idea` project metadata change is in this documentation checkpoint (not runtime
   behavior).
@@ -279,7 +279,7 @@ binary reader implemented; richer telemetry future.
 
 ## 7. Validation inventory
 
-36 deterministic CTest programs:
+38 deterministic CTest programs:
 
 | Test | Coverage |
 | --- | --- |
@@ -301,7 +301,7 @@ binary reader implemented; richer telemetry future.
 | `staging_warhead` | two-stage separation (dump, inertia rescale, event) + fusing |
 | `warhead_falloff` | falloff law (1/linear/0), fixed-seed in-band outcome, flat-law RNG exclusion, round-trip + reject |
 | `serialization` | config round-trip, scenario/design load-save, `designRef` override, four profile-id keys, legacy-compat |
-| `profile_database` | aero/motor/seek/sensor DB, fail-fast `loadProfile`, profile-wins resolution |
+| `profile_database` | aero/motor/seeker/sensor/guidance/warhead DB, fail-fast `loadProfile`, profile-wins resolution |
 | `designer_pipeline` | manifest→`designRef`→profile-id→intercept (9.7 m miss) + kill |
 | `seeker_intercept` | two explicit missiles: friendly RF-seeker interceptor (sa_missile_mk1 aero/motor profiles + 12 kW radar, 20° FOV half-angle, 65° gimbal, 0.5 s acquisition blend, proximity warhead 20/15/25 m) vs hostile coasting target missile (target_missile_rcs.json, 0.25 m² flat RCS); midcourse PN on explicit state, RF acquisition via radar equation + RCS + allegiance (no fake lock), phase sequence Midcourse→Acquisition→Terminal asserted, terminal APN, detonation + kill; seed `0x5EEDF1A5u` |
 | `track_manager` | W39 persistent target-track lifecycle: external command seed (identity/pos/vel/accel/timestamp); seeker LOS fix → world-frame estimate via nav (no truth coupling) + finite-difference velocity; Acquire→Maintain after `trackConfirmations` fixes; coast prediction at the sim rate (pos advances vel·dt); quality decay (exp tau 1 s) + uncertainty growth (5+25·age, 25+50·age); Maintain→Coast→Lost timing; Reacquire→Maintain; guidance handoff (PN on the track when measurement-anchored, fallback to external command when Lost) and the three config keys; extended `GuidanceSystem::update(const TrackBlock&)` signature |
@@ -310,6 +310,7 @@ binary reader implemented; richer telemetry future.
 | `coefficient_table` | `interpolateCoefficient` breakpoint/interior/clamp, `AeroTables::isValid` |
 | `rocket_mvp_tables` | constant vs tables: apogee 24.79 > 17.19 km, burnout V 713.6 > 686.8 m/s, max-Q 260.4 > 242.2 kPa; fallback byte-identical |
 | `fins` | geometric fins: three-shape geometry hand-checks (trapezoidal/elliptical/free-form), Mach lift-slope monotonicity, tail-fin restoring-moment sign, positive-cant roll forcing, JSON round-trip (incl. `shape_points`), validation throws (count<3, free-form <3 points), ballistic rocket_mvp with 4 tail fins (trapezoidal + elliptical; apogee 17.2 km, drift ~0 m) |
+| `multithread` | multi-threaded `CPUBackend` parallel execution via persistent `WorkerPool`; parallel derivative evaluation and cache refresh; bit-identical positions/velocities/quaternions across 32 entities between 1 and 4 threads; dynamic thread pool resizing |
 
 Every runtime increment MUST add/update a deterministic regression, run
 `git diff --check`, build Release, run complete CTest.
@@ -348,6 +349,8 @@ Every runtime increment MUST add/update a deterministic regression, run
 | W38 | traceable mode-aware guidance stack (phases, blend, bounded lock-loss retention replays the retained terminal command, diagnostics, APN feed-forward availability + public command/scenario target-accel inputs, `GuidanceLaw::Waypoint` + non-finite hardening) + seeker intercept regression (`seeker_intercept_test`, `guidance_test`) | current |
 | W39 | persistent target-track manager (acquire/maintain/coast/lost/reacquire, identity, quality/covariance model, multi-rate prediction, command+seeker fusion, track-based midcourse aim with legacy fallback) (`track_manager_test`, `seeker_intercept_test`) | current |
 | W40 | trajectory-aware midcourse guidance: explicit `GuidanceMode::Trajectory`, constant-speed intercept predictor (PIP + tgo + required accel) over the track/command aim, `maxAccel`-budget feasibility gate (`trajectoryReason`/`trajectoryAimSource` diagnostics), dropout/reacquisition response, midcourse-only with seeker-lock override preserved, legacy byte-identical when unselected (`trajectory_test`, `guidance_test`, `track_manager_test`, `seeker_intercept_test`) | current |
+| W41 | full 3×3 rigid-body inertia tensor with analytical symmetric inverse + dynamic pressure (q) gain-scheduled autopilot | current |
+| W42 | multi-threaded CPU backend execution (`WorkerPool`) + guidance & warhead profile databases (`multithread_test`, `profile_database_test`) | current |
 
 ## 9. Project boundaries and deferred feature inventory
 
@@ -384,8 +387,8 @@ Tracked so these are not mistaken for missing docs or current guarantees:
   imaging IR, dynamic SARH illuminator tracking, multi-target tracking,
   band-resolved extinction. (SARH, PassiveRF, Beer-Lambert IR, chaff/flare done —
   MVP.)
-- **Execution/platforms:** parallel CPU, validated Vulkan/CPU parity, GPU ECEF,
-  CUDA (if required).
+- **Execution/platforms:** validated Vulkan/CPU parity, GPU ECEF, CUDA (if required).
+  (Parallel CPU execution implemented via `WorkerPool` — W42.)
 - **Tools/integration:** richer telemetry schemas, versioned schema evolution,
   plotting/analysis/scenario tools, shared logging/units/profiling,
   visualization/debug drawing, future API server wrapper.

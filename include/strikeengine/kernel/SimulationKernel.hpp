@@ -112,6 +112,10 @@ namespace StrikeEngine::Kernel {
         // Configure terrain and world-frame wind before stepping.
         void setEnvironment(const EnvironmentConfig& environment);
 
+        // Backend threading
+        void setThreadCount(std::size_t threads);
+        [[nodiscard]] std::size_t threadCount() const;
+
         // Accessors
         const PhysicsBlock& getPhysics() const { return physicsBlock; }
         const ControlBlock& getControl() const { return controlBlock; }

@@ -40,6 +40,16 @@ namespace StrikeEngine::Kernel
 			(void)environment;
 		}
 
+		virtual void setThreadCount(std::size_t threads)
+		{
+			(void)threads;
+		}
+
+		[[nodiscard]] virtual std::size_t threadCount() const
+		{
+			return 1;
+		}
+
 		virtual void initialize(
 			PhysicsBlock& physics,
 			ControlBlock& control) = 0;

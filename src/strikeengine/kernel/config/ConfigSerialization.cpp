@@ -559,6 +559,8 @@ void to_json(json& j, const VehicleConfig& v) {
     j["motor_profile_id"] = v.motorProfileId;
     j["seeker_profile_id"] = v.seekerProfileId;
     j["sensor_profile_id"] = v.sensorProfileId;
+    j["guidance_profile_id"] = v.guidanceProfileId;
+    j["warhead_profile_id"] = v.warheadProfileId;
     j["emitter_eirp_w"] = v.emitterEirpW;
 }
 
@@ -584,6 +586,8 @@ void from_json(const json& j, VehicleConfig& v) {
     v.motorProfileId = j.value("motor_profile_id", std::string(""));
     v.seekerProfileId = j.value("seeker_profile_id", std::string(""));
     v.sensorProfileId = j.value("sensor_profile_id", std::string(""));
+    v.guidanceProfileId = j.value("guidance_profile_id", std::string(""));
+    v.warheadProfileId = j.value("warhead_profile_id", std::string(""));
     v.emitterEirpW = j.at("emitter_eirp_w").get<double>();
 }
 
