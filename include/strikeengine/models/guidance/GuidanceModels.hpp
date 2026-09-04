@@ -154,7 +154,9 @@ namespace StrikeEngine::Models {
         const Vec3& targetAccel,
         bool targetAccelAvailable,
         double navigationConstant,
-        double minSpeedMps)
+        double minSpeedMps,
+        const Vec3& interceptorAccel = {0.0, 0.0, 0.0},
+        bool interceptorAccelAvailable = false)
     {
         InterceptResult out;
 
@@ -165,6 +167,7 @@ namespace StrikeEngine::Models {
         if (!finite3(interceptorPos) || !finite3(interceptorVel) ||
             !finite3(targetPos) || !finite3(targetVel) ||
             (targetAccelAvailable && !finite3(targetAccel)) ||
+            (interceptorAccelAvailable && !finite3(interceptorAccel)) ||
             !std::isfinite(navigationConstant) || navigationConstant <= 0.0 ||
             !std::isfinite(minSpeedMps) || minSpeedMps < 0.0)
         {
@@ -186,7 +189,7 @@ namespace StrikeEngine::Models {
             return out;
         }
 
-        // Quadratic: (|v|^2 - |Vi|^2) t^2 + 2 (r.v) t + |r|^2 = 0
+        // Quadratic in relative velocity: (|v|^2 - |Vi|^2) t^2 + 2 (r.v) t + |r|^2 = 0
         const double a = dot(v, v) - vi2;
         const double b = 2.0 * dot(r, v);
         const double c = dot(r, r);
@@ -210,14 +213,55 @@ namespace StrikeEngine::Models {
         }
 
         const Vec3 at = targetAccelAvailable ? targetAccel : Vec3{0.0, 0.0, 0.0};
+        const Vec3 ai = interceptorAccelAvailable ? interceptorAccel : Vec3{0.0, 0.0, 0.0};
+
+        // When interceptor acceleration is available, refine tgo accounting for
+        // axial acceleration / deceleration along the flight heading via Newton-Raphson.
+        if (interceptorAccelAvailable && vi > 1e-6) {
+            const double aiAxial = dot(ai, interceptorVel) / vi;
+            if (std::abs(aiAxial) > 1e-4) {
+                const Vec3 arel = {at[0] - ai[0], at[1] - ai[1], at[2] - ai[2]};
+                double tIter = tStar;
+                for (int iter = 0; iter < 8; ++iter) {
+                    const Vec3 rrel = {
+                        r[0] + v[0] * tIter + 0.5 * arel[0] * tIter * tIter,
+                        r[1] + v[1] * tIter + 0.5 * arel[1] * tIter * tIter,
+                        r[2] + v[2] * tIter + 0.5 * arel[2] * tIter * tIter
+                    };
+                    const Vec3 vrel = {
+                        v[0] + arel[0] * tIter,
+                        v[1] + arel[1] * tIter,
+                        v[2] + arel[2] * tIter
+                    };
+                    const double dist = std::sqrt(dot(rrel, rrel));
+                    if (dist < 1e-6) break;
+                    const double sMissile = vi * tIter + 0.5 * aiAxial * tIter * tIter;
+                    const double residual = dist - sMissile;
+                    if (std::abs(residual) < 1e-5) break;
+                    const double vMissile = vi + aiAxial * tIter;
+                    if (vMissile <= 0.0) break;
+                    const double distDot = dot(rrel, vrel) / dist;
+                    const double fPrime = distDot - vMissile;
+                    if (std::abs(fPrime) < 1e-6) break;
+                    const double deltaT = residual / fPrime;
+                    const double nextT = tIter - deltaT;
+                    if (nextT <= 0.0 || !std::isfinite(nextT)) break;
+                    tIter = nextT;
+                }
+                if (tIter > 0.0 && std::isfinite(tIter)) {
+                    tStar = tIter;
+                }
+            }
+        }
+
         const Vec3 pip = {
             targetPos[0] + targetVel[0] * tStar + 0.5 * at[0] * tStar * tStar,
             targetPos[1] + targetVel[1] * tStar + 0.5 * at[1] * tStar * tStar,
             targetPos[2] + targetVel[2] * tStar + 0.5 * at[2] * tStar * tStar};
         const Vec3 vClose = {
-            (targetVel[0] + at[0] * tStar) - interceptorVel[0],
-            (targetVel[1] + at[1] * tStar) - interceptorVel[1],
-            (targetVel[2] + at[2] * tStar) - interceptorVel[2]};
+            (targetVel[0] + at[0] * tStar) - (interceptorVel[0] + ai[0] * tStar),
+            (targetVel[1] + at[1] * tStar) - (interceptorVel[1] + ai[1] * tStar),
+            (targetVel[2] + at[2] * tStar) - (interceptorVel[2] + ai[2] * tStar)};
 
         const GuidanceSolution sol = proportionalNavigation(
             vec3Sub(pip, interceptorPos), vClose, navigationConstant);

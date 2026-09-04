@@ -327,12 +327,79 @@ static void controlPolarityChecks()
     }
 }
 
+static void multiFinSetChecks()
+{
+    std::printf("\n-- multi-fin sets (canards + tail fins) --\n");
+    // Build forward steerable canards (position +1.0 m, smaller span)
+    auto canards = buildFinsGeometry(FinShape::Trapezoidal, 4,
+        0.3, 0.15, 0.15, 0.10, +1.0, 0.0, {}, kRefAreaRadius01, nullptr, true);
+    check(canards != nullptr, "canards build");
+    check(canards->steerable == true, "canards are steerable");
+
+    // Build aft stabilizing tail fins (position -1.5 m, larger span, fixed/passive)
+    auto tails = buildFinsGeometry(FinShape::Trapezoidal, 4,
+        0.5, 0.35, 0.25, 0.15, -1.5, 0.0, {}, kRefAreaRadius01, nullptr, false);
+    check(tails != nullptr, "tails build");
+    check(tails->steerable == false, "tails are non-steerable (passive)");
+
+    AeroParams p;
+    p.referenceArea = kRefAreaRadius01;
+    p.referenceLength = 0.2;
+    p.cd = 0.0; p.clAlpha = 0.0; p.clFin = 0.0; p.clMax = 2.0;
+    p.finSets = {canards, tails};
+
+    BasicAeroModel m;
+    const double V = 100.0;
+
+    // 1. Overall stability check: with alpha > 0 and no control commands,
+    // the larger aft tail fins should dominate the forward canards, producing net restoring nose-DOWN moment.
+    auto wStab = m.computeWrench(V, 0.0, 5.0, 0.0, 0.0, 0.0,
+                                 0.0, 0.0, 0.0, 1.225, 340.0, p);
+    check(wStab.torque_y < 0.0, "multi-fin net stability: tail dominates canard -> nose-DOWN restoring moment");
+
+    // 2. Control check: steerable canards should respond to positive pitch command -> nose-UP moment (+torque_y)
+    // while non-steerable tails do not add anti-pitch control deflection.
+    auto wCtrl = m.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                 0.05, 0.0, 0.0, 1.225, 340.0, p);
+    check(wCtrl.torque_y > 0.0, "canard pitch command -> nose-UP moment");
+
+    // 3. Serialization check: multi-fin sets round-trip through JSON
+    VehicleConfig vcfg;
+    FinsConfig fCanard;
+    fCanard.shape = FinShape::Trapezoidal;
+    fCanard.count = 4;
+    fCanard.positionM = 1.0;
+    fCanard.rootChordM = 0.3;
+    fCanard.tipChordM = 0.15;
+    fCanard.spanM = 0.15;
+    fCanard.steerable = true;
+
+    FinsConfig fTail;
+    fTail.shape = FinShape::Trapezoidal;
+    fTail.count = 4;
+    fTail.positionM = -1.5;
+    fTail.rootChordM = 0.5;
+    fTail.tipChordM = 0.35;
+    fTail.spanM = 0.25;
+    fTail.steerable = false;
+
+    vcfg.aero.finSets = {fCanard, fTail};
+
+    const std::string s = serializeVehicleConfig(vcfg);
+    VehicleConfig rt = deserializeVehicleConfig(s);
+    check(rt.aero.finSets.size() == 2, "deserialized finSets has 2 entries");
+    check(rt.aero.finSets[0].positionM == 1.0 && rt.aero.finSets[0].steerable == true, "deserialized canard matches");
+    check(rt.aero.finSets[1].positionM == -1.5 && rt.aero.finSets[1].steerable == false, "deserialized tail matches");
+    check(rt.aero.allFinSets().size() == 2, "allFinSets() returns both sets");
+}
+
 int main()
 {
     std::printf("=== fins: RocketPy geometric fin model (trapezoidal/elliptical/free-form) ===\n");
     geometryChecks();
     machAndSignChecks();
     controlPolarityChecks();
+    multiFinSetChecks();
     serializationChecks();
     validationChecks();
     flightChecks();

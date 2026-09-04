@@ -139,12 +139,13 @@ carries per-entity `stageIndex`/`stageCount`.
 - `FinsModel.hpp`: `FinShape` (`Trapezoidal`/`Elliptical`/`FreeForm`), `FinsGeometry`
   (precomputed geometry + Mach-dependent `clAlpha`/`rollForcingPerRad`/
   `rollDampingCoeff`), `buildFinsGeometry` (RocketPy port: Diederich + Prandtl–Glauert
-  lift slope, fin-number/interference corrections, per-shape CP, roll factors).
-  `AeroConfig::fins` (count 0 disables, ≥3 enables) wires into `BasicAeroModel::
-  computeWrench`; when non-null the geometry-derived Mach-dependent fin terms
-  REPLACE the abstract `clFin`/`CM_delta`/`Cl_delta`/`CN_beta` (body terms stay),
-  and when null the legacy path is byte-identical. `fins` JSON parsed in
-  `ConfigSerialization.cpp` and `AeroProfileDatabase.cpp` with fail-fast validation.
+  lift slope, fin-number/interference corrections, per-shape CP, roll factors,
+  optional `steerable` flag). `AeroConfig::fins` and `AeroConfig::finSets`
+  (multi-fin support: canards + tail fins) wire into `BasicAeroModel::computeWrench`;
+  geometry-derived Mach-dependent fin terms replace abstract fin coefficients
+  while retaining body aerodynamics. Control moments apply consistent nose-UP/nose-RIGHT
+  moments across canards and tails via signed CP arms. JSON `fins` object and
+  `fin_sets` array parsed in `ConfigSerialization.cpp` and `AeroProfileDatabase.cpp`.
 - `PropulsionModel.hpp`/`ThrustCurve.hpp`: validated thrust interpolation, Isp,
   mass flow, ignition/shutdown transients, two-axis gimballed thrust, and
   effective burn duration.
@@ -208,14 +209,17 @@ carries per-entity `stageIndex`/`stageCount`.
 - `CommandProcessor.cpp`: applies queued `SimulationCommand`s; W39 seeds/refreshes
   `TrackBlock` from the command state (identity via `cmd.targetId`, `-1` unknown;
   scenario `initial_target_id` flows through it).
-- `GuidanceModels.hpp`: `Models::predictIntercept` (W40) — constant-speed intercept
-  predictor (PIP + tgo + required accel), `InterceptStatus`
+- `GuidanceModels.hpp`: `Models::predictIntercept` (W40) — acceleration-aware intercept
+  predictor (PIP + tgo + required accel); solves relative kinematics with
+  Newton-Raphson axial boost/drag refinement when interceptor acceleration is available,
+  or closed-form quadratic at constant velocity; `InterceptStatus`
   (`Ok`/`VelocityLow`/`NoIntercept`/`NonFinite`), deterministic + non-finite-safe.
 - `GuidanceSystem.cpp`: `GuidanceMode::Trajectory` midcourse path — aim-source
   precedence (measurement-anchored track wins, command fallback), feasibility gate
   `requiredAccel ≤ factor·maxAccel`, PN-on-PIP command with bounded raw-aim
   fallback, `GuidanceLaw::Trajectory` + `trajectoryReason`/`trajectoryAimSource`/
-  PIP/tgo/required-accel diagnostics; W40 config keys on `GuidanceAutopilotConfig`
+  PIP/tgo/required-accel diagnostics; extracts estimated acceleration from
+  `NavigationBlock::estAx/estAy/estAz`; W40 config keys on `GuidanceAutopilotConfig`
   (`trajectoryMinSpeedMps` 30.0, `trajectoryFeasibilityAccelFactor` 0.95).
 - `AutopilotSystem.cpp`: world→body demand conversion, bounded fins; reads gains
   + `maxDeflectionRad`; publishes `pitchSaturated`/`yawSaturated`/

@@ -52,13 +52,13 @@ implemented MVP features, not deferred work.
 
 W40 is complete: trajectory-aware midcourse guidance consumes the W39
 `TrackBlock`, provides predicted intercept/tgo/required-acceleration
-diagnostics, handles dropout/reacquisition, and preserves seeker-lock and
-legacy fallbacks. Its constant-speed predictor is not an energy or drag/thrust
-optimizer.
+diagnostics, handles dropout/reacquisition, supports acceleration-aware
+relative kinematics (Newton-Raphson refinement for axial boost and drag deceleration),
+and preserves seeker-lock and legacy fallbacks.
 
-The next guidance milestone is W41: trajectory optimization and energy-aware
-guidance with deterministic tests for energy limits, actuator limits, and
-feasible target interception.
+The next guidance milestone is W41: full trajectory optimization, energy corridors,
+and energy management with deterministic tests for energy limits, actuator limits,
+and feasible target interception.
 
 ## Execution and platform support
 

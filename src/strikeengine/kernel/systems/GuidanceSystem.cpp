@@ -210,6 +210,12 @@ namespace StrikeEngine::Kernel {
 
             const Models::Vec3 ownP{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
             const Models::Vec3 ownV{nav.estVx[id], nav.estVy[id], nav.estVz[id]};
+            Models::Vec3 ownA{0.0, 0.0, 0.0};
+            bool ownAccelAvailable = false;
+            if (id < nav.estAx.size() && id < nav.estAy.size() && id < nav.estAz.size()) {
+                ownA = {nav.estAx[id], nav.estAy[id], nav.estAz[id]};
+                ownAccelAvailable = std::isfinite(ownA[0]) && std::isfinite(ownA[1]) && std::isfinite(ownA[2]);
+            }
             const double minSpeed = g.trajectoryMinSpeedMps[id];
             const double factor = std::isfinite(g.trajectoryFeasibilityAccelFactor[id])
                 ? g.trajectoryFeasibilityAccelFactor[id] : 0.95;
@@ -218,7 +224,8 @@ namespace StrikeEngine::Kernel {
                 ownP, ownV,
                 {tx, ty, tz}, {tvx, tvy, tvz},
                 {atx, aty, atz}, accelAvailable,
-                N, minSpeed);
+                N, minSpeed,
+                ownA, ownAccelAvailable);
 
             // Publish prediction diagnostics.
             g.predictedInterceptX[id] = pred.pip[0];

@@ -110,6 +110,7 @@ namespace StrikeEngine::Kernel {
         if (nav.estPx.size() < size) {
             nav.estPx.resize(size, 0.0); nav.estPy.resize(size, 0.0); nav.estPz.resize(size, 0.0);
             nav.estVx.resize(size, 0.0); nav.estVy.resize(size, 0.0); nav.estVz.resize(size, 0.0);
+            nav.estAx.resize(size, 0.0); nav.estAy.resize(size, 0.0); nav.estAz.resize(size, 0.0);
             nav.estQx.resize(size, 0.0); nav.estQy.resize(size, 0.0); nav.estQz.resize(size, 0.0); nav.estQw.resize(size, 1.0);
             nav.estWx.resize(size, 0.0); nav.estWy.resize(size, 0.0); nav.estWz.resize(size, 0.0);
             nav.estAccelBiasX.resize(size, 0.0); nav.estAccelBiasY.resize(size, 0.0); nav.estAccelBiasZ.resize(size, 0.0);
@@ -246,6 +247,9 @@ namespace StrikeEngine::Kernel {
         const double ax = wfx + gravity[0] + earthAcceleration[0];
         const double ay = wfy + gravity[1] + earthAcceleration[1];
         const double az = wfz + gravity[2] + earthAcceleration[2];
+        nav.estAx[id] = ax;
+        nav.estAy[id] = ay;
+        nav.estAz[id] = az;
 
         // 4. Integrate velocity
         nav.estVx[id] += ax * dt;
@@ -503,6 +507,11 @@ namespace StrikeEngine::Kernel {
                 nav.estWx[i] = physics.wx[i];
                 nav.estWy[i] = physics.wy[i];
                 nav.estWz[i] = physics.wz[i];
+                if (i < physics.ax.size()) {
+                    nav.estAx[i] = physics.ax[i];
+                    nav.estAy[i] = physics.ay[i];
+                    nav.estAz[i] = physics.az[i];
+                }
                 nav.isAligned[i] = true;
                 continue; // Skip first tick integration
             }

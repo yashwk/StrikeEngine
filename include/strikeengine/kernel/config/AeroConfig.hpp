@@ -26,6 +26,7 @@ namespace StrikeEngine::Kernel {
         double positionM    = 0.0;
         double cantAngleDeg = 0.0;
         std::vector<std::array<double, 2>> shapePoints; // free-form only
+        bool steerable = true; // true = responds to control deflections (finPitch/finYaw/finRoll)
 
         bool enabled() const { return count >= 3; }
     };
@@ -44,6 +45,20 @@ namespace StrikeEngine::Kernel {
 
         // Optional geometric fins (trapezoidal/elliptical/free-form).
         FinsConfig fins;
+
+        // Optional multiple geometric fin sets (e.g. canards + tails).
+        // When non-empty, all enabled fin sets in finSets are simulated.
+        std::vector<FinsConfig> finSets;
+
+        std::vector<FinsConfig> allFinSets() const {
+            if (!finSets.empty()) {
+                return finSets;
+            }
+            if (fins.enabled()) {
+                return {fins};
+            }
+            return {};
+        }
     };
 
 } // namespace StrikeEngine::Kernel

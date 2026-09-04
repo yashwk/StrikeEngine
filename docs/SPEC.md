@@ -312,9 +312,13 @@ body +Y pitch moment, `Cn` is body +Z yaw moment, and rolling `Cl` is body +X
 moment. cd/cl tables come from StrikeCFD; moment/lateral tables are expected
 from validated StrikeCFD data.
 
-Optional geometric fins (`fins` on `AeroConfig`) port RocketPy's fin aerodynamic
-model. `FinShape` selects `Trapezoidal`, `Elliptical`, or `FreeForm`; `count` 0
-disables fins, `>=3` enables them. Geometry inputs: `rootChordM`, `tipChordM`,
+Optional geometric fins (`fins` or `finSets` on `AeroConfig`) port RocketPy's fin aerodynamic
+model. Multiple fin sets (e.g. canards + aft tail fins) are supported via `finSets`;
+when empty and `fins` is enabled, `fins` is treated as a single set for backward
+compatibility. `FinShape` selects `Trapezoidal`, `Elliptical`, or `FreeForm`; `count` 0
+disables fins, `>=3` enables them. `steerable` (default `true`) specifies whether the
+fin set responds to servo control deflections (`finPitch`/`finYaw`/`finRoll`) or acts
+as a passive stabilizing surface. Geometry inputs: `rootChordM`, `tipChordM`,
 `spanM`, `sweepLengthM` (<0 => root-tip sweep), `positionM` (fin-root leading-edge
 axial offset from CG along body +X; nose positive, tail negative), `cantAngleDeg`,
 and `shapePoints` (free-form). `buildFinsGeometry` precomputes Mach-dependent
@@ -325,19 +329,20 @@ planform lift slope with a Prandtl–Glauert Mach correction, fin-number correct
 free-form mac_lead+0.25·mac_length), and roll-forcing/damping interference
 factors. `cpLeverArmM` is the SIGNED body-X coordinate of the fin CP relative to CG
 (negative = tail), producing restoring (stabilizing) pitch/yaw moments for
-positive α/β.
+positive α/β. Control deflections produce consistent nose-UP / nose-RIGHT moments
+proportional to `|cpLeverArmM|` across both canard and tail geometries.
 
-When `fins` is present and valid, the geometry-derived Mach-dependent fin terms
+When geometric fins are present and valid, the geometry-derived Mach-dependent fin terms
 REPLACE the flat abstract fins (`clFin`/`CM_delta`/`Cl_delta`/`CN_beta`); the body
 terms (body `clAlpha` lift, body `CM_alpha` where applicable, `Cq`/`Clp` damping)
 stay. The lateral/β side-force and static-stability terms are then modeled from fin
-geometry. When `fins` is absent (default), the legacy flat-fin path is
-byte-identical. JSON: optional `fins` object under `aero` with `"shape"`
-("trapezoidal"/"elliptical"/"freeform"), `count`, `position_m`, `cant_angle_deg`,
-`root_chord_m`, `span_m`, plus `tip_chord_m`+`sweep_length_m` (trapezoidal) or
-`shape_points` (free-form). Parsed in `ConfigSerialization.cpp` and
-`AeroProfileDatabase.cpp` with fail-fast validation: `count` <3, or a free-form
-with <3 points, throws.
+geometry across all enabled fin sets. When no geometric fins are configured (default),
+the legacy flat-fin path is byte-identical. JSON: optional `fins` object or `fin_sets`
+array under `aero` with `"shape"` ("trapezoidal"/"elliptical"/"freeform"), `count`,
+`position_m`, `cant_angle_deg`, `root_chord_m`, `span_m`, optional `steerable` (bool),
+plus `tip_chord_m`+`sweep_length_m` (trapezoidal) or `shape_points` (free-form).
+Parsed in `ConfigSerialization.cpp` and `AeroProfileDatabase.cpp` with fail-fast
+validation: `count` <3, or a free-form with <3 points, throws.
 
 ### 6.3 Rotation and actuators
 
@@ -593,15 +598,18 @@ management exactly as it overrides `ProportionalNavigation` (§7.4). When the
 mode is not selected, guidance is byte-identical to the legacy path.
 
 Prediction model (deterministic, in `models/guidance/GuidanceModels.hpp`):
-`predictIntercept` solves the constant-speed intercept
-`‖r + v·t‖² = |Vi|²·t²` for the smallest positive time-to-go `t*`
-(`r = aimPos − navPos`, `v = aimVel − navVel`), then publishes the predicted
-intercept point `PIP = T + Vt·t*` (+ `0.5·At·t*²` when target acceleration is
-available) and the required acceleration (the `|PN|` demand aimed at the PIP,
-evaluated at the intercept-time closing velocity). It rejects non-finite input,
+`predictIntercept` solves the intercept time-to-go `t*` over relative kinematics
+`‖r + v·t + 0.5·arel·t²‖ = s_m(t)` (`r = aimPos − navPos`, `v = aimVel − navVel`,
+`arel = at − ai`, `s_m(t) = |Vi|·t + 0.5·aiAxial·t²`). When own-ship acceleration is
+available from `NavigationBlock` (`estAx/estAy/estAz`), `predictIntercept` refines
+`t*` via Newton-Raphson accounting for axial boost acceleration or drag deceleration,
+and evaluates closing velocity at intercept time (`vClose = (Vt + At·t*) − (Vi + Ai·t*)`).
+When interceptor acceleration is omitted or zero, it evaluates the exact closed-form
+velocity quadratic `‖r + v·t‖² = |Vi|²·t²` with byte-identical legacy precision.
+It publishes the predicted intercept point `PIP = T + Vt·t* + 0.5·At·t*²` and the
+required acceleration (the `|PN|` demand aimed at the PIP). It rejects non-finite input,
 a non-positive navigation constant, own est speed below `trajectoryMinSpeedMps`
-(`VelocityLow`), and geometry with no positive-time intercept
-(`NoIntercept`).
+(`VelocityLow`), and geometry with no positive-time intercept (`NoIntercept`).
 
 Aim-source precedence matches §7.4/§7.5 exactly: a measurement-anchored track
 (state active AND `updateCount > 0`) wins; a `Coast` track keeps streaming

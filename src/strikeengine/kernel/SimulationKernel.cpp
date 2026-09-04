@@ -156,6 +156,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.clMax.push_back(2.0);
             physicsBlock.aeroTables.push_back(nullptr);
             physicsBlock.fins.push_back(nullptr);
+            physicsBlock.finSets.push_back({});
             physicsBlock.propulsionId.push_back(-1);
             physicsBlock.ignitionTime.push_back(0.0);
             physicsBlock.stageIndex.push_back(-1);
@@ -517,21 +518,25 @@ namespace StrikeEngine::Kernel {
         physicsBlock.aeroTables[id] = resolved.aero.tables.empty()
             ? nullptr
             : std::make_shared<const Models::AeroTables>(resolved.aero.tables);
-        if (resolved.aero.fins.enabled()) {
-            std::string err;
-            auto g = Models::buildFinsGeometry(
-                resolved.aero.fins.shape, resolved.aero.fins.count,
-                resolved.aero.fins.rootChordM, resolved.aero.fins.tipChordM,
-                resolved.aero.fins.spanM, resolved.aero.fins.sweepLengthM,
-                resolved.aero.fins.positionM, resolved.aero.fins.cantAngleDeg,
-                resolved.aero.fins.shapePoints, resolved.aero.referenceArea, &err);
-            if (!g) {
-                throw std::runtime_error("Invalid fins configuration: " + err);
+        std::vector<std::shared_ptr<const Models::FinsGeometry>> builtFinSets;
+        for (const auto& fc : resolved.aero.allFinSets()) {
+            if (fc.enabled()) {
+                std::string err;
+                auto g = Models::buildFinsGeometry(
+                    fc.shape, fc.count,
+                    fc.rootChordM, fc.tipChordM,
+                    fc.spanM, fc.sweepLengthM,
+                    fc.positionM, fc.cantAngleDeg,
+                    fc.shapePoints, resolved.aero.referenceArea, &err,
+                    fc.steerable);
+                if (!g) {
+                    throw std::runtime_error("Invalid fins configuration: " + err);
+                }
+                builtFinSets.push_back(g);
             }
-            physicsBlock.fins[id] = g;
-        } else {
-            physicsBlock.fins[id] = nullptr;
         }
+        physicsBlock.finSets[id] = builtFinSets;
+        physicsBlock.fins[id] = builtFinSets.empty() ? nullptr : builtFinSets.front();
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;

@@ -185,6 +185,42 @@ int main()
                   "target accel increases the required lateral accel");
         }
 
+        // Interceptor axial acceleration (boost) shortens time-to-go.
+        {
+            const M::InterceptResult base = M::predictIntercept(
+                ownP, ownV, {1000.0, 0.0, 0.0}, {-100.0, 0.0, 0.0}, zip,
+                false, 4.0, 30.0);
+            const M::InterceptResult boost = M::predictIntercept(
+                ownP, ownV, {1000.0, 0.0, 0.0}, {-100.0, 0.0, 0.0}, zip,
+                false, 4.0, 30.0, {50.0, 0.0, 0.0}, true);
+            check(boost.valid && boost.status == M::InterceptStatus::Ok,
+                  "boosted interceptor resolves valid intercept");
+            check(boost.tgoSec < base.tgoSec,
+                  "boost axial acceleration reduces time-to-go");
+            const double sMissile = 100.0 * boost.tgoSec + 0.5 * 50.0 * boost.tgoSec * boost.tgoSec;
+            const double rRel = std::abs(1000.0 - 200.0 * boost.tgoSec - 0.5 * 50.0 * boost.tgoSec * boost.tgoSec);
+            check(near(sMissile, rRel, 1e-2),
+                  "boosted kinematic intercept closes distance accurately");
+        }
+
+        // Interceptor axial deceleration (drag) increases time-to-go.
+        {
+            const M::InterceptResult base = M::predictIntercept(
+                ownP, ownV, {1000.0, 0.0, 0.0}, {-100.0, 0.0, 0.0}, zip,
+                false, 4.0, 30.0);
+            const M::InterceptResult drag = M::predictIntercept(
+                ownP, ownV, {1000.0, 0.0, 0.0}, {-100.0, 0.0, 0.0}, zip,
+                false, 4.0, 30.0, {-20.0, 0.0, 0.0}, true);
+            check(drag.valid && drag.status == M::InterceptStatus::Ok,
+                  "decelerating interceptor resolves valid intercept");
+            check(drag.tgoSec > base.tgoSec,
+                  "drag deceleration increases time-to-go");
+            const double sMissile = 100.0 * drag.tgoSec + 0.5 * (-20.0) * drag.tgoSec * drag.tgoSec;
+            const double rRel = std::abs(1000.0 - 200.0 * drag.tgoSec - 0.5 * (-20.0) * drag.tgoSec * drag.tgoSec);
+            check(near(sMissile, rRel, 1e-2),
+                  "drag decelerating kinematic intercept closes distance accurately");
+        }
+
         // Velocity-low: own est speed below the floor.
         {
             const M::InterceptResult r = M::predictIntercept(

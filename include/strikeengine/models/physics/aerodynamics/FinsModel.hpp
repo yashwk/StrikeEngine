@@ -50,6 +50,7 @@ namespace StrikeEngine::Models {
         double rollDampingInterferenceFactor = 0.0;
         double rollForcingInterferenceFactor = 0.0;
         double finNumCorrection = 0.0;
+        bool steerable = true;
 
         // Single-fin lift slope vs the fin's local angle of attack, before the
         // fin-count and interference corrections.
@@ -119,7 +120,8 @@ namespace StrikeEngine::Models {
         double rootChord, double tipChord, double span,
         double sweepLength, double positionM, double cantAngleDeg,
         const std::vector<std::array<double, 2>>& shapePoints,
-        double referenceArea, std::string* error = nullptr)
+        double referenceArea, std::string* error = nullptr,
+        bool steerable = true)
     {
         auto fail = [&](const char* msg) {
             if (error) *error = msg;
@@ -138,6 +140,7 @@ namespace StrikeEngine::Models {
         g->referenceLength = 2.0 * radius;
         g->positionM = positionM;
         g->cantRad = cantAngleDeg * kFinPi / 180.0;
+        g->steerable = steerable;
         g->rootChord = rootChord;
         g->tipChord = tipChord;
 

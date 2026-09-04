@@ -10,6 +10,7 @@ namespace StrikeEngine::Kernel {
         // Estimated State (Navigation Computer's belief)
         std::vector<double> estPx, estPy, estPz;    // Position
         std::vector<double> estVx, estVy, estVz;    // Velocity
+        std::vector<double> estAx, estAy, estAz;    // World acceleration (m/s^2)
         std::vector<double> estQx, estQy, estQz, estQw; // Attitude Quaternion
         std::vector<double> estWx, estWy, estWz;    // Angular Rates
 

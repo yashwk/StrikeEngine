@@ -33,6 +33,20 @@ namespace StrikeEngine::Models {
         // force, CM_delta/Cl_delta moments) with geometry-derived,
         // Mach-dependent terms; nullptr keeps the byte-identical legacy path.
         std::shared_ptr<const Models::FinsGeometry> fins;
+
+        // Optional multiple geometric fin sets (e.g. canards + tails).
+        // When non-empty, all fin sets are composited in the force and moment calculations.
+        std::vector<std::shared_ptr<const Models::FinsGeometry>> finSets;
+
+        std::vector<std::shared_ptr<const Models::FinsGeometry>> activeFins() const {
+            if (!finSets.empty()) {
+                return finSets;
+            }
+            if (fins) {
+                return {fins};
+            }
+            return {};
+        }
     };
 
     /**
@@ -126,20 +140,28 @@ namespace StrikeEngine::Models {
                     tables->machBreakpoints, tables->betaBreakpointsRad, table);
             };
 
+            const auto fList = p.activeFins();
+
             // Lift (pitch plane): positive alpha => force -Z (up), saturated at
             // CL_max (stall / control limit). With geometric fins the fin lift
             // slope clAlpha(mach) acts on the fin's local AoA (alpha +
             // finPitch); without them the flat clFin term is used.
             double cl;
-            if (p.fins) {
-                const double clFin = p.fins->clAlpha(mach);
+            if (!fList.empty()) {
+                double finLift = 0.0;
+                for (const auto& f : fList) {
+                    if (!f) continue;
+                    const double clFin = f->clAlpha(mach);
+                    const double effPitch = f->steerable ? finPitch : 0.0;
+                    finLift += clFin * (alpha + effPitch);
+                }
                 if (tables) {
                     cl = interpolateCoefficient(mach, alpha,
                              tables->machBreakpoints, tables->aoaBreakpointsRad,
                              tables->clTable)
-                         + clFin * (alpha + finPitch);
+                         + finLift;
                 } else {
-                    cl = p.clAlpha * alpha + clFin * (alpha + finPitch);
+                    cl = p.clAlpha * alpha + finLift;
                 }
             } else if (tables) {
                 cl = interpolateCoefficient(mach, alpha,
@@ -159,10 +181,15 @@ namespace StrikeEngine::Models {
             if (hasCyTable) {
                 fy += q * S * tableAtBeta(tables->cyTable);
             }
-            if (p.fins) {
-                const double clFin = p.fins->clAlpha(mach);
-                const double cy = clFin * (beta + finYaw);
-                fy -= q * S * std::clamp(cy, -p.clMax, p.clMax);
+            if (!fList.empty()) {
+                double cySum = 0.0;
+                for (const auto& f : fList) {
+                    if (!f) continue;
+                    const double clFin = f->clAlpha(mach);
+                    const double effYaw = f->steerable ? finYaw : 0.0;
+                    cySum += clFin * (beta + effYaw);
+                }
+                fy -= q * S * std::clamp(cySum, -p.clMax, p.clMax);
             } else {
                 constexpr double cyBody = 0.0;
                 const double cyFin  = std::clamp(p.clFin * finYaw, -p.clMax, p.clMax);
@@ -199,31 +226,26 @@ namespace StrikeEngine::Models {
             constexpr double Cq = 20.0;    // body pitch/yaw damping
 
             double tx, ty, tz;
-            if (p.fins) {
-                const double clFin = p.fins->clAlpha(mach);
-                const double xcp = p.fins->cpLeverArmM;
-                // Fin stability + control moments about the fin CP (lever arm
-                // xcp, negative for tail fins => restoring). Roll forcing from
-                // cant and roll damping replace the abstract Cl_delta/Clp fin
-                // terms; body Cq/Clp damping is still applied below.
-                tx = std::clamp(qS * l * p.fins->rollForcingPerRad(mach)
-                                    * (p.fins->cantRad + finRoll)
-                                - qS * l * l * 0.5 * p.fins->rollDampingCoeff(mach) * wx,
-                                -maxControlMoment, maxControlMoment);
-                ty = std::clamp(qS * xcp * clFin * (alpha - finPitch),
-                                -maxControlMoment, maxControlMoment);
-                tz = std::clamp(qS * xcp * clFin * (beta - finYaw),
-                                -maxControlMoment, maxControlMoment);
+            if (!fList.empty()) {
+                double totalRollTorque = 0.0;
+                double totalPitchTorque = 0.0;
+                double totalYawTorque = 0.0;
+                for (const auto& f : fList) {
+                    if (!f) continue;
+                    const double clFin = f->clAlpha(mach);
+                    const double xcp = f->cpLeverArmM;
+                    const double effPitch = f->steerable ? finPitch : 0.0;
+                    const double effYaw = f->steerable ? finYaw : 0.0;
+                    const double effRoll = f->steerable ? finRoll : 0.0;
 
-                // Control-term polarity matches the documented + tuned
-                // convention (positive deflection -> nose-UP / nose-RIGHT, the
-                // same response the abstract CM_delta path gives), so the
-                // guidance loop behaves identically with or without geometric
-                // fins. The angle terms keep their restoring sign for tail
-                // fins (negative xcp): alpha>0 (nose up) -> nose-DOWN
-                // command-free torque; beta>0 (wind from right) -> nose-LEFT.
-                // (Previously the control terms were inverted here, which put
-                // an aft-fin vehicle into positive feedback -> hard-over dive.)
+                    totalRollTorque += (qS * l * f->rollForcingPerRad(mach) * (f->cantRad + effRoll)
+                                        - qS * l * l * 0.5 * f->rollDampingCoeff(mach) * wx);
+                    totalPitchTorque += (qS * clFin * (xcp * alpha + std::abs(xcp) * effPitch));
+                    totalYawTorque += (qS * clFin * (xcp * beta + std::abs(xcp) * effYaw));
+                }
+                tx = std::clamp(totalRollTorque, -maxControlMoment, maxControlMoment);
+                ty = std::clamp(totalPitchTorque, -maxControlMoment, maxControlMoment);
+                tz = std::clamp(totalYawTorque, -maxControlMoment, maxControlMoment);
 
                 // A supplied table adds validated body static coefficients to
                 // the geometry-derived fin contribution. Without a table the
