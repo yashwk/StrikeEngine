@@ -76,29 +76,31 @@ namespace StrikeEngine::Kernel {
             const double currentGround = terrain(currentLocal);
             const double currentHeight = currentLocal.local[2] - currentGround;
 
-            // Continuous ground check against the configured terrain surface.
-            if (currentHeight <= 0.0) {
-                // Ground impact removes the entity from subsequent physics
-                // and sensor updates. Clamp the crossing state so callers do
-                // not observe a dead entity continuing below the terrain as
-                // an active ghost.
-                const bool hasCrossingData = dt > 0.0 &&
-                    i < previousPx.size() && i < previousPy.size() &&
-                    i < previousPz.size();
-                double impactTime = currentTime;
-                if (hasCrossingData) {
-                    const auto previousLocal = location(
-                        previousPx[i], previousPy[i], previousPz[i]);
-                    const double previousGround = terrain(previousLocal);
-                    const double previousHeight = previousLocal.local[2] - previousGround;
-                    if (previousHeight > 0.0 && currentHeight < 0.0) {
-                        const double fraction = previousHeight /
-                            (previousHeight - currentHeight);
-                        impactTime = currentTime - dt +
-                            dt * std::clamp(fraction, 0.0, 1.0);
-                    }
+            // Ground-impact detection. A vehicle resting exactly on the surface
+            // (a ground launch rail / platform at height 0) is NOT an impact;
+            // only a genuine crossing (descending from above onto/below the
+            // surface this step) or a position beneath the surface is.
+            const bool hasCrossingData = dt > 0.0 &&
+                i < previousPx.size() && i < previousPy.size() &&
+                i < previousPz.size();
+            bool crossedBelow = false;
+            double impactTime = currentTime;
+            if (hasCrossingData) {
+                const auto previousLocal = location(
+                    previousPx[i], previousPy[i], previousPz[i]);
+                const double previousGround = terrain(previousLocal);
+                const double previousHeight = previousLocal.local[2] - previousGround;
+                // Descended from above and now at/below the surface.
+                crossedBelow = (previousHeight > 0.0 && currentHeight <= 0.0);
+                if (crossedBelow) {
+                    const double fraction = previousHeight /
+                        (previousHeight - currentHeight);
+                    impactTime = currentTime - dt +
+                        dt * std::clamp(fraction, 0.0, 1.0);
                 }
-
+            }
+            const bool isGroundImpact = crossedBelow || (currentHeight < 0.0);
+            if (isGroundImpact) {
                 if (ecefTruth) {
                     auto impactGeodetic = Models::ecefToGeodetic({
                         physics.px[i], physics.py[i], physics.pz[i]});
