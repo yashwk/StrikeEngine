@@ -31,11 +31,11 @@ namespace StrikeEngine::Kernel {
     using PhysicsId = std::size_t;
 
     struct VehicleInitState {
-        double px, py, pz;
-        double vx, vy, vz;
-        double qx, qy, qz, qw;
-        double wx, wy, wz;
-        double mass;
+        double px = 0.0, py = 0.0, pz = 0.0;
+        double vx = 0.0, vy = 0.0, vz = 0.0;
+        double qx = 0.0, qy = 0.0, qz = 0.0, qw = 1.0;
+        double wx = 0.0, wy = 0.0, wz = 0.0;
+        double mass = 0.0;
         Allegiance allegiance = Allegiance::Friendly;
     };
 
