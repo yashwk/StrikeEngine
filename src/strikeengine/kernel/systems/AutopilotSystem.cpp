@@ -128,15 +128,12 @@ namespace StrikeEngine::Kernel {
         const double yawAoaDamping = std::clamp(
             -control.kAlphaP[id] * beta, -0.15, 0.15);
 
+        // Do not create a lateral steering demand from sensor noise when guidance
+        // is asking for a straight-plane flight path; keep rate and AoA damping
+        // active so the vehicle stays aerodynamically stable and roll/yaw trimmed.
+        const double yawFeed = (std::abs(ayCmdB) < 0.5) ? 0.0 : yawFeedForward;
         double pitchDeflection = pitchFeedForward + pitchRateDamping + pitchAoaDamping;
-        double yawDeflection   = yawFeedForward + yawRateDamping + yawAoaDamping;
-
-        // Do not create a lateral maneuver from sensor noise when guidance is
-        // asking for a straight-plane flight path. Once a real lateral demand
-        // exceeds the deadband, the normal yaw rate/AoA damping terms engage.
-        if (std::abs(ayCmdB) < 0.5) {
-            yawDeflection = 0.0;
-        }
+        double yawDeflection   = yawFeed + yawRateDamping + yawAoaDamping;
 
         // 6. Roll stabilization: wings-level P-D, referenced to the local
         // gravity direction (attitude-independent — works for any initial
