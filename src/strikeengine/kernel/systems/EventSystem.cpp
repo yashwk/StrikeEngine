@@ -99,7 +99,8 @@ namespace StrikeEngine::Kernel {
                         dt * std::clamp(fraction, 0.0, 1.0);
                 }
             }
-            const bool isGroundImpact = crossedBelow || (currentHeight < 0.0);
+            const bool isSubsurface = (currentHeight < -0.10);
+            const bool isGroundImpact = crossedBelow || isSubsurface;
             if (isGroundImpact) {
                 if (ecefTruth) {
                     auto impactGeodetic = Models::ecefToGeodetic({
