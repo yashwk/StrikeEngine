@@ -79,6 +79,7 @@ namespace StrikeEngine::Kernel {
         sensorBlock = SensorBlock();
         navigationBlock = NavigationBlock();
         seekerBlock = SeekerBlock();
+        trackBlock = TrackBlock();
         seekerSystem.reset();
         sensorSystem.reset();
         freeList.clear();

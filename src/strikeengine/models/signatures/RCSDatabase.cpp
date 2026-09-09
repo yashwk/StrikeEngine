@@ -26,6 +26,10 @@ namespace StrikeEngine::Models {
 
         _name = data.value("name", "Unnamed RCS Profile");
 
+        _azimuth_breakpoints_rad.clear();
+        _elevation_breakpoints_rad.clear();
+        _rcs_table_dbsm.clear();
+
         // Load breakpoints and convert from degrees to radians
         auto az_deg = data.at("azimuth_breakpoints_deg").get<std::vector<double>>();
         for (double deg : az_deg) {
@@ -39,11 +43,30 @@ namespace StrikeEngine::Models {
 
         _rcs_table_dbsm = data.at("rcs_table_dbsm").get<std::vector<std::vector<double>>>();
 
+        // If table was formatted as [azimuth][elevation], transpose to [elevation][azimuth]
+        // so that row index i corresponds to elevation and column index j to azimuth.
+        if (_rcs_table_dbsm.size() == _azimuth_breakpoints_rad.size() &&
+            !_rcs_table_dbsm.empty() &&
+            _rcs_table_dbsm[0].size() == _elevation_breakpoints_rad.size() &&
+            _azimuth_breakpoints_rad.size() != _elevation_breakpoints_rad.size()) {
+            std::vector<std::vector<double>> transposed(
+                _elevation_breakpoints_rad.size(),
+                std::vector<double>(_azimuth_breakpoints_rad.size(), 0.0));
+            for (std::size_t a = 0; a < _azimuth_breakpoints_rad.size(); ++a) {
+                for (std::size_t e = 0; e < _elevation_breakpoints_rad.size(); ++e) {
+                    if (e < _rcs_table_dbsm[a].size()) {
+                        transposed[e][a] = _rcs_table_dbsm[a][e];
+                    }
+                }
+            }
+            _rcs_table_dbsm = std::move(transposed);
+        }
+
         return true;
     }
 
     double RCSDatabase::getRCS(double azimuth_rad, double elevation_rad) const {
-        if (_azimuth_breakpoints_rad.empty() || _elevation_breakpoints_rad.empty()) {
+        if (_azimuth_breakpoints_rad.empty() || _elevation_breakpoints_rad.empty() || _rcs_table_dbsm.empty()) {
             return 1.0; // Default RCS if no data is loaded
         }
 
@@ -52,14 +75,28 @@ namespace StrikeEngine::Models {
         // Find indices for azimuth
         auto it_az = std::ranges::lower_bound(_azimuth_breakpoints_rad, azimuth_rad);
         int j = std::distance(_azimuth_breakpoints_rad.begin(), it_az);
-        if (j >= _azimuth_breakpoints_rad.size()) j = _azimuth_breakpoints_rad.size() - 1;
-        if (j == 0) j = 1;
+        if (j >= static_cast<int>(_azimuth_breakpoints_rad.size())) j = static_cast<int>(_azimuth_breakpoints_rad.size()) - 1;
+        if (j < 1) j = 1;
 
         // Find indices for elevation
         auto it_el = std::ranges::lower_bound(_elevation_breakpoints_rad, elevation_rad);
         int i = std::distance(_elevation_breakpoints_rad.begin(), it_el);
-        if (i >= _elevation_breakpoints_rad.size()) i = _elevation_breakpoints_rad.size() - 1;
-        if (i == 0) i = 1;
+        if (i >= static_cast<int>(_elevation_breakpoints_rad.size())) i = static_cast<int>(_elevation_breakpoints_rad.size()) - 1;
+        if (i < 1) i = 1;
+
+        // Safe row and column indexing into _rcs_table_dbsm[elevation][azimuth]
+        const std::size_t numRows = _rcs_table_dbsm.size();
+        const std::size_t row1 = std::min(static_cast<std::size_t>(i - 1), numRows - 1);
+        const std::size_t row2 = std::min(static_cast<std::size_t>(i), numRows - 1);
+
+        const std::size_t numCols1 = _rcs_table_dbsm[row1].size();
+        const std::size_t numCols2 = _rcs_table_dbsm[row2].size();
+        if (numCols1 == 0 || numCols2 == 0) return 1.0;
+
+        const std::size_t col1_r1 = std::min(static_cast<std::size_t>(j - 1), numCols1 - 1);
+        const std::size_t col2_r1 = std::min(static_cast<std::size_t>(j), numCols1 - 1);
+        const std::size_t col1_r2 = std::min(static_cast<std::size_t>(j - 1), numCols2 - 1);
+        const std::size_t col2_r2 = std::min(static_cast<std::size_t>(j), numCols2 - 1);
 
         // Get the four corner points for interpolation
         double az1 = _azimuth_breakpoints_rad[j - 1];
@@ -67,18 +104,24 @@ namespace StrikeEngine::Models {
         double el1 = _elevation_breakpoints_rad[i - 1];
         double el2 = _elevation_breakpoints_rad[i];
 
-        double rcs_dbsm_11 = _rcs_table_dbsm[i - 1][j - 1];
-        double rcs_dbsm_12 = _rcs_table_dbsm[i - 1][j];
-        double rcs_dbsm_21 = _rcs_table_dbsm[i][j - 1];
-        double rcs_dbsm_22 = _rcs_table_dbsm[i][j];
+        double rcs_dbsm_11 = _rcs_table_dbsm[row1][col1_r1];
+        double rcs_dbsm_12 = _rcs_table_dbsm[row1][col2_r1];
+        double rcs_dbsm_21 = _rcs_table_dbsm[row2][col1_r2];
+        double rcs_dbsm_22 = _rcs_table_dbsm[row2][col2_r2];
 
         // Perform bilinear interpolation on the dBsm values
+        const double dAz = az2 - az1;
+        const double dEl = el2 - el1;
+        if (std::abs(dAz) < 1e-12 || std::abs(dEl) < 1e-12) {
+            return std::pow(10.0, rcs_dbsm_11 / 10.0);
+        }
+
         double term1 = rcs_dbsm_11 * (az2 - azimuth_rad) * (el2 - elevation_rad);
         double term2 = rcs_dbsm_21 * (azimuth_rad - az1) * (el2 - elevation_rad);
         double term3 = rcs_dbsm_12 * (az2 - azimuth_rad) * (elevation_rad - el1);
         double term4 = rcs_dbsm_22 * (azimuth_rad - az1) * (elevation_rad - el1);
 
-        double interpolated_rcs_dbsm = (term1 + term2 + term3 + term4) / ((az2 - az1) * (el2 - el1));
+        double interpolated_rcs_dbsm = (term1 + term2 + term3 + term4) / (dAz * dEl);
 
         // Convert the final result from dBsm back to a linear scale (m^2)
         return std::pow(10.0, interpolated_rcs_dbsm / 10.0);
