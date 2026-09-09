@@ -362,7 +362,6 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["handoffBlendTimeSec"] = g.handoffBlendTimeSec;
     j["lockLossRetentionSec"] = g.lockLossRetentionSec;
     j["apnFeedforwardEnabled"] = g.apnFeedforwardEnabled;
-    j["gravityCompensationEnabled"] = g.gravityCompensationEnabled;
     // W39 track-manager keys (optional with defaults).
     j["trackConfirmations"] = g.trackConfirmations;
     j["trackCoastTimeoutSec"] = g.trackCoastTimeoutSec;
@@ -391,7 +390,6 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.handoffBlendTimeSec = j.value("handoffBlendTimeSec", 0.0);
     g.lockLossRetentionSec = j.value("lockLossRetentionSec", 0.0);
     g.apnFeedforwardEnabled = j.value("apnFeedforwardEnabled", false);
-    g.gravityCompensationEnabled = j.value("gravityCompensationEnabled", false);
     g.trackConfirmations = j.value("trackConfirmations", 3);
     g.trackCoastTimeoutSec = j.value("trackCoastTimeoutSec", 0.5);
     g.trackLossTimeoutSec = j.value("trackLossTimeoutSec", 2.0);

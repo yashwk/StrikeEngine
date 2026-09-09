@@ -357,19 +357,6 @@ namespace StrikeEngine::Kernel {
                 aWorld += 0.5 * N * aTperp;
             }
 
-            // TPN-G Gravity bias compensation: pre-emptively cancels trajectory sag under gravity
-            if (id < guidance.gravityCompensationEnabled.size() && guidance.gravityCompensationEnabled[id]) {
-                const double az = seeker.targetAzimuth[id];
-                const double el = seeker.targetElevation[id];
-                const double cEl = std::cos(el), sEl = std::sin(el);
-                const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
-                const glm::dvec3 losWorld = glm::normalize(estQ * losBody);
-                const glm::dvec3 gWorld(0.0, 0.0, -9.80665);
-                const glm::dvec3 gAlongLos = glm::dot(gWorld, losWorld) * losWorld;
-                const glm::dvec3 gPerp = gWorld - gAlongLos;
-                aWorld -= gPerp;
-            }
-
             out.ax = aWorld.x;
             out.ay = aWorld.y;
             out.az = aWorld.z;

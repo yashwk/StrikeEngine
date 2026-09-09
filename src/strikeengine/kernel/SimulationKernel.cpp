@@ -247,7 +247,6 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.handoffBlendTimeSec.push_back(0.0);
             guidanceBlock.lockLossRetentionSec.push_back(0.0);
             guidanceBlock.apnFeedforwardEnabled.push_back(false);
-            guidanceBlock.gravityCompensationEnabled.push_back(false);
             guidanceBlock.phase.push_back(GuidancePhase::None);
             guidanceBlock.law.push_back(GuidanceLaw::None);
             guidanceBlock.trackId.push_back(-1);
@@ -391,7 +390,6 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.handoffBlendTimeSec[id] = resolved.guidanceAutopilot.handoffBlendTimeSec;
         guidanceBlock.lockLossRetentionSec[id] = resolved.guidanceAutopilot.lockLossRetentionSec;
         guidanceBlock.apnFeedforwardEnabled[id] = resolved.guidanceAutopilot.apnFeedforwardEnabled;
-        guidanceBlock.gravityCompensationEnabled[id] = resolved.guidanceAutopilot.gravityCompensationEnabled;
         // W36 state/diagnostics reset (fresh and reused slots).
         guidanceBlock.phase[id] = GuidancePhase::None;
         guidanceBlock.law[id] = GuidanceLaw::None;

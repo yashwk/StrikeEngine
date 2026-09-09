@@ -21,7 +21,6 @@ namespace StrikeEngine::Kernel {
         double handoffBlendTimeSec  = 0.0;  // acquisition -> terminal ramp time (s)
         double lockLossRetentionSec = 0.0;  // parent track retention after lock loss (s)
         bool   apnFeedforwardEnabled = false; // use target-accel feed-forward APN
-        bool   gravityCompensationEnabled = false; // TPN-G gravity bias compensation (-g_perp)
 
         // W39 persistent target-track manager (defaults keep the external
         // command state as the guidance aim; a track only supersedes it once
