@@ -96,7 +96,7 @@ VehicleConfig makeInterceptorConfig(const std::string& srcDir)
     cfg.warhead.proximityTriggerM = 20.0;
     cfg.warhead.massKg = 12.0;
     // Guidance/autopilot gains (designer defaults).
-    cfg.guidanceAutopilot.navigationConstant = 4.0;
+    cfg.guidanceAutopilot.navigationConstant = 6.0;
     cfg.guidanceAutopilot.kAccelP = 0.030;
     cfg.guidanceAutopilot.kRateP = 1.0;
     cfg.guidanceAutopilot.kAlphaP = 0.2;

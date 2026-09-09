@@ -193,8 +193,8 @@ int main()
         tm.update(nav, seeker, tracks, t, dt);
         check(tracks.state[0] == TrackState::Acquire && tracks.updateCount[0] == 2,
               "second fix still Acquire");
-        check(near(tracks.velX[0], 100.0, 1e-6),
-              "finite-difference velocity from consecutive fixes");
+        check(near(tracks.velX[0], 8.0, 1e-6),
+              "finite-difference velocity from consecutive fixes (low-pass smoothed)");
 
         // Fix 3: promotion to Maintain (confirmations = 3).
         seekerFixAt(seeker, 1002.0, 100.0, 50.0);

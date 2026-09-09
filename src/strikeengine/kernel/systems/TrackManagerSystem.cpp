@@ -101,14 +101,21 @@ namespace StrikeEngine::Kernel {
             tracks.velocityStdMs[i] = kVelStdBaseMps;
             tracks.quality01[i] = 1.0;
 
-            // Velocity: finite difference between consecutive fixes.
+            // Velocity: finite difference between consecutive fixes, smoothed
+            // with a low-pass so noisy long-range LOS fixes don't blow up the
+            // estimate (a 0.1 deg angle jitter at 100 km is ~175 m/step, which
+            // over a 0.01 s step would otherwise be ~17500 m/s).
             if (state != TrackState::None && sameTarget &&
                 tracks.updateCount[i] > 0)
             {
                 const double dtMeas = std::max(1e-9, timeSec - tracks.measTimeSec[i]);
-                tracks.velX[i] = (measPos.x - tracks.measPosX[i]) / dtMeas;
-                tracks.velY[i] = (measPos.y - tracks.measPosY[i]) / dtMeas;
-                tracks.velZ[i] = (measPos.z - tracks.measPosZ[i]) / dtMeas;
+                const double nvx = (measPos.x - tracks.measPosX[i]) / dtMeas;
+                const double nvy = (measPos.y - tracks.measPosY[i]) / dtMeas;
+                const double nvz = (measPos.z - tracks.measPosZ[i]) / dtMeas;
+                const double alpha = 0.08;   // low-pass blend (0.08 -> ~12 s tau)
+                tracks.velX[i] = (1.0 - alpha) * tracks.velX[i] + alpha * nvx;
+                tracks.velY[i] = (1.0 - alpha) * tracks.velY[i] + alpha * nvy;
+                tracks.velZ[i] = (1.0 - alpha) * tracks.velZ[i] + alpha * nvz;
             } else if (state == TrackState::None) {
                 tracks.velX[i] = tracks.velY[i] = tracks.velZ[i] = 0.0;
                 tracks.accelAvailable[i] = false;

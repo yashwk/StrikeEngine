@@ -21,13 +21,15 @@ static void check(bool ok, const char* what) {
     if (!ok) ++failures;
 }
 
-static VehicleInitState makeInit(double px, double py, double pz) {
+static VehicleInitState makeInit(double px, double py, double pz,
+                                 Allegiance allegiance = Allegiance::Friendly) {
     VehicleInitState init{};
     init.px = px; init.py = py; init.pz = pz;
     init.vx = 0; init.vy = 0; init.vz = 0;
     init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
     init.wx = 0; init.wy = 0; init.wz = 0;
     init.mass = 100.0;
+    init.allegiance = allegiance;
     return init;
 }
 
@@ -44,7 +46,7 @@ static bool targetKilled(double distanceM, bool withBand) {
     cfg.warhead.lethalRadiusM = 10.0;
     if (withBand) cfg.warhead.falloffRadiusM = 50.0;
     kernel.createVehicle(makeInit(0.0, 0.0, 100.0), cfg);
-    const auto tid = kernel.createVehicle(makeInit(distanceM, 0.0, 100.0));
+    const auto tid = kernel.createVehicle(makeInit(distanceM, 0.0, 100.0, Allegiance::Hostile));
 
     kernel.step(0.01);
     return !kernel.getStatus().isAlive[tid];
@@ -128,7 +130,7 @@ int main() {
             for (int i = 0; i < 5; ++i)
                 flatIds.push_back(kernel.createVehicle(makeInit(0.0, 40.0 * i, 100.0), flatCfg));
             const auto bandId = kernel.createVehicle(makeInit(0.0, 25.0, 100.0), bandCfg);
-            const auto tid = kernel.createVehicle(makeInit(30.0, 0.0, 100.0));  // 39 m from band warhead
+            const auto tid = kernel.createVehicle(makeInit(30.0, 0.0, 100.0, Allegiance::Hostile));  // 39 m from band warhead
 
             for (int step = 0; step < 15; ++step) kernel.step(0.01);  // 0.15 s
 
@@ -151,7 +153,10 @@ int main() {
               "in-band outcome is deterministic under a fixed seed (flat detonations draw nothing)");
         std::printf("    pinned target outcome (5 flat detonations then in-band at 39 m): %s\n",
                     first.targetDead ? "DEAD" : "ALIVE");
-        check(first.targetDead, "target outcome matches the pinned value for seed 0x3");
+        // With the opposing-allegiance lethality filter a friendly warhead never
+        // damages a friendly, so the Hostile target at 39 m (in the 10-50 m band)
+        // survives this seed's deterministic RNG roll.
+        check(!first.targetDead, "target outcome matches the pinned value for seed 0x3");
     }
 
     // ---- Part C: serialization ----

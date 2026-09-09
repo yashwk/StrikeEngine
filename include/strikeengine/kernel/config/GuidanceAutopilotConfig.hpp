@@ -30,6 +30,14 @@ namespace StrikeEngine::Kernel {
         double trackCoastTimeoutSec = 0.5; // no measurement: Maintain/Acquire -> Coast
         double trackLossTimeoutSec  = 2.0; // no measurement: Coast -> Lost
 
+        // W41 cooperative-engagement datalink: when datalinkSourceId >= 0 the
+        // entity uses the source entity's persistent track (of datalinkTargetId)
+        // as its midcourse aim, instead of its own command/track, until its own
+        // seeker acquires. This models the launch aircraft (or an AWACS/radar
+        // mothership) providing midcourse guidance to a BVRAAM. -1 = disabled.
+        int datalinkSourceId = -1;
+        int datalinkTargetId = -1;
+
         // W40 trajectory-core keys (optional with legacy defaults; active only
         // when GuidanceMode::Trajectory is explicitly selected). A seeker lock
         // still overrides midcourse trajectory management exactly as it does

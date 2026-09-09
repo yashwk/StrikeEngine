@@ -370,6 +370,9 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     // W40 trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
+    // W41 cooperative-engagement datalink (optional with defaults).
+    j["datalinkSourceId"] = g.datalinkSourceId;
+    j["datalinkTargetId"] = g.datalinkTargetId;
     // Dynamic pressure gain scheduling keys (optional with defaults).
     j["gainSchedulingEnabled"] = g.gainSchedulingEnabled;
     j["refDynamicPressurePa"] = g.refDynamicPressurePa;
@@ -397,6 +400,8 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackLossTimeoutSec = j.value("trackLossTimeoutSec", 2.0);
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
+    g.datalinkSourceId = j.value("datalinkSourceId", -1);
+    g.datalinkTargetId = j.value("datalinkTargetId", -1);
     g.gainSchedulingEnabled = j.value("gainSchedulingEnabled", false);
     g.refDynamicPressurePa = j.value("refDynamicPressurePa", 50000.0);
     g.minDynamicPressurePa = j.value("minDynamicPressurePa", 2000.0);

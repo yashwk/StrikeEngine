@@ -100,17 +100,32 @@ namespace StrikeEngine::Kernel {
                 return out;
             }
 
-            // Select the aim state: persistent track (measurement-anchored)
-            // or the external command state (legacy).
+            // Select the aim state: datalink source track (W41 cooperative
+            // engagement) > own persistent track (measurement-anchored, W39) >
+            // the external command state (legacy).
             double tx, ty, tz, tvx, tvy, tvz;
             bool trackAim = false;
-            if (tracks && id < tracks->size && tracks->active(id) &&
+            bool datalinkAim = false;
+            const int dlSrc = (id < guidance.datalinkSourceId.size())
+                ? guidance.datalinkSourceId[id] : -1;
+            if (dlSrc >= 0 && tracks) {
+                const std::size_t src = static_cast<std::size_t>(dlSrc);
+                if (src < tracks->size && tracks->active(src) &&
+                    tracks->updateCount[src] > 0)
+                {
+                    datalinkAim = true;
+                    tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
+                    tvx = tracks->velX[src]; tvy = tracks->velY[src]; tvz = tracks->velZ[src];
+                }
+            }
+            if (!datalinkAim && tracks && id < tracks->size && tracks->active(id) &&
                 tracks->updateCount[id] > 0)
             {
                 trackAim = true;
                 tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
                 tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
-            } else {
+            }
+            if (!datalinkAim && !trackAim) {
                 tx = guidance.targetX[id]; ty = guidance.targetY[id]; tz = guidance.targetZ[id];
                 tvx = guidance.targetVx[id]; tvy = guidance.targetVy[id]; tvz = guidance.targetVz[id];
             }
@@ -187,20 +202,39 @@ namespace StrikeEngine::Kernel {
                 return out;
             }
 
-            // Select the aim state with the exact W39 precedence: a
+            // Select the aim state with W41 datalink > W39 precedence: a
             // measurement-anchored persistent track beats the command state.
+            // A datalink source's track (the mothership/AWACS tracking the target)
+            // is the best midcourse aim and wins over the receiver's own track.
             double tx, ty, tz, tvx, tvy, tvz;
             double atx = 0.0, aty = 0.0, atz = 0.0;
             bool accelAvailable = false;
+            bool datalinkAim = false;
+            const int dlSrc = (id < g.datalinkSourceId.size())
+                ? g.datalinkSourceId[id] : -1;
+            if (dlSrc >= 0 && tracks) {
+                const std::size_t src = static_cast<std::size_t>(dlSrc);
+                if (src < tracks->size && tracks->active(src) &&
+                    tracks->updateCount[src] > 0)
+                {
+                    datalinkAim = true;
+                    g.trajectoryAimSource[id] = GuidanceAimSource::Track;
+                    tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
+                    tvx = tracks->velX[src]; tvy = tracks->velY[src]; tvz = tracks->velZ[src];
+                    accelAvailable = tracks->accelAvailable[src];
+                    atx = tracks->accelX[src]; aty = tracks->accelY[src]; atz = tracks->accelZ[src];
+                }
+            }
             const bool trackAim = tracks && id < tracks->size &&
                                   tracks->active(id) && tracks->updateCount[id] > 0;
-            if (trackAim) {
+            if (!datalinkAim && trackAim) {
                 g.trajectoryAimSource[id] = GuidanceAimSource::Track;
                 tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
                 tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
                 accelAvailable = tracks->accelAvailable[id];
                 atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
-            } else {
+            }
+            if (!datalinkAim && !trackAim) {
                 g.trajectoryAimSource[id] = GuidanceAimSource::Command;
                 tx = g.targetX[id]; ty = g.targetY[id]; tz = g.targetZ[id];
                 tvx = g.targetVx[id]; tvy = g.targetVy[id]; tvz = g.targetVz[id];
@@ -442,6 +476,36 @@ namespace StrikeEngine::Kernel {
                     out.valid = apn.valid;
                     out.lawInvalid = apn.lawInvalid && pn.lawInvalid;
                     out.nonClosing = pn.nonClosing || apn.nonClosing;
+                }
+                // W41/C2 gimbal-edge hold: a target sitting at/near the seeker
+                // gimbal edge drives a churny, high-LOS-rate APN command (the
+                // observed instability). Realistically the missile keeps flying
+                // its midcourse collision course (the datalink aim) and lets the
+                // seeker re-centre / scan, rather than steering hard toward an
+                // off-boresight target. Blend the APN toward the midcourse course
+                // as the target's off-boresight angle approaches the cone edge.
+                if (i < seeker.targetAzimuth.size() &&
+                    i < seeker.gimbalAzimuthLimitRad.size() &&
+                    i < seeker.gimbalElevationLimitRad.size())
+                {
+                    const double azAbs = std::abs(seeker.targetAzimuth[i]);
+                    const double elAbs = std::abs(seeker.targetElevation[i]);
+                    const double holdAz = 0.8 * std::max(1e-6, seeker.gimbalAzimuthLimitRad[i]);
+                    const double holdEl = 0.8 * std::max(1e-6, seeker.gimbalElevationLimitRad[i]);
+                    const double targetOff = std::sqrt(azAbs * azAbs + elAbs * elAbs);
+                    const double coneRad = std::sqrt(holdAz * holdAz + holdEl * holdEl);
+                    const double w = (coneRad > 1e-6)
+                        ? std::clamp(1.0 - targetOff / coneRad, 0.0, 1.0) : 0.0;
+                    if (w < 1.0) {
+                        const LawResult mc = computeMidcourse(i, nav, &tracks, guidance);
+                        if (mc.valid) {
+                            out.ax = w * out.ax + (1.0 - w) * mc.ax;
+                            out.ay = w * out.ay + (1.0 - w) * mc.ay;
+                            out.az = w * out.az + (1.0 - w) * mc.az;
+                            out.valid = true;
+                        }
+                        if (w <= 0.0) phase = GuidancePhase::LostTrack; // seeker scans
+                    }
                 }
                 applyDemand(i, out, guidance);
                 // Refresh the bounded retained terminal command (post-clamp)

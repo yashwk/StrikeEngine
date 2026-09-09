@@ -165,6 +165,7 @@ namespace StrikeEngine::Kernel {
             sensorBlock.size = physicsBlock.size;
             navigationBlock.size = physicsBlock.size;
             seekerBlock.size = physicsBlock.size;
+            trackBlock.size = physicsBlock.size;   // W39 track manager reads tracks.size
             
             // Resize arrays
             physicsBlock.px.push_back(0); physicsBlock.py.push_back(0); physicsBlock.pz.push_back(0);
@@ -264,6 +265,8 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.retainedAccelZ.push_back(0);
             guidanceBlock.trajectoryMinSpeedMps.push_back(30.0);
             guidanceBlock.trajectoryFeasibilityAccelFactor.push_back(0.95);
+            guidanceBlock.datalinkSourceId.push_back(-1);
+            guidanceBlock.datalinkTargetId.push_back(-1);
             guidanceBlock.predictedInterceptX.push_back(0);
             guidanceBlock.predictedInterceptY.push_back(0);
             guidanceBlock.predictedInterceptZ.push_back(0);
@@ -410,6 +413,8 @@ namespace StrikeEngine::Kernel {
         // W40 trajectory-core config + state/diagnostics reset (fresh and reused).
         guidanceBlock.trajectoryMinSpeedMps[id] = resolved.guidanceAutopilot.trajectoryMinSpeedMps;
         guidanceBlock.trajectoryFeasibilityAccelFactor[id] = resolved.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
+        guidanceBlock.datalinkSourceId[id] = resolved.guidanceAutopilot.datalinkSourceId;
+        guidanceBlock.datalinkTargetId[id] = resolved.guidanceAutopilot.datalinkTargetId;
         guidanceBlock.predictedInterceptX[id] = 0;
         guidanceBlock.predictedInterceptY[id] = 0;
         guidanceBlock.predictedInterceptZ[id] = 0;
@@ -827,6 +832,7 @@ namespace StrikeEngine::Kernel {
                         const double r2 = wh.proximityTriggerM * wh.proximityTriggerM;
                         for (std::size_t j = 0; j < physicsBlock.size; ++j) {
                             if (j == i || !statusBlock.isAlive[j]) continue;
+                            if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
                             const double dx = physicsBlock.px[j] - physicsBlock.px[i];
                             const double dy = physicsBlock.py[j] - physicsBlock.py[i];
                             const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
@@ -868,6 +874,7 @@ namespace StrikeEngine::Kernel {
             // consume the kernel RNG stream and keep today's behavior.
             for (std::size_t j = 0; j < physicsBlock.size; ++j) {
                 if (j == i || !statusBlock.isAlive[j]) continue;
+                if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
                 const double dx = physicsBlock.px[j] - physicsBlock.px[i];
                 const double dy = physicsBlock.py[j] - physicsBlock.py[i];
                 const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];

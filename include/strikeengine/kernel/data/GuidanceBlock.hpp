@@ -87,6 +87,12 @@ namespace StrikeEngine::Kernel {
         std::vector<double> trajectoryMinSpeedMps;          // own est-speed floor for an intercept prediction (default 30.0)
         std::vector<double> trajectoryFeasibilityAccelFactor; // feasibility: requiredAccel <= factor * maxAccel when maxAccel > 0 (0.95)
 
+        // W41 cooperative-engagement datalink (see GuidanceAutopilotConfig):
+        // the source entity whose persistent track provides the midcourse aim,
+        // and the target entity that track is of. -1 = disabled.
+        std::vector<int> datalinkSourceId;
+        std::vector<int> datalinkTargetId;
+
         // Output: Required acceleration command
         std::vector<double> commandedAccelX;
         std::vector<double> commandedAccelY;

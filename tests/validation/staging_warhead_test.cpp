@@ -13,13 +13,15 @@ static void check(bool ok, const char* what) {
     if (!ok) ++failures;
 }
 
-static VehicleInitState makeInit(double px, double py, double pz, double mass = 100.0) {
+static VehicleInitState makeInit(double px, double py, double pz, double mass = 100.0,
+                                 Allegiance allegiance = Allegiance::Friendly) {
     VehicleInitState init{};
     init.px = px; init.py = py; init.pz = pz;
     init.vx = 0; init.vy = 0; init.vz = 0;
     init.qw = 1; init.qx = 0; init.qy = 0; init.qz = 0;
     init.wx = 0; init.wy = 0; init.wz = 0;
     init.mass = mass;
+    init.allegiance = allegiance;
     return init;
 }
 
@@ -194,7 +196,7 @@ int main() {
         cfg.warhead.proximityTriggerM = 40.0;
         cfg.warhead.lethalRadiusM = 60.0;
         const auto id = kernel.createVehicle(makeInit(0, 0, 100.0), cfg);
-        const auto tid = kernel.createVehicle(makeInit(30.0, 0, 100.0));  // ~30 m away, within 40 m
+        const auto tid = kernel.createVehicle(makeInit(30.0, 0, 100.0, 100.0, Allegiance::Hostile));  // ~30 m away, within 40 m
 
         kernel.step(0.01);
         check(detonations >= 1, "proximity fuse detonates near the target");
@@ -215,7 +217,7 @@ int main() {
         cfg.warhead.timedDelaySec = 0.2;
         cfg.warhead.lethalRadiusM = 60.0;
         kernel.createVehicle(makeInit(0, 0, 100.0), cfg);
-        const auto tid = kernel.createVehicle(makeInit(20.0, 0, 100.0));  // ~20 m away
+        const auto tid = kernel.createVehicle(makeInit(20.0, 0, 100.0, 100.0, Allegiance::Hostile));  // ~20 m away
 
         for (int step = 0; step < 30; ++step) kernel.step(0.01);  // 0.3 s
         check(detonations >= 1, "timed fuse detonates after its delay");
@@ -234,7 +236,7 @@ int main() {
         cfg.warhead.fusing = FusingType::Impact;
         cfg.warhead.lethalRadiusM = 120.0;
         const auto id = kernel.createVehicle(makeInit(0, 0, 0.5), cfg);   // falls to ground
-        const auto tid = kernel.createVehicle(makeInit(0, 0, 100.0));     // 100 m above
+        const auto tid = kernel.createVehicle(makeInit(0, 0, 100.0, 100.0, Allegiance::Hostile));     // 100 m above
 
         for (int step = 0; step < 60; ++step) kernel.step(0.01);  // 0.6 s (ground impact)
         check(detonations >= 1, "impact fuse detonates on ground impact");
