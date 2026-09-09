@@ -2,6 +2,7 @@
 #include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace StrikeEngine::Kernel {
 
@@ -135,6 +136,36 @@ namespace StrikeEngine::Kernel {
                     evt.terrainSlopeRad = surface.slopeRad;
                 }
                 dispatch(evt);
+            }
+        }
+
+        // Kinetic impact (body contact) report: opposing-allegiance entities
+        // within the configured contact band dispatch TargetImpact. This is
+        // report-only — lethality stays warhead-governed (processWarheads),
+        // so a proximity warhead still gets its detonation event and kill
+        // roll on a close pass instead of being pre-empted here.
+        const double contactR = environment.kineticImpactRadiusM;
+        if (contactR > 0.0) {
+            const double contactR2 = contactR * contactR;
+            for (std::size_t i = 0; i < physics.size; ++i) {
+                if (!physics.active[i] || !status.isAlive[i]) continue;
+                for (std::size_t j = i + 1; j < physics.size; ++j) {
+                    if (!physics.active[j] || !status.isAlive[j]) continue;
+                    if (i >= status.allegiance.size() || j >= status.allegiance.size()) continue;
+                    if (status.allegiance[i] == status.allegiance[j]) continue;
+                    const double dx = physics.px[j] - physics.px[i];
+                    const double dy = physics.py[j] - physics.py[i];
+                    const double dz = physics.pz[j] - physics.pz[i];
+                    if (dx * dx + dy * dy + dz * dz > contactR2) continue;
+                    // The interceptor is the non-hostile side of the pair.
+                    const std::size_t interceptor =
+                        (status.allegiance[j] == Allegiance::Hostile) ? i : j;
+                    SimulationEvent evt;
+                    evt.type = EventType::TargetImpact;
+                    evt.entityId = interceptor;
+                    evt.timestamp = currentTime;
+                    dispatch(evt);
+                }
             }
         }
     }

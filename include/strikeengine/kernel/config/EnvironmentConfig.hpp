@@ -61,6 +61,13 @@ namespace StrikeEngine::Kernel {
             windVelocity = [](double, double, double, double) {
                 return std::array<double, 3>{0.0, 0.0, 0.0};
             };
+
+        // Kinetic-impact (body-contact) band in metres. Opposing-allegiance
+        // entities that close to within this distance dispatch TargetImpact
+        // (report-only; lethality stays warhead-governed). Matches the sim
+        // viewport's kinetic-hit display radius (15 m). <= 0 disables
+        // kinetic-impact detection.
+        double kineticImpactRadiusM = 15.0;
     };
 
 } // namespace StrikeEngine::Kernel
