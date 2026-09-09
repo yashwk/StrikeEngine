@@ -30,9 +30,14 @@ constexpr std::size_t covarianceIndex(std::size_t row, std::size_t column)
 
 std::array<double, kErrorStateSize> initialCovarianceDiag()
 {
+    // Tight initial uncertainty: the INS is aligned from truth (perfect
+    // initialization), and the attitude/heading correction must not be
+    // over-applied at each GPS fix (a 0.1 (std 18 deg) attitude variance drove
+    // the EKF to over-correct and diverge). POS=10 m, VEL=1 m/s,
+    // ATTITUDE=1e-4 (std ~0.6 deg), a-bias=0.01, g-bias=4e-5 (std ~0.4 deg/s).
     return {10.0, 10.0, 10.0, 1.0, 1.0, 1.0,
-            0.1, 0.1, 0.1, 0.01, 0.01, 0.01,
-            0.01, 0.01, 0.01};
+            1e-4, 1e-4, 1e-4, 0.01, 0.01, 0.01,
+            4e-5, 4e-5, 4e-5};
 }
 
 void initializeCovariance(Covariance& covariance,
@@ -470,13 +475,32 @@ namespace StrikeEngine::Kernel {
         nav.estVx[id] += correction[3];
         nav.estVy[id] += correction[4];
         nav.estVz[id] += correction[5];
-        applyAttitudeError(nav, id, correction[6], correction[7], correction[8]);
+        // The attitude (especially yaw) is only weakly observable from GPS
+        // position/velocity, so the full yaw correction over-corrects and drives
+        // the attitude to diverge at each GPS fix (observed stair-step growth to
+        // >100 deg on a turning aircraft). Keep the full, well-observable
+        // roll/pitch correction but heavily damp the weakly-observable yaw; the
+        // tightly-seeded gyro integration tracks the true heading between fixes.
+        applyAttitudeError(nav, id, correction[6], correction[7], 0.1 * correction[8]);
         nav.estAccelBiasX[id] += correction[9];
         nav.estAccelBiasY[id] += correction[10];
         nav.estAccelBiasZ[id] += correction[11];
         nav.estGyroBiasX[id] += correction[12];
         nav.estGyroBiasY[id] += correction[13];
         nav.estGyroBiasZ[id] += correction[14];
+
+        // The yaw (and hence the yaw gyro-bias) is only weakly observable from
+        // GPS position/velocity, so the bias estimate can otherwise run away and
+        // corrupt the attitude integration (observed: estGyroBiasZ -> -0.09
+        // rad/s). Bound the IMU bias estimates to physically plausible ranges.
+        constexpr double kMaxAccelBias = 0.5;    // m/s^2
+        constexpr double kMaxGyroBias = 0.02;    // rad/s (~1.15 deg/s)
+        nav.estAccelBiasX[id] = std::clamp(nav.estAccelBiasX[id], -kMaxAccelBias, kMaxAccelBias);
+        nav.estAccelBiasY[id] = std::clamp(nav.estAccelBiasY[id], -kMaxAccelBias, kMaxAccelBias);
+        nav.estAccelBiasZ[id] = std::clamp(nav.estAccelBiasZ[id], -kMaxAccelBias, kMaxAccelBias);
+        nav.estGyroBiasX[id] = std::clamp(nav.estGyroBiasX[id], -kMaxGyroBias, kMaxGyroBias);
+        nav.estGyroBiasY[id] = std::clamp(nav.estGyroBiasY[id], -kMaxGyroBias, kMaxGyroBias);
+        nav.estGyroBiasZ[id] = std::clamp(nav.estGyroBiasZ[id], -kMaxGyroBias, kMaxGyroBias);
     }
 
     void NavigationSystem::update(

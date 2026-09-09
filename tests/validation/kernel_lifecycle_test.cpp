@@ -84,12 +84,12 @@ int main()
                   approx(control.yawCommand[reused], 0.0) &&
                   approx(control.rollCommand[reused], 0.0),
               "reused slot resets control commands to zero");
-        check(approx(sensors.accelNoiseStdDev[reused], 0.1) &&
-                  approx(sensors.accelBiasStdDev[reused], 0.01) &&
-                  approx(sensors.gyroNoiseStdDev[reused], 0.01) &&
-                  approx(sensors.gyroBiasStdDev[reused], 0.001) &&
-                  approx(sensors.gpsPosNoiseStdDev[reused], 5.0) &&
-                  approx(sensors.gpsVelNoiseStdDev[reused], 0.5),
+        check(approx(sensors.accelNoiseStdDev[reused], 0.02) &&
+                  approx(sensors.accelBiasStdDev[reused], 0.005) &&
+                  approx(sensors.gyroNoiseStdDev[reused], 0.0002) &&
+                  approx(sensors.gyroBiasStdDev[reused], 0.00005) &&
+                  approx(sensors.gpsPosNoiseStdDev[reused], 1.5) &&
+                  approx(sensors.gpsVelNoiseStdDev[reused], 0.15),
               "reused slot carries the default sensor noise settings");
 
         const auto& physics = kernel.getPhysics();
