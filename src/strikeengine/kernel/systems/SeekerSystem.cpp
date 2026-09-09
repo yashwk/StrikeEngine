@@ -1,6 +1,7 @@
 #include <strikeengine/kernel/systems/SeekerSystem.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <numbers>
 #include <glm/glm.hpp>
@@ -17,6 +18,9 @@ namespace StrikeEngine::Kernel {
     {
         measurementHistory.clear();
         historyEntityCount = 0;
+        // Retry failed profile loads on the next scenario (a missing file may
+        // have been restored); successful cache entries persist by design.
+        rcsLoadFailed.clear();
     }
 
     void SeekerSystem::update(
@@ -124,7 +128,14 @@ namespace StrikeEngine::Kernel {
                     if (!rcsCache.contains(profileId)) {
                         auto db = std::make_unique<Models::RCSDatabase>();
                         if (db->loadProfile(profileId)) rcsCache[profileId] = std::move(db);
-                        else return candidate;
+                        else {
+                            if (rcsLoadFailed.insert(profileId).second) {
+                                std::fprintf(stderr, "[seek] RF seeker: RCS profile '%s' failed to load; "
+                                             "entity %zu will not be acquired (check working directory)\n",
+                                             profileId.c_str(), target);
+                            }
+                            return candidate;
+                        }
                     }
 
                     const double rcsM2 = rcsCache.at(profileId)->getRCS(
@@ -156,7 +167,14 @@ namespace StrikeEngine::Kernel {
                     if (!rcsCache.contains(profileId)) {
                         auto db = std::make_unique<Models::RCSDatabase>();
                         if (db->loadProfile(profileId)) rcsCache[profileId] = std::move(db);
-                        else return candidate;
+                        else {
+                            if (rcsLoadFailed.insert(profileId).second) {
+                                std::fprintf(stderr, "[seek] SARH seeker: RCS profile '%s' failed to load; "
+                                             "entity %zu will not be acquired (check working directory)\n",
+                                             profileId.c_str(), target);
+                            }
+                            return candidate;
+                        }
                     }
 
                     const double rcsM2 = rcsCache.at(profileId)->getRCS(
@@ -208,7 +226,14 @@ namespace StrikeEngine::Kernel {
                     if (!irCache.contains(profileId)) {
                         auto db = std::make_unique<Models::IRSignatureDatabase>();
                         if (db->loadProfile(profileId)) irCache[profileId] = std::move(db);
-                        else return candidate;
+                        else {
+                            if (rcsLoadFailed.insert("ir:" + profileId).second) {
+                                std::fprintf(stderr, "[seek] IR seeker: signature profile '%s' failed to load; "
+                                             "entity %zu will not be acquired (check working directory)\n",
+                                             profileId.c_str(), target);
+                            }
+                            return candidate;
+                        }
                     }
 
                     const double radiantIntensity = irCache.at(profileId)->getRadiantIntensity(

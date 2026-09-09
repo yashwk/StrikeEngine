@@ -7,6 +7,7 @@
 #include <strikeengine/models/signatures/IRSignatureDatabase.hpp>
 
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <memory>
 #include <deque>
@@ -39,6 +40,10 @@ namespace StrikeEngine::Kernel {
 
         std::unordered_map<std::string, std::unique_ptr<Models::RCSDatabase>> rcsCache;
         std::unordered_map<std::string, std::unique_ptr<Models::IRSignatureDatabase>> irCache;
+        // Profile ids that failed to load (warned once): RF/SARH evaluation
+        // skips these targets, so a missing file would otherwise blind the
+        // seeker with zero diagnostic.
+        std::unordered_set<std::string> rcsLoadFailed;
         std::vector<std::deque<DelayedMeasurement>> measurementHistory;
         std::size_t historyEntityCount = 0;
     };
