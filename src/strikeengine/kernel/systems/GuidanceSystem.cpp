@@ -303,9 +303,11 @@ namespace StrikeEngine::Kernel {
         // Seeker-rate APN: N * Vc * LOS rate, body-frame mapping per the frame
         // contract (azimuth -> +body-Y, elevation -> -body-Z), rotated to the
         // world frame with the navigation attitude.
+        // True APN adds 0.5 * N * a_T_perp target acceleration feedforward when available.
+        // Gyro decoupling removes parasitic body-rate coupling (radome/airframe feedback).
         LawResult computeSeekerAPN(
             std::size_t id, const NavigationBlock& nav,
-            const SeekerBlock& seeker, GuidanceBlock& guidance)
+            const SeekerBlock& seeker, const TrackBlock* tracks, GuidanceBlock& guidance)
         {
             LawResult out;
             const double N = guidance.navigationConstant[id];
@@ -330,7 +332,44 @@ namespace StrikeEngine::Kernel {
             const double ayBody = N * vc * dAz;
             const double azBody = -N * vc * dEl;
             glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
-            const glm::dvec3 aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
+            glm::dvec3 aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
+
+            // True APN target-acceleration feedforward augmentation:
+            // a_cmd = a_PN + 0.5 * N * a_T_perp
+            bool ffAvailable = false;
+            double atx = 0.0, aty = 0.0, atz = 0.0;
+            if (tracks && tracks->active(id) && tracks->accelAvailable[id]) {
+                ffAvailable = isFinite3(tracks->accelX[id], tracks->accelY[id], tracks->accelZ[id]);
+                atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
+            } else if (guidance.targetAccelAvailable[id]) {
+                ffAvailable = isFinite3(guidance.targetAccelX[id], guidance.targetAccelY[id], guidance.targetAccelZ[id]);
+                atx = guidance.targetAccelX[id]; aty = guidance.targetAccelY[id]; atz = guidance.targetAccelZ[id];
+            }
+
+            if (guidance.apnFeedforwardEnabled[id] && ffAvailable) {
+                const double az = seeker.targetAzimuth[id];
+                const double el = seeker.targetElevation[id];
+                const double cEl = std::cos(el), sEl = std::sin(el);
+                const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
+                const glm::dvec3 losWorld = glm::normalize(estQ * losBody);
+                const glm::dvec3 aT(atx, aty, atz);
+                const glm::dvec3 aTperp = aT - glm::dot(aT, losWorld) * losWorld;
+                aWorld += 0.5 * N * aTperp;
+            }
+
+            // TPN-G Gravity bias compensation: pre-emptively cancels trajectory sag under gravity
+            if (id < guidance.gravityCompensationEnabled.size() && guidance.gravityCompensationEnabled[id]) {
+                const double az = seeker.targetAzimuth[id];
+                const double el = seeker.targetElevation[id];
+                const double cEl = std::cos(el), sEl = std::sin(el);
+                const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
+                const glm::dvec3 losWorld = glm::normalize(estQ * losBody);
+                const glm::dvec3 gWorld(0.0, 0.0, -9.80665);
+                const glm::dvec3 gAlongLos = glm::dot(gWorld, losWorld) * losWorld;
+                const glm::dvec3 gPerp = gWorld - gAlongLos;
+                aWorld -= gPerp;
+            }
+
             out.ax = aWorld.x;
             out.ay = aWorld.y;
             out.az = aWorld.z;
@@ -404,7 +443,7 @@ namespace StrikeEngine::Kernel {
                 if (w >= 1.0) phase = GuidancePhase::Terminal;
 
                 law = GuidanceLaw::SeekerRateAPN;
-                LawResult apn = computeSeekerAPN(i, nav, seeker, guidance);
+                LawResult apn = computeSeekerAPN(i, nav, seeker, &tracks, guidance);
                 LawResult out = apn;
                 if (phase == GuidancePhase::Acquisition) {
                     // Blend midcourse PN -> terminal APN (deterministic ramp).

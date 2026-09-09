@@ -80,6 +80,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> handoffBlendTimeSec;   // acquisition->terminal ramp; 0 = instant
         std::vector<double> lockLossRetentionSec;  // guidance-layer track retention past lock loss; 0 = none
         std::vector<bool>   apnFeedforwardEnabled; // APN target-accel feed-forward (needs targetAccelAvailable)
+        std::vector<bool>   gravityCompensationEnabled; // TPN-G gravity bias compensation (-g_perp)
 
         // W40 trajectory-core configuration (active only in Trajectory mode;
         // defaults preserve the legacy midcourse path for all other modes).

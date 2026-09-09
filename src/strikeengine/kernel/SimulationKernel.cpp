@@ -247,6 +247,7 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.handoffBlendTimeSec.push_back(0.0);
             guidanceBlock.lockLossRetentionSec.push_back(0.0);
             guidanceBlock.apnFeedforwardEnabled.push_back(false);
+            guidanceBlock.gravityCompensationEnabled.push_back(false);
             guidanceBlock.phase.push_back(GuidancePhase::None);
             guidanceBlock.law.push_back(GuidanceLaw::None);
             guidanceBlock.trackId.push_back(-1);
@@ -390,6 +391,7 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.handoffBlendTimeSec[id] = resolved.guidanceAutopilot.handoffBlendTimeSec;
         guidanceBlock.lockLossRetentionSec[id] = resolved.guidanceAutopilot.lockLossRetentionSec;
         guidanceBlock.apnFeedforwardEnabled[id] = resolved.guidanceAutopilot.apnFeedforwardEnabled;
+        guidanceBlock.gravityCompensationEnabled[id] = resolved.guidanceAutopilot.gravityCompensationEnabled;
         // W36 state/diagnostics reset (fresh and reused slots).
         guidanceBlock.phase[id] = GuidancePhase::None;
         guidanceBlock.law[id] = GuidanceLaw::None;
@@ -828,7 +830,19 @@ namespace StrikeEngine::Kernel {
                             const double dx = physicsBlock.px[j] - physicsBlock.px[i];
                             const double dy = physicsBlock.py[j] - physicsBlock.py[i];
                             const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
-                            if (dx*dx + dy*dy + dz*dz <= r2) { trigger = true; break; }
+                            const double dist2 = dx*dx + dy*dy + dz*dz;
+                            if (dist2 <= r2) {
+                                const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
+                                const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
+                                const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
+                                const double rdotv = dx * dvx + dy * dvy + dz * dvz;
+                                const double dist = std::sqrt(dist2);
+                                const double vrel = std::sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+                                if (rdotv >= 0.0 || dist <= 2.0 || (dist - vrel * 0.02) <= 0.0) {
+                                    trigger = true;
+                                    break;
+                                }
+                            }
                         }
                     }
                     break;

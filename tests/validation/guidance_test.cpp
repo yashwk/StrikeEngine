@@ -223,6 +223,37 @@ int main()
               "elevation rate -> upward (-body-Z) APN acceleration");
     }
 
+    // --- Seeker APN with target-acceleration feedforward (true APN) ----------
+    {
+        GuidanceBlock guidance = makeBlock();
+        guidance.mode = {GuidanceMode::ProportionalNavigation};
+        guidance.targetX = {1000.0}; guidance.targetY = {0.0}; guidance.targetZ = {0.0};
+        guidance.apnFeedforwardEnabled = {true};
+        guidance.targetAccelAvailable = {true};
+        guidance.targetAccelX = {0.0};
+        guidance.targetAccelY = {4.0}; // +4 m/s^2 along body Y (normal to LOS along X)
+        guidance.targetAccelZ = {0.0};
+
+        seeker.type = {SeekerType::RF};
+        seeker.isLocked = {true};
+        seeker.lockedTargetId = {0};
+        seeker.targetRange = {900.0};
+        seeker.targetRangeRate = {-100.0};
+        seeker.targetAzimuth = {0.0};
+        seeker.targetElevation = {0.0};
+        seeker.targetAzimuthRate = {0.02};
+        seeker.targetElevationRate = {0.0};
+
+        system.update(status, nav, seeker, tracks, guidance, control, 0.01);
+        // Base PN: N * Vc * dAz = 3.5 * 100 * 0.02 = 7.0
+        // APN feedforward: 0.5 * N * aT_perp = 0.5 * 3.5 * 4.0 = 7.0
+        // Total commandedAccelY = 7.0 + 7.0 = 14.0
+        check(std::abs(guidance.commandedAccelY[0] - 14.0) < 1e-12,
+              "true APN: adds 0.5*N*a_T_perp target acceleration feedforward in terminal seeker APN");
+        check(guidance.law[0] == GuidanceLaw::SeekerRateAPN,
+              "seeker APN reports SeekerRateAPN guidance law");
+    }
+
     // --- Acquisition blend ramp ----------------------------------------------
     {
         GuidanceBlock guidance = makeBlock();
