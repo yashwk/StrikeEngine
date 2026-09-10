@@ -1,6 +1,8 @@
 #include <strikeengine/kernel/systems/AutopilotSystem.hpp>
 #include <strikeengine/kernel/math/Quaternion.hpp>
 #include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
+#include <strikeengine/models/physics/earth/EarthModel.hpp>
+#include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -14,7 +16,8 @@ namespace StrikeEngine::Kernel {
         const SensorBlock& /*sensor*/,
         const GuidanceBlock& guidance,
         ControlBlock& control,
-        double /*dt*/)
+        double /*dt*/,
+        const EnvironmentConfig& environment)
     {
         // Resize control block if needed (usually handled in SimulationKernel, but safe to check)
         if (control.pitchCommand.size() < nav.size) {
@@ -43,7 +46,7 @@ namespace StrikeEngine::Kernel {
                 continue;
             }
 
-            updateFlightController(i, nav, guidance, control);
+            updateFlightController(i, nav, guidance, control, environment);
         }
     }
 
@@ -51,7 +54,8 @@ namespace StrikeEngine::Kernel {
         std::size_t id,
         const NavigationBlock& nav,
         const GuidanceBlock& guidance,
-        ControlBlock& control)
+        ControlBlock& control,
+        const EnvironmentConfig& environment)
     {
         // 1. Commanded acceleration (world, from guidance) -> body frame
         double axCmdB, ayCmdB, azCmdB;
@@ -68,9 +72,27 @@ namespace StrikeEngine::Kernel {
         // intentionally feed-forward: feeding the fin's own measured force
         // back into this simplified airframe model creates a short-period
         // limit cycle. Rates and AoA below provide the stabilizing feedback.
+        //
+        // WGS84/ECEF awareness: gravity points toward the local geodetic
+        // nadir, not a fixed [0,0,-g] axis (in ECEF, +Z is the polar axis). Use
+        // the ellipsoidal normal-gravity vector so the autopilot's specific-force
+        // conversion is correct over long/curved engagements.
+        double gx, gy, gz;
+        if (environment.earth.useEcefTruth) {
+            const Models::EcefCoordinate pos{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
+            const auto geodetic = Models::ecefToGeodetic(pos);
+            const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
+            // The WGS84 normal-gravity vector points toward the geodetic nadir
+            // (down). Resolved into the aerospace (X-forward/Y-right/Z-down)
+            // body axes via estQ it lands on -Z, so negate it to match the
+            // autopilot's Z-down specific-force/roll convention.
+            gx = -grav[0]; gy = -grav[1]; gz = -grav[2];
+        } else {
+            gx = 0.0; gy = 0.0; gz = -9.80665;
+        }
         double gravityBx, gravityBy, gravityBz;
         quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
-                         0.0, 0.0, -9.80665, gravityBx, gravityBy, gravityBz);
+                         gx, gy, gz, gravityBx, gravityBy, gravityBz);
         const double aySpecificCmd = ayCmdB - gravityBy;
         const double azSpecificCmd = azCmdB - gravityBz;
 
@@ -93,7 +115,17 @@ namespace StrikeEngine::Kernel {
             const double vy = nav.estVy[id];
             const double vz = nav.estVz[id];
             const double speedSq = vx * vx + vy * vy + vz * vz;
-            const double alt = std::max(0.0, nav.estPz[id]);
+            // In ECEF the Cartesian +Z is the polar axis (not altitude); use the
+            // geodetic height so the ISA atmosphere/dynamic-pressure gain
+            // schedule is evaluated at the correct altitude.
+            double alt;
+            if (environment.earth.useEcefTruth) {
+                const auto geo =
+                    Models::ecefToGeodetic({nav.estPx[id], nav.estPy[id], nav.estPz[id]});
+                alt = std::max(0.0, geo.altitudeM);
+            } else {
+                alt = std::max(0.0, nav.estPz[id]);
+            }
 
             static const Models::ISA1976 isa;
             const auto atmos = isa.evaluate(alt);
@@ -143,9 +175,24 @@ namespace StrikeEngine::Kernel {
         // In a steep dive g_b.z -> 0 and the reference degenerates; scale the
         // command by the vertical component so wings-level authority fades
         // near-vertical instead of slamming full deflection.
+        // WGS84/ECEF: the local "down" is the geodetic nadir, not a fixed
+        // [0,0,-1] (which would point the wings at the North Pole).
         double gBx, gBy, gBz;
-        quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
-                         0.0, 0.0, -1.0, gBx, gBy, gBz);
+        if (environment.earth.useEcefTruth) {
+            const Models::EcefCoordinate pos{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
+            const auto geodetic = Models::ecefToGeodetic(pos);
+            const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
+            const double gmag = std::sqrt(grav[0]*grav[0] + grav[1]*grav[1] + grav[2]*grav[2]);
+            // Negate (as above) so the local "down" resolves to body +Z (level).
+            const double nx = gmag > 1e-9 ? -grav[0]/gmag : 0.0;
+            const double ny = gmag > 1e-9 ? -grav[1]/gmag : 0.0;
+            const double nz = gmag > 1e-9 ? -grav[2]/gmag : -1.0;
+            quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                             nx, ny, nz, gBx, gBy, gBz);
+        } else {
+            quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
+                             0.0, 0.0, -1.0, gBx, gBy, gBz);
+        }
         const double verticality = std::clamp(gBz, 0.0, 1.0);
         const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
         double rollDeflection = verticality * (-control.kRollP[id] * rollError - control.kRollD[id] * nav.estWx[id]);

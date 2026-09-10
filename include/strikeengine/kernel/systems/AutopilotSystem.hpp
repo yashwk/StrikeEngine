@@ -5,6 +5,7 @@
 #include <strikeengine/kernel/data/NavigationBlock.hpp>
 #include <strikeengine/kernel/data/SensorBlock.hpp>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <vector>
 #include <cstddef>
 
@@ -34,14 +35,16 @@ namespace StrikeEngine::Kernel {
             const SensorBlock& sensor,
             const GuidanceBlock& guidance,
             ControlBlock& control,
-            double dt);
+            double dt,
+            const EnvironmentConfig& environment);
 
     private:
         void updateFlightController(
             std::size_t id,
             const NavigationBlock& nav,
             const GuidanceBlock& guidance,
-            ControlBlock& control);
+            ControlBlock& control,
+            const EnvironmentConfig& environment);
 
         // Direct acceleration-command controller: feed-forward fin demand
         // plus body-rate and AoA damping. Per-entity gains now live in

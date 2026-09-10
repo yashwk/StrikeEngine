@@ -942,7 +942,7 @@ namespace StrikeEngine::Kernel {
                               trackBlock, guidanceBlock, controlBlock, dt);
 
         // 4.5 Update Autopilot to translate commanded accel to fin deflections
-        autopilotSystem.update(statusBlock, navigationBlock, sensorBlock, guidanceBlock, controlBlock, dt);
+        autopilotSystem.update(statusBlock, navigationBlock, sensorBlock, guidanceBlock, controlBlock, dt, environment);
         
         // 5. Evaluate truth events (impacts)
         eventSystem.evaluate(
