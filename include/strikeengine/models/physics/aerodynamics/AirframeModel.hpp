@@ -162,26 +162,27 @@ namespace StrikeEngine::Models {
         const double wingCmAlpha = (a.wingPositionM / std::max(mac, 1e-9)) * cLalpha;
         const double tailCmAlpha = -cLalpha * a.tailVolumeH * (1.0 - a.downwashPerAlpha);
         const double cmAlpha = wingCmAlpha + tailCmAlpha;
-        // Elevator authority: the tail surface deflected by finPitch. A
-        // positive pitch command must produce a nose-UP moment (+cm), matching
-        // the autopilot/control convention (positive finPitch -> nose-up).
-        const double cMdelta = cLalpha * a.tailVolumeH;
+        // Elevator authority: realistic finite-elevator effectiveness (~0.8 per
+        // rad), NOT the full-tail derivative cLalpha*tailVolumeH (which is far
+        // larger than a real elevator and over-drives the heavy airframe). A
+        // positive pitch command must produce a nose-UP moment.
+        const double cMdelta = 0.80;
         const double cM = a.cm0 + cmAlpha * alpha + cMdelta * finPitch;
 
         // --- Side / yaw (directional) ------------------------------------------
-        // Vertical tail provides CN_beta > 0 (weathercock stability) and a
-        // side-force CY_beta = -CN_beta about the body Y axis. Rudder (finYaw)
-        // adds directional moment.
-        const double cnBeta = cLalpha * a.tailVolumeV;   // >0 stable
-        const double cnRudder = cnBeta * (1.0 / std::max(a.vtailPositionM, 1e-6));  // per-rad scale
-        const double cn = cnBeta * beta + cLalpha * a.tailVolumeV * finYaw;
-        const double cyBeta = -cnBeta;                    // side force per rad sideslip
+        // Vertical tail provides directional (weathercock) stability: a positive
+        // sideslip must yaw the nose to REDUCE that sideslip (restoring), i.e.
+        // cn_beta < 0 for a stable aircraft. Rudder (finYaw) adds a positive
+        // (nose-RIGHT) directional command with realistic authority.
+        const double cnBeta = -cLalpha * a.tailVolumeV;            // <0 stable
+        const double cn = cnBeta * beta + 0.50 * finYaw;
+        const double cyBeta = cLalpha * a.tailVolumeV;             // side force per rad sideslip
 
         // --- Roll (dihedral + aileron) ------------------------------------------
         // Dihedral produces a restoring roll from sideslip; aileron (finRoll)
         // commands roll. Normalised to a ~ unity magnitude.
         const double clDihedral = -a.wingDihedralRad * cLalpha * (a.wingSpanM / (2.0 * std::max(mac, 1e-9)));
-        const double cl = clDihedral * beta + 0.20 * finRoll;
+        const double cl = clDihedral * beta + 0.08 * finRoll;
 
         // --- Body-frame forces (N) ----------------------------------------------
         // Drag opposes the velocity vector.
@@ -199,10 +200,10 @@ namespace StrikeEngine::Models {
         double ty = qSL * cM - q * S * mac * 16.0 * lOverV * wy;   // pitch damping
         double tz = qSb * cn - q * S * b * 12.0 * lOverV * wz;     // yaw damping
 
-        // Clamp the aircraft's control moments to a physical scale so the
-        // large q*S leads don't spin the rigid body (aircraft control authority
-        // is far larger than a missile's 600 N*m).
-        const double maxAC = 2.0 * std::max(qSL, qSb);
+        // Clamp the aircraft's control moments to a realistic authority bound
+        // (based on the tail/wing control surface size) so the large q*S lead
+        // doesn't over-drive the high-inertia airframe into a spin.
+        const double maxAC = 4.0e5;   // ~Moment authority consistent with a finite elevator/rudder
         tx = std::clamp(tx, -maxAC, maxAC);
         ty = std::clamp(ty, -maxAC, maxAC);
         tz = std::clamp(tz, -maxAC, maxAC);
