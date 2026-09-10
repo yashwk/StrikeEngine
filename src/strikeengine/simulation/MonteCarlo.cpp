@@ -25,17 +25,24 @@ namespace StrikeEngine::Simulation {
         std::vector<StudyOutputRecord> records;
         records.reserve(static_cast<std::size_t>(iterations));
 
-        // Initialize RNG
-        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-        std::mt19937 generator(seed);
+        // Initialize RNG: pinned seed when setSeed was used, wall clock
+        // otherwise (legacy behavior).
+        unsigned useed = seedSet
+            ? seed
+            : static_cast<unsigned>(std::chrono::system_clock::now().time_since_epoch().count());
+        std::mt19937 generator(useed);
 
         for (int i = 0; i < iterations; ++i) {
+            // Draw the iteration kernel seed first so kernel streams stay
+            // stable even if the perturb callback changes its draw count.
+            const std::uint32_t kernelSeed = static_cast<std::uint32_t>(generator());
             // Apply noise to base config
             Kernel::ScenarioConfig config = baseConfig;
             perturb(config, generator);
 
             // Initialize Kernel
             Kernel::SimulationKernel kernel;
+            kernel.setRandomSeed(kernelSeed);
             config.loadInto(kernel);
 
             const auto& physics = kernel.getPhysics();

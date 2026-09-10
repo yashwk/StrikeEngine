@@ -43,6 +43,11 @@ namespace StrikeEngine::Kernel {
         // seeding the persistent target track (W39).
         void process(GuidanceBlock& guidance, TrackBlock& tracks, double simTimeSec);
 
+        // Drop queued (not yet applied) commands for an entity, e.g. when its
+        // slot is freed: applying them later would silently re-arm whatever
+        // vehicle reuses the id.
+        void dropCommandsFor(std::size_t entityId);
+
     private:
         std::vector<SimulationCommand> commandQueue;
     };

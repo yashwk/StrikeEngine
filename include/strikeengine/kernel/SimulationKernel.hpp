@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <random>
 #include <vector>
 #include <memory>
 
@@ -158,6 +160,14 @@ namespace StrikeEngine::Kernel {
         // Per-entity staging + warhead state (parallel to physics entities).
         std::vector<StagePlan> stagePlans;
         std::vector<WarheadState> warheads;
+
+        // RNG streams. Sensor noise and warhead kill draws live on SEPARATE
+        // streams: sharing one entangles future sensor noise with engagement
+        // outcomes (kill draws shift the sensor stream position), breaking
+        // noise reproducibility across lethality variants. Both derive
+        // deterministically from the seed set via setRandomSeed.
+        std::uint32_t randomSeed = 0u;
+        std::mt19937 warheadRng;
 
         void processStaging();
         void processWarheads();

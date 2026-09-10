@@ -196,9 +196,13 @@ namespace StrikeEngine::Kernel
                 thrustBodyY = prop.thrustBodyY;
                 thrustBodyZ = prop.thrustBodyZ;
                 massFlow   = prop.massFlowRate_kg_s;
-                constexpr double kFuelDepletionGuardWindowSec = 0.01; // depletion guard window (s); mass floor is enforced by applyStateUpdate
-                if (massFlow * kFuelDepletionGuardWindowSec > fuel) {  // never burn more fuel than remains
-                    const double cappedMassFlow = fuel / kFuelDepletionGuardWindowSec;
+                // Never burn more fuel than remains: cap the flow so the
+                // remaining fuel lasts the current step window (thrust scales
+                // with the capped flow so T = mdot*Isp*g0 holds — no
+                // free-thrust tail on the last grams of propellant).
+                const double guardWindowSec = std::max(currentStepDt, 1e-6);
+                if (massFlow * guardWindowSec > fuel) {  // never burn more fuel than remains
+                    const double cappedMassFlow = fuel / guardWindowSec;
                     // Scale thrust with the capped flow so T = mdot*Isp*g0
                     // holds at every instant: no free-thrust tail on the last
                     // few grams of propellant (full thrust on ~0 flow).
@@ -472,6 +476,7 @@ namespace StrikeEngine::Kernel
         double dt)
     {
         ensureDerivCapacity(physics);
+        currentStepDt = (dt > 0.0) ? dt : 0.01;
 
         // Derivative callback: pure function of (state, time) with fixed
         // zero-order-held control commands for this step.

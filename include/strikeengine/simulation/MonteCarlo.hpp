@@ -4,6 +4,7 @@
 #include <strikeengine/kernel/config/ScenarioConfig.hpp>
 #include <strikeengine/simulation/StudyOutput.hpp>
 #include <string>
+#include <cstdint>
 #include <functional>
 #include <vector>
 #include <random>
@@ -13,6 +14,15 @@ namespace StrikeEngine::Simulation {
     class MonteCarlo {
     public:
         MonteCarlo(double timeStep_s, double maxTime_s);
+
+        /**
+         * @brief Pins the study RNG for reproducible runs.
+         *
+         * Seeds both the perturbation stream and every iteration kernel's
+         * sensor stream. Without it the study seeds from the wall clock and
+         * kernels draw chrono-seeded sensor noise (not reproducible).
+         */
+        void setSeed(std::uint32_t s) { seedSet = true; seed = s; }
 
         /**
          * @brief Runs a Monte Carlo statistical analysis.
@@ -32,6 +42,8 @@ namespace StrikeEngine::Simulation {
     private:
         double dt;
         double maxTime;
+        bool seedSet = false;
+        std::uint32_t seed = 0u;
     };
 
 } // namespace StrikeEngine::Simulation

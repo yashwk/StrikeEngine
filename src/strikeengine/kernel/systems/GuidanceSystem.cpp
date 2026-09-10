@@ -116,9 +116,19 @@ namespace StrikeEngine::Kernel {
             }
             const double climbRate = vx * upx + vy * upy + vz * upz;
 
-            // Reference altitude: explicit cruise altitude, or the waypoint Z.
+            // Reference altitude: explicit cruise altitude, else the waypoint's
+            // own geodetic altitude (never a raw Cartesian Z delta, which is
+            // not an altitude change under ECEF truth).
             double altRef = g.cruiseAltitudeM[id];
-            if (altRef <= 0.0) altRef = alt + (g.targetZ[id] - pz);
+            if (altRef <= 0.0) {
+                if (env.earth.useEcefTruth) {
+                    const auto geoTgt = Models::ecefToGeodetic(
+                        {g.targetX[id], g.targetY[id], g.targetZ[id]});
+                    altRef = std::isfinite(geoTgt.altitudeM) ? geoTgt.altitudeM : alt;
+                } else {
+                    altRef = alt + (g.targetZ[id] - pz);
+                }
+            }
 
             // Altitude-hold vertical demand (m/s^2 along the local up).
             const double aVert = g.cruiseAltitudeGain[id] * (altRef - alt)
@@ -167,6 +177,7 @@ namespace StrikeEngine::Kernel {
             double tx, ty, tz, tvx, tvy, tvz;
             bool trackAim = false;
             bool datalinkAim = false;
+            std::size_t datalinkSrc = 0;
             const int dlSrc = (id < guidance.datalinkSourceId.size())
                 ? guidance.datalinkSourceId[id] : -1;
             if (dlSrc >= 0 && tracks) {
@@ -175,6 +186,7 @@ namespace StrikeEngine::Kernel {
                     tracks->updateCount[src] > 0)
                 {
                     datalinkAim = true;
+                    datalinkSrc = src;
                     tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
                     tvx = tracks->velX[src]; tvy = tracks->velY[src]; tvz = tracks->velZ[src];
                 }
@@ -209,15 +221,26 @@ namespace StrikeEngine::Kernel {
             const double closingSpeed = (range > 1e-9)
                 ? -(rx * vx + ry * vy + rz * vz) / range : 0.0;
 
-            // Feed-forward target acceleration: from the track when
-            // measurement-anchored and available, else from the command.
+            // Feed-forward target acceleration: from the AIMED track when
+            // measurement-anchored and available (own track, else the
+            // datalink source track whose position/velocity steers above),
+            // else from the command. Falling back to the command under a
+            // datalink aim can augment with the wrong target's accel.
             bool ffAvailable = false;
             double atx = 0.0, aty = 0.0, atz = 0.0;
             if (trackAim && tracks->accelAvailable[id]) {
                 ffAvailable = isFinite3(tracks->accelX[id], tracks->accelY[id],
                                         tracks->accelZ[id]);
                 atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
-            } else if (!trackAim && guidance.targetAccelAvailable[id]) {
+            } else if (datalinkAim && datalinkSrc < tracks->size &&
+                       tracks->accelAvailable[datalinkSrc]) {
+                ffAvailable = isFinite3(tracks->accelX[datalinkSrc],
+                                        tracks->accelY[datalinkSrc],
+                                        tracks->accelZ[datalinkSrc]);
+                atx = tracks->accelX[datalinkSrc];
+                aty = tracks->accelY[datalinkSrc];
+                atz = tracks->accelZ[datalinkSrc];
+            } else if (!trackAim && !datalinkAim && guidance.targetAccelAvailable[id]) {
                 ffAvailable = isFinite3(guidance.targetAccelX[id],
                                         guidance.targetAccelY[id],
                                         guidance.targetAccelZ[id]);
@@ -536,13 +559,19 @@ namespace StrikeEngine::Kernel {
                 if (phase == GuidancePhase::Acquisition) {
                     // Blend midcourse PN -> terminal APN (deterministic ramp).
                     const LawResult pn = computeMidcourse(i, nav, &tracks, guidance);
-                    const double w = guidance.handoffWeight[i];
-                    out.ax = (1.0 - w) * (pn.valid ? pn.ax : 0.0) + w * apn.ax;
-                    out.ay = (1.0 - w) * (pn.valid ? pn.ay : 0.0) + w * apn.ay;
-                    out.az = (1.0 - w) * (pn.valid ? pn.az : 0.0) + w * apn.az;
-                    out.valid = apn.valid;
-                    out.lawInvalid = apn.lawInvalid && pn.lawInvalid;
-                    out.nonClosing = pn.nonClosing || apn.nonClosing;
+                    if (!apn.valid && pn.valid) {
+                        // Seeker solution unusable: fly pure midcourse rather
+                        // than zeroing a valid demand.
+                        out = pn;
+                    } else {
+                        const double w = guidance.handoffWeight[i];
+                        out.ax = (1.0 - w) * (pn.valid ? pn.ax : 0.0) + w * apn.ax;
+                        out.ay = (1.0 - w) * (pn.valid ? pn.ay : 0.0) + w * apn.ay;
+                        out.az = (1.0 - w) * (pn.valid ? pn.az : 0.0) + w * apn.az;
+                        out.valid = apn.valid || pn.valid;
+                        out.lawInvalid = apn.lawInvalid && pn.lawInvalid;
+                        out.nonClosing = pn.nonClosing || apn.nonClosing;
+                    }
                 }
                 // W41/C2 gimbal-edge hold: a target sitting at/near the seeker
                 // gimbal edge drives a churny, high-LOS-rate APN command (the
@@ -571,7 +600,14 @@ namespace StrikeEngine::Kernel {
                             out.az = w * out.az + (1.0 - w) * mc.az;
                             out.valid = true;
                         }
-                        if (w <= 0.0) phase = GuidancePhase::LostTrack; // seeker scans
+                        // NOTE: the phase is deliberately LEFT at Terminal /
+                        // Acquisition here even when fully off-cone (w = 0,
+                        // demand already pure midcourse). Marking LostTrack
+                        // while still locked makes the next step look like a
+                        // fresh lock (handoff weight re-zeroed every step at
+                        // the cone edge) and, worse, a later genuine unlock
+                        // skips the lock-loss counter + retention window
+                        // below (they only run from Acquisition/Terminal).
                     }
                 }
                 applyDemand(i, out, guidance);

@@ -54,7 +54,11 @@ namespace StrikeEngine::Kernel {
     }
 
     void SimulationKernel::setRandomSeed(std::uint32_t seed) {
+        randomSeed = seed;
         sensorSystem.setSeed(seed);
+        // Split stream: golden-ratio mix keeps warhead draws disjoint from
+        // the sensor stream for every seed.
+        warheadRng.seed(seed ^ 0x9E3779B9u);
     }
 
     void SimulationKernel::setEnvironment(const EnvironmentConfig& environmentConfig) {
@@ -83,6 +87,11 @@ namespace StrikeEngine::Kernel {
         trackBlock = TrackBlock();
         seekerSystem.reset();
         sensorSystem.reset();
+        // Re-apply the stored seed so a reset kernel reproduces the same
+        // streams (reset used to leave both RNGs wherever they stopped,
+        // silently breaking the seed contract on kernel reuse).
+        sensorSystem.setSeed(randomSeed);
+        warheadRng.seed(randomSeed ^ 0x9E3779B9u);
         freeList.clear();
         stagePlans.clear();
         warheads.clear();
@@ -691,6 +700,18 @@ namespace StrikeEngine::Kernel {
         if (id >= physicsBlock.size || !physicsBlock.active[id]) return;
         physicsBlock.active[id] = false;
         statusBlock.isAlive[id] = false;
+        // A despawn is not a kill: disarm the warhead, otherwise an Impact
+        // fuse (triggered by !isAlive) or a Proximity/Timed fuse detonates
+        // the removed slot on a later step and rolls lethality against live
+        // opponents (phantom kill + spurious Detonation event). Structural
+        // kills keep their detonation — they go through failEntity, not here.
+        if (id < warheads.size()) {
+            warheads[id].detonated = true;
+            warheads[id].lethalRadiusM = 0.0;
+            warheads[id].falloffRadiusM = 0.0;
+        }
+        // Stale queued commands must not re-arm whatever reuses the slot.
+        commandProcessor.dropCommandsFor(id);
         freeList.push_back(id);
     }
 
@@ -910,7 +931,7 @@ namespace StrikeEngine::Kernel {
                 const double prob = Models::warheadKillProbability(
                     missDistance, wh.lethalRadiusM, wh.falloffRadiusM);
                 const bool kill = (prob >= 1.0) ||
-                    (prob > 0.0 && prob >= sensorSystem.nextUniform01());
+                    (prob > 0.0 && prob >= std::uniform_real_distribution<double>(0.0, 1.0)(warheadRng));
                 if (kill) {
                     applyDamage(j, 100.0);
                 }

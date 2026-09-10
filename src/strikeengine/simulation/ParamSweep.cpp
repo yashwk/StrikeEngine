@@ -38,6 +38,9 @@ namespace StrikeEngine::Simulation {
 
             // Initialize Kernel
             Kernel::SimulationKernel kernel;
+            if (seedSet) {
+                kernel.setRandomSeed(seed + static_cast<std::uint32_t>(i));
+            }
             config.loadInto(kernel);
 
             const auto& physics = kernel.getPhysics();

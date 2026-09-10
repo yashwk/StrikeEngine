@@ -76,4 +76,54 @@ namespace StrikeEngine::Simulation {
         std::cout << "Simulation completed. Impact/End time: " << kernel.getSimulationTime() << "s. Output saved to " << outputFile << std::endl;
     }
 
+    void SingleRun::execute(
+        const Kernel::ScenarioEntityConfig& entity,
+        const Kernel::EnvironmentConfig& environment,
+        const std::string& outputFile,
+        const StudyOutputConfig& outputConfig)
+    {
+        Kernel::SimulationKernel kernel;
+        kernel.setEnvironment(environment);
+        kernel.initialize();
+
+        Kernel::PhysicsId id = kernel.createVehicle(entity.initState, entity.vehicleConfig);
+
+        const auto& physics = kernel.getPhysics();
+        std::vector<StudyOutputRecord> records;
+
+        while (kernel.getSimulationTime() <= maxTime) {
+            const auto state = reportState(physics, id, environment);
+            StudyOutputRecord record;
+            record.entityId = id;
+            record.timeS = kernel.getSimulationTime();
+            record.frame = state.frame;
+            record.positionX = state.positionX;
+            record.positionY = state.positionY;
+            record.positionZ = state.positionZ;
+            record.latitudeRad = state.latitudeRad;
+            record.longitudeRad = state.longitudeRad;
+            record.altitudeM = state.altitudeM;
+            record.velocityX = state.velocityX;
+            record.velocityY = state.velocityY;
+            record.velocityZ = state.velocityZ;
+            record.speedMps = state.speedMps;
+            record.massKg = state.massKg;
+            record.active = physics.active[id];
+            record.status = !record.active
+                ? StudyStatus::Impacted
+                : (record.timeS >= maxTime ? StudyStatus::Completed : StudyStatus::Active);
+            records.push_back(record);
+
+            if (!physics.active[id]) break;
+
+            const double remaining = maxTime - kernel.getSimulationTime();
+            if (remaining <= 0.0) break;
+            kernel.step(std::min(dt, remaining));
+        }
+
+        StudyOutputWriter::write(
+            outputFile, StudyRecordType::Trajectory, records, outputConfig);
+        std::cout << "Simulation completed. Impact/End time: " << kernel.getSimulationTime() << "s. Output saved to " << outputFile << std::endl;
+    }
+
 } // namespace StrikeEngine::Simulation

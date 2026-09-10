@@ -80,6 +80,11 @@ namespace StrikeEngine::Kernel
 
 		WorkerPool threadPool;
 		PhysicsBlock derivBuffer;   // scratch for cache refresh + stage reuse
+
+		// Current step dt, set by step() before integrating. The fuel-
+		// depletion guard caps mass flow so the remaining fuel lasts this
+		// window; a fixed window over- or under-covers the actual step.
+		double currentStepDt = 0.01;
 	};
 
 } // namespace StrikeEngine::Kernel

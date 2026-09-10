@@ -83,16 +83,16 @@ int main() {
     // ---- Part B2: integration, in-band detonation with a fixed seed ----
     {
         // d = 30 m is the midpoint of the (10, 50] m band -> p = 0.5 exactly.
-        // The kill decision is a uniform draw from the kernel RNG stream, so
-        // with the fixed seed the outcome is deterministic. Run twice and pin
-        // the observed outcome.
+        // The kill decision is a uniform draw from the kernel's dedicated
+        // warhead RNG stream, so with the fixed seed the outcome is
+        // deterministic. Run twice and pin the observed outcome.
         const bool first = targetKilled(30.0, true);
         const bool second = targetKilled(30.0, true);
         check(first == second, "in-band kill is deterministic under a fixed seed");
         std::printf("    pinned in-band outcome (d=30, lethal=10, falloff=50): %s\n",
                     first ? "KILL" : "NO KILL");
         // Pinned by running the fixed-seed engagement (see the report).
-        check(first == true, "in-band outcome matches the pinned value for seed 0xFA11");
+        check(first == false, "in-band outcome matches the pinned value for seed 0xFA11");
     }
 
     // ---- Part B3: flat-law warheads never consume the kernel RNG stream ----

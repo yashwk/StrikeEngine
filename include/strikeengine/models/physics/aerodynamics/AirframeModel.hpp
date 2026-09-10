@@ -135,7 +135,16 @@ namespace StrikeEngine::Models {
         const double q = 0.5 * density * speedSq;
         const AirframeParams& a = *p.airframe;
         const double S = std::max(p.referenceArea, a.wingAreaM2);   // aero reference (wing area)
-        const double mac = std::max(p.referenceLength, a.wingMeanChordM);
+        // Moment arm MUST be the wing mean aerodynamic chord. The vehicle
+        // referenceLength is the fuselage/body length (e.g. 21.9 m for a
+        // fighter vs a ~3.3 m MAC); using it here inflated every pitching /
+        // yawing / rolling moment ~7x and the rate-damping stiffness ~44x,
+        // pushing rotational dynamics far past explicit-integration
+        // stability at dt = 0.01 s (integrator-dependent spins and chatter
+        // instead of damped motion). Fall back to referenceLength only when
+        // the geometry carries no usable chord.
+        const double mac = (a.wingMeanChordM > 1e-9) ? a.wingMeanChordM
+                                                     : std::max(p.referenceLength, 1e-9);
         const double b  = a.wingSpanM;
         const double mach = (speedOfSound > 1e-6) ? V / speedOfSound : 0.0;
 

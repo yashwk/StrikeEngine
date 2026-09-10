@@ -164,7 +164,10 @@ namespace StrikeEngine::Kernel {
         // Do not create a lateral steering demand from sensor noise when guidance
         // is asking for a straight-plane flight path; keep rate and AoA damping
         // active so the vehicle stays aerodynamically stable and roll/yaw trimmed.
-        const double yawFeed = (std::abs(ayCmdB) < 0.5) ? 0.0 : yawFeedForward;
+        // Gate on the specific-force demand (what the fins actually serve),
+        // not the total command: under bank the gravity component alone can
+        // exceed the dead-band and the gate would disagree with its steering.
+        const double yawFeed = (std::abs(aySpecificCmd) < 0.5) ? 0.0 : yawFeedForward;
         double pitchDeflection = pitchFeedForward + pitchRateDamping + pitchAoaDamping;
         double yawDeflection   = yawFeed + yawRateDamping + yawAoaDamping;
 

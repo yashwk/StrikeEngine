@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 #include <cstddef>
+#include <cstdint>
 
 namespace StrikeEngine::Simulation {
 
@@ -40,6 +41,14 @@ namespace StrikeEngine::Simulation {
         ParamSweep(double timeStep_s, double maxTime_s);
 
         /**
+         * @brief Pins the per-point kernel sensor stream for reproducible runs.
+         *
+         * Point i is seeded with (seed + i). Without it kernels draw
+         * chrono-seeded sensor noise.
+         */
+        void setSeed(std::uint32_t s) { seedSet = true; seed = s; }
+
+        /**
          * @brief Runs a parameter sweep.
          * @param baseConfig The base scenario configuration.
          * @param startValue Sweep start value.
@@ -61,6 +70,8 @@ namespace StrikeEngine::Simulation {
     private:
         double dt;
         double maxTime;
+        bool seedSet = false;
+        std::uint32_t seed = 0u;
     };
 
 } // namespace StrikeEngine::Simulation

@@ -1,9 +1,19 @@
 #include <strikeengine/kernel/systems/CommandProcessor.hpp>
 
+#include <algorithm>
 namespace StrikeEngine::Kernel {
 
     void CommandProcessor::enqueueCommand(const SimulationCommand& cmd) {
         commandQueue.push_back(cmd);
+    }
+
+    void CommandProcessor::dropCommandsFor(std::size_t entityId) {
+        commandQueue.erase(
+            std::remove_if(commandQueue.begin(), commandQueue.end(),
+                           [entityId](const SimulationCommand& cmd) {
+                               return cmd.entityId == entityId;
+                           }),
+            commandQueue.end());
     }
 
     void CommandProcessor::process(GuidanceBlock& guidance, TrackBlock& tracks,
