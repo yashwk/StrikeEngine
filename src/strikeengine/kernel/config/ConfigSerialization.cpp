@@ -287,6 +287,27 @@ void to_json(json& j, const AeroConfig& a) {
     } else if (a.fins.enabled()) {
         j["fins"] = finConfigToJson(a.fins);
     }
+    if (a.airframe.enabled()) {
+        j["airframe"] = json{
+            {"wing_span_m",       a.airframe.wingSpanM},
+            {"wing_root_chord_m", a.airframe.wingRootChordM},
+            {"wing_tip_chord_m",  a.airframe.wingTipChordM},
+            {"wing_sweep_deg",    a.airframe.wingSweepDeg},
+            {"wing_position_m",   a.airframe.wingPositionM},
+            {"wing_dihedral_deg", a.airframe.wingDihedralDeg},
+            {"htail_span_m",      a.airframe.htailSpanM},
+            {"htail_chord_m",     a.airframe.htailChordM},
+            {"htail_position_m",  a.airframe.htailPositionM},
+            {"vtail_span_m",      a.airframe.vtailSpanM},
+            {"vtail_chord_m",     a.airframe.vtailChordM},
+            {"vtail_position_m",  a.airframe.vtailPositionM},
+            {"fuselage_diameter_m", a.airframe.fuselageDiameterM},
+            {"fuselage_length_m",   a.airframe.fuselageLengthM},
+            {"cd0",               a.airframe.cd0},
+            {"oswald_efficiency", a.airframe.oswaldEfficiency},
+            {"cl_max",            a.airframe.clMax}
+        };
+    }
 }
 
 void from_json(const json& j, AeroConfig& a) {
@@ -307,6 +328,26 @@ void from_json(const json& j, AeroConfig& a) {
     }
     if (j.contains("fins")) {
         a.fins = finConfigFromJson(j.at("fins"));
+    }
+    if (j.contains("airframe")) {
+        const auto& af = j.at("airframe");
+        a.airframe.wingSpanM       = af.at("wing_span_m").get<double>();
+        a.airframe.wingRootChordM  = af.at("wing_root_chord_m").get<double>();
+        a.airframe.wingTipChordM   = af.at("wing_tip_chord_m").get<double>();
+        a.airframe.wingSweepDeg    = af.at("wing_sweep_deg").get<double>();
+        a.airframe.wingPositionM   = af.at("wing_position_m").get<double>();
+        a.airframe.wingDihedralDeg = af.at("wing_dihedral_deg").get<double>();
+        a.airframe.htailSpanM      = af.at("htail_span_m").get<double>();
+        a.airframe.htailChordM     = af.at("htail_chord_m").get<double>();
+        a.airframe.htailPositionM  = af.at("htail_position_m").get<double>();
+        a.airframe.vtailSpanM      = af.at("vtail_span_m").get<double>();
+        a.airframe.vtailChordM     = af.at("vtail_chord_m").get<double>();
+        a.airframe.vtailPositionM  = af.at("vtail_position_m").get<double>();
+        a.airframe.fuselageDiameterM = af.at("fuselage_diameter_m").get<double>();
+        a.airframe.fuselageLengthM   = af.at("fuselage_length_m").get<double>();
+        a.airframe.cd0              = af.at("cd0").get<double>();
+        a.airframe.oswaldEfficiency = af.at("oswald_efficiency").get<double>();
+        a.airframe.clMax            = af.at("cl_max").get<double>();
     }
 }
 

@@ -84,9 +84,10 @@ namespace StrikeEngine::Kernel {
             const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
             // The WGS84 normal-gravity vector points toward the geodetic nadir
             // (down). Resolved into the aerospace (X-forward/Y-right/Z-down)
-            // body axes via estQ it lands on -Z, so negate it to match the
-            // autopilot's Z-down specific-force/roll convention.
-            gx = -grav[0]; gy = -grav[1]; gz = -grav[2];
+            // body axes via estQ it lands on +Z, matching the autopilot's Z-down
+            // specific-force/roll convention (the scenario pose builder now
+            // emits a NED body frame).
+            gx = grav[0]; gy = grav[1]; gz = grav[2];
         } else {
             gx = 0.0; gy = 0.0; gz = -9.80665;
         }
@@ -183,10 +184,9 @@ namespace StrikeEngine::Kernel {
             const auto geodetic = Models::ecefToGeodetic(pos);
             const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
             const double gmag = std::sqrt(grav[0]*grav[0] + grav[1]*grav[1] + grav[2]*grav[2]);
-            // Negate (as above) so the local "down" resolves to body +Z (level).
-            const double nx = gmag > 1e-9 ? -grav[0]/gmag : 0.0;
-            const double ny = gmag > 1e-9 ? -grav[1]/gmag : 0.0;
-            const double nz = gmag > 1e-9 ? -grav[2]/gmag : -1.0;
+            const double nx = gmag > 1e-9 ? grav[0]/gmag : 0.0;
+            const double ny = gmag > 1e-9 ? grav[1]/gmag : 0.0;
+            const double nz = gmag > 1e-9 ? grav[2]/gmag : -1.0;
             quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
                              nx, ny, nz, gBx, gBy, gBz);
         } else {

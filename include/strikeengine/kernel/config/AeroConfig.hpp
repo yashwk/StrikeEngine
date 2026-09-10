@@ -31,6 +31,49 @@ namespace StrikeEngine::Kernel {
         bool enabled() const { return count >= 3; }
     };
 
+    /**
+     * @brief Aircraft airframe geometry (W-AC). When a main wing is present
+     * (wingSpanM > 0) the entity is treated as a wing-body-tail aircraft and
+     * uses the DATCOM-light semi-empirical aero model (AirframeModel.hpp)
+     * instead of the axisymmetric missile/fin model. Missiles leave wingSpanM
+     * = 0 (the default) so the existing path is byte-identical.
+     *
+     * Positions are axial along body +X from the CG (aft positive). The wing
+     * and tail chords/positions define the aerodynamic reference and tail
+     * volume coefficients, so the aircraft gets real static stability and
+     * elevator/rudder authority.
+     */
+    struct AirframeConfig {
+        // Main wing (the aerodynamic reference surface).
+        double wingSpanM     = 0.0;
+        double wingRootChordM = 0.0;
+        double wingTipChordM  = 0.0;
+        double wingSweepDeg    = 0.0;
+        double wingPositionM   = 0.0;
+        double wingDihedralDeg = 0.0;
+
+        // Horizontal tail (stability + elevator).
+        double htailSpanM    = 0.0;
+        double htailChordM   = 0.0;
+        double htailPositionM = 0.0;
+
+        // Vertical tail (directional stability + rudder).
+        double vtailSpanM    = 0.0;
+        double vtailChordM   = 0.0;
+        double vtailPositionM = 0.0;
+
+        // Fuselage.
+        double fuselageDiameterM = 0.0;
+        double fuselageLengthM   = 0.0;
+
+        // Parasite/wave drag at zero lift (CD0); induced-drag efficiency.
+        double cd0 = 0.03;
+        double oswaldEfficiency = 0.8;
+        double clMax = 1.6;
+
+        bool enabled() const { return wingSpanM > 0.0; }
+    };
+
     struct AeroConfig {
         double referenceArea   = 0.1;   // m^2
         double referenceLength = 1.0;   // m (moment arm for torques)
@@ -49,6 +92,11 @@ namespace StrikeEngine::Kernel {
         // Optional multiple geometric fin sets (e.g. canards + tails).
         // When non-empty, all enabled fin sets in finSets are simulated.
         std::vector<FinsConfig> finSets;
+
+        // Aircraft airframe geometry. When enabled, the entity uses the
+        // wing-body-tail semi-empirical aero model instead of the axisymmetric
+        // missile model.
+        AirframeConfig airframe;
 
         std::vector<FinsConfig> allFinSets() const {
             if (!finSets.empty()) {

@@ -9,6 +9,7 @@
 #include <strikeengine/kernel/profiles/WarheadProfileDatabase.hpp>
 #include <strikeengine/models/physics/atmosphere/ISA1976.hpp>
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
+#include <strikeengine/models/physics/aerodynamics/AirframeModel.hpp>
 #include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
 #include <strikeengine/models/warhead/WarheadEffects.hpp>
 #include <stdexcept>
@@ -188,6 +189,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.aeroTables.push_back(nullptr);
             physicsBlock.fins.push_back(nullptr);
             physicsBlock.finSets.push_back({});
+            physicsBlock.airframe.push_back(nullptr);
             physicsBlock.propulsionId.push_back(-1);
             physicsBlock.ignitionTime.push_back(0.0);
             physicsBlock.stageIndex.push_back(-1);
@@ -583,6 +585,22 @@ namespace StrikeEngine::Kernel {
         }
         physicsBlock.finSets[id] = builtFinSets;
         physicsBlock.fins[id] = builtFinSets.empty() ? nullptr : builtFinSets.front();
+        // Aircraft airframe geometry -> AirframeParams (DATCOM-light wing-body-tail).
+        physicsBlock.airframe[id] = nullptr;
+        if (resolved.aero.airframe.enabled()) {
+            const auto& af = resolved.aero.airframe;
+            auto ap = Models::buildAirframeParams(
+                af.wingSpanM, af.wingRootChordM, af.wingTipChordM,
+                af.wingSweepDeg, af.wingPositionM, af.wingDihedralDeg,
+                af.htailSpanM, af.htailChordM, af.htailPositionM,
+                af.vtailSpanM, af.vtailChordM, af.vtailPositionM,
+                af.fuselageDiameterM, af.fuselageLengthM,
+                af.cd0, af.oswaldEfficiency, af.clMax);
+            if (!ap) {
+                throw std::runtime_error("Invalid aircraft airframe configuration");
+            }
+            physicsBlock.airframe[id] = ap;
+        }
         physicsBlock.finPitch[id] = 0.0; physicsBlock.finYaw[id] = 0.0; physicsBlock.finRoll[id] = 0.0;
         physicsBlock.ignitionTime[id] = time.currentTime();
         physicsBlock.active[id] = true;

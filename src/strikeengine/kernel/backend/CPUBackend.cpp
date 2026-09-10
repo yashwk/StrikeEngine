@@ -5,6 +5,7 @@
 #include <strikeengine/models/physics/earth/EarthModel.hpp>
 #include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <strikeengine/models/physics/earth/EarthFixedPropagator.hpp>
+#include <strikeengine/models/physics/aerodynamics/AirframeModel.hpp>
 #include <array>
 #include <cmath>
 
@@ -157,6 +158,9 @@ namespace StrikeEngine::Kernel
             params.fins            = s.fins[i];
             if (s.finSets.size() > i) {
                 params.finSets     = s.finSets[i];
+            }
+            if (s.airframe.size() > i) {
+                params.airframe    = s.airframe[i];
             }
 
             const Models::AeroWrench aeroWrench = aero->computeWrench(

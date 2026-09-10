@@ -7,6 +7,8 @@
 
 namespace StrikeEngine::Models {
 
+    struct AirframeParams;  // defined in AirframeModel.hpp (aircraft wing-body-tail)
+
     struct AeroWrench {
         double force_x, force_y, force_z;   // BODY frame forces (N)
         double torque_x, torque_y, torque_z; // BODY frame moments (N*m)
@@ -38,6 +40,11 @@ namespace StrikeEngine::Models {
         // When non-empty, all fin sets are composited in the force and moment calculations.
         std::vector<std::shared_ptr<const Models::FinsGeometry>> finSets;
 
+        // Optional aircraft airframe. When present the entity is a wing-body-tail
+        // aircraft and uses the DATCOM-light semi-empirical aircraft model
+        // (airframeAeroWrench) instead of the axisymmetric missile path.
+        std::shared_ptr<const Models::AirframeParams> airframe;
+
         std::vector<std::shared_ptr<const Models::FinsGeometry>> activeFins() const {
             if (!finSets.empty()) {
                 return finSets;
@@ -48,6 +55,13 @@ namespace StrikeEngine::Models {
             return {};
         }
     };
+
+    // Aircraft wing-body-tail aero wrench (defined in AirframeModel.hpp).
+    AeroWrench airframeAeroWrench(
+        double u, double v, double w,
+        double wx, double wy, double wz,
+        double finPitch, double finYaw, double finRoll,
+        double density, double speedOfSound, const AeroParams& p);
 
     /**
      * @brief Aerodynamic force/moment model (BODY frame).
@@ -89,6 +103,15 @@ namespace StrikeEngine::Models {
             const double speedSq = u * u + v * v + w * w;
             if (speedSq < 1e-6) {
                 return {0, 0, 0, 0, 0, 0};
+            }
+
+            // Aircraft wing-body-tail path: when an airframe is present, use the
+            // DATCOM-light semi-empirical aircraft model. Missiles leave the
+            // airframe null and follow the axisymmetric path below.
+            if (p.airframe) {
+                return airframeAeroWrench(u, v, w, wx, wy, wz,
+                                          finPitch, finYaw, finRoll,
+                                          density, speedOfSound, p);
             }
 
             const double V = std::sqrt(speedSq);
@@ -295,3 +318,8 @@ namespace StrikeEngine::Models {
     };
 
 } // namespace StrikeEngine::Models
+
+// Pull in the aircraft wing-body-tail model (defines AirframeParams,
+// buildAirframeParams and the airframeAeroWrench called by computeWrench).
+// Included here so any TU that uses BasicAeroModel also gets the definition.
+#include <strikeengine/models/physics/aerodynamics/AirframeModel.hpp>
