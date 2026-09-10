@@ -499,8 +499,13 @@ namespace StrikeEngine::Kernel {
             }
 
             // --- Terminal homing path (seeker lock; overrides the configured
-            // --- mode, matching the legacy lock-override contract) --------
-            if (locked) {
+            // --- mode, matching the legacy lock-override contract). This override
+            // --- applies ONLY to interceptor guidance (PN/Waypoint/Trajectory).
+            // --- A Cruise-mode aircraft (e.g. the Tejas mothership with its own
+            // --- fire-control radar) must NOT be pulled into seeker homing by its
+            // --- radar lock - the lock is for targeting/situational awareness and
+            // --- the aircraft keeps flying its altitude-hold + waypoint course.
+            if (locked && guidance.mode[i] != GuidanceMode::Cruise) {
                 const double ramp = guidance.handoffBlendTimeSec[i];
                 const bool freshLock =
                     phase != GuidancePhase::Acquisition &&

@@ -202,8 +202,15 @@ namespace StrikeEngine::Models {
 
         // Clamp the aircraft's control moments to a realistic authority bound
         // (based on the tail/wing control surface size) so the large q*S lead
-        // doesn't over-drive the high-inertia airframe into a spin.
-        const double maxAC = 4.0e5;   // ~Moment authority consistent with a finite elevator/rudder
+        // doesn't over-drive the high-inertia airframe into a spin. This must be
+        // large enough for a finite elevator/rudder to be effective at the
+        // operating dynamic pressure (a Fin at full +/-0.43 rad on a 48 m^2
+        // fighter wing at ~40 kPa produces ~2-3 MN*m of moment); 4e5 N*m capped
+        // both control AND rate-damping far below the heavy airframe's need and
+        // let the aircraft tumble. 3e6 N*m keeps the fins effective through
+        // transonic/Mach 1.5 while still bounding the absurd control growth an
+        // unconstrained q*S lead would produce.
+        const double maxAC = 3.0e6;   // ~Moment authority consistent with a finite elevator/rudder
         tx = std::clamp(tx, -maxAC, maxAC);
         ty = std::clamp(ty, -maxAC, maxAC);
         tz = std::clamp(tz, -maxAC, maxAC);
