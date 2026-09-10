@@ -248,6 +248,10 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.maxAccel.push_back(0.0);
             guidanceBlock.navigationConstant.push_back(3.5);
             guidanceBlock.waypointGain.push_back(20.0);
+            guidanceBlock.cruiseAltitudeM.push_back(0.0);
+            guidanceBlock.cruiseAltitudeGain.push_back(0.05);
+            guidanceBlock.cruiseAltitudeDamping.push_back(0.30);
+            guidanceBlock.cruiseWaypointGain.push_back(0.8);
             guidanceBlock.handoffBlendTimeSec.push_back(0.0);
             guidanceBlock.lockLossRetentionSec.push_back(0.0);
             guidanceBlock.apnFeedforwardEnabled.push_back(false);
@@ -393,6 +397,11 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.maxAccel[id] = 0.0;
         guidanceBlock.navigationConstant[id] = resolved.guidanceAutopilot.navigationConstant;
         guidanceBlock.waypointGain[id] = resolved.guidanceAutopilot.waypointGain;
+        // Aircraft cruise config.
+        guidanceBlock.cruiseAltitudeM[id] = resolved.guidanceAutopilot.cruiseAltitudeM;
+        guidanceBlock.cruiseAltitudeGain[id] = resolved.guidanceAutopilot.cruiseAltitudeGain;
+        guidanceBlock.cruiseAltitudeDamping[id] = resolved.guidanceAutopilot.cruiseAltitudeDamping;
+        guidanceBlock.cruiseWaypointGain[id] = resolved.guidanceAutopilot.cruiseWaypointGain;
         // W36 phase-manager config (defaults preserve the legacy path).
         guidanceBlock.handoffBlendTimeSec[id] = resolved.guidanceAutopilot.handoffBlendTimeSec;
         guidanceBlock.lockLossRetentionSec[id] = resolved.guidanceAutopilot.lockLossRetentionSec;
@@ -957,7 +966,8 @@ namespace StrikeEngine::Kernel {
 
         // 4. Update Guidance based on estimates, tracks, and seekers
         guidanceSystem.update(statusBlock, navigationBlock, seekerBlock,
-                              trackBlock, guidanceBlock, controlBlock, dt);
+                              trackBlock, guidanceBlock, controlBlock, dt,
+                              environment);
 
         // 4.5 Update Autopilot to translate commanded accel to fin deflections
         autopilotSystem.update(statusBlock, navigationBlock, sensorBlock, guidanceBlock, controlBlock, dt, environment);

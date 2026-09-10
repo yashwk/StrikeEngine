@@ -38,6 +38,13 @@ namespace StrikeEngine::Kernel {
         int datalinkSourceId = -1;
         int datalinkTargetId = -1;
 
+        // Aircraft cruise (GuidanceMode::Cruise): hold a reference geodetic
+        // altitude and fly a level course toward the waypoint target.
+        double cruiseAltitudeM       = 0.0;   // reference altitude (m); <=0 => follow the waypoint Z
+        double cruiseAltitudeGain    = 0.05;  // vertical accel per m of altitude error (1/s^2)
+        double cruiseAltitudeDamping = 0.30;  // vertical accel per m/s of climb rate (1/s)
+        double cruiseWaypointGain    = 0.8;   // horizontal accel toward the waypoint (1/s^2)
+
         // W40 trajectory-core keys (optional with legacy defaults; active only
         // when GuidanceMode::Trajectory is explicitly selected). A seeker lock
         // still overrides midcourse trajectory management exactly as it does

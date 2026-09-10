@@ -304,8 +304,9 @@ int main()
         status.isAlive = {true};
         ControlBlock control;
         GuidanceSystem system;
+        StrikeEngine::Kernel::EnvironmentConfig env;
         seeker.type = {SeekerType::None};   // pure midcourse PN path (no lock)
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
         check(near(g.commandedAccelY[0], 7.0, 1e-9),
               "midcourse PN consumes the persistent track (not the command aim)");
         check(g.phase[0] == GuidancePhase::Midcourse,
@@ -315,7 +316,7 @@ int main()
         // (command target at (500,0,0), stationary vs nav vx=100: head-on ->
         // zero lateral demand), and the feed-forward accel stays command-based.
         tracks.state = {TrackState::Lost};
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
         check(near(g.commandedAccelY[0], 0.0, 1e-9),
               "Lost track falls back to the external command aim");
     }

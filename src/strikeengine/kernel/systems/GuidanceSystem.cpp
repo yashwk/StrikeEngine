@@ -1,5 +1,7 @@
 #include <strikeengine/kernel/systems/GuidanceSystem.hpp>
 #include <strikeengine/models/guidance/GuidanceModels.hpp>
+#include <strikeengine/models/physics/earth/EarthModel.hpp>
+#include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <cmath>
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -83,6 +85,65 @@ namespace StrikeEngine::Kernel {
             g.trajectoryAimSource[id] = GuidanceAimSource::None;
             g.trajectoryFeasible[id] = false;
             g.trajectoryReason[id] = TrajectoryReason::None;
+        }
+
+        // Aircraft cruise (GuidanceMode::Cruise): hold a reference geodetic
+        // altitude and fly a level course toward the waypoint target. The
+        // missile ProNav/Waypoint laws steer toward a point but do not hold
+        // altitude, so a heavy aircraft sinks; this law adds an altitude-hold
+        // (P + D on altitude error) along the local vertical plus a horizontal
+        // demand toward the waypoint.
+        LawResult computeCruise(
+            std::size_t id, const NavigationBlock& nav, const GuidanceBlock& g,
+            const EnvironmentConfig& env)
+        {
+            LawResult out;
+            const double px = nav.estPx[id], py = nav.estPy[id], pz = nav.estPz[id];
+            const double vx = nav.estVx[id], vy = nav.estVy[id], vz = nav.estVz[id];
+
+            // Local vertical (geodetic up) direction, present altitude, climb rate.
+            double upx = 0.0, upy = 0.0, upz = 0.0, alt = 0.0;
+            if (env.earth.useEcefTruth) {
+                const auto geo = Models::ecefToGeodetic({px, py, pz});
+                alt = geo.altitudeM;
+                const double lat = geo.latitudeRad, lon = geo.longitudeRad;
+                upx = std::cos(lat) * std::cos(lon);
+                upy = std::cos(lat) * std::sin(lon);
+                upz = std::sin(lat);
+            } else {
+                upx = 0.0; upy = 0.0; upz = 1.0;
+                alt = pz;
+            }
+            const double climbRate = vx * upx + vy * upy + vz * upz;
+
+            // Reference altitude: explicit cruise altitude, or the waypoint Z.
+            double altRef = g.cruiseAltitudeM[id];
+            if (altRef <= 0.0) altRef = alt + (g.targetZ[id] - pz);
+
+            // Altitude-hold vertical demand (m/s^2 along the local up).
+            const double aVert = g.cruiseAltitudeGain[id] * (altRef - alt)
+                               - g.cruiseAltitudeDamping[id] * climbRate;
+
+            // Horizontal direction toward the waypoint (remove vertical comp).
+            const double dx = g.targetX[id] - px, dy = g.targetY[id] - py, dz = g.targetZ[id] - pz;
+            const double dUp = dx * upx + dy * upy + dz * upz;
+            const double hx = dx - dUp * upx, hy = dy - dUp * upy, hz = dz - dUp * upz;
+            const double hMag = std::sqrt(hx * hx + hy * hy + hz * hz);
+            double ax = 0.0, ay = 0.0, az = 0.0;
+            if (hMag > 1e-6) {
+                const double k = g.cruiseWaypointGain[id];
+                ax = k * (hx / hMag);
+                ay = k * (hy / hMag);
+                az = k * (hz / hMag);
+            }
+            ax += aVert * upx;
+            ay += aVert * upy;
+            az += aVert * upz;
+
+            out.ax = ax; out.ay = ay; out.az = az;
+            out.valid = std::isfinite(ax) && std::isfinite(ay) && std::isfinite(az);
+            out.tgoSec = hMag / 250.0; // diagnostic only
+            return out;
         }
 
         // Midcourse PN / APN on the commanded target track (world frame).
@@ -405,7 +466,8 @@ namespace StrikeEngine::Kernel {
         const TrackBlock& tracks,
         GuidanceBlock& guidance,
         ControlBlock& control,
-        double dt)
+        double dt,
+        const EnvironmentConfig& environment)
     {
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
@@ -590,6 +652,10 @@ namespace StrikeEngine::Kernel {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Trajectory;
                 applyDemand(i, computeTrajectory(i, nav, &tracks, guidance), guidance);
+            } else if (mode == GuidanceMode::Cruise) {
+                if (!terminalLost) phase = GuidancePhase::Midcourse;
+                law = GuidanceLaw::Cruise;
+                applyDemand(i, computeCruise(i, nav, guidance, environment), guidance);
             } else {
                 zeroDemand(i, guidance);
                 phase = GuidancePhase::None;

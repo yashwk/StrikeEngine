@@ -6,6 +6,7 @@
 #include <strikeengine/kernel/data/ControlBlock.hpp>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
 #include <strikeengine/kernel/data/SeekerBlock.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -36,7 +37,8 @@ namespace StrikeEngine::Kernel {
             const TrackBlock& tracks,
             GuidanceBlock& guidance,
             ControlBlock& control,
-            double dt
+            double dt,
+            const EnvironmentConfig& environment
         );
     };
 

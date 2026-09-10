@@ -8,7 +8,8 @@ namespace StrikeEngine::Kernel {
         None,                   // Ballistic or Uncontrolled
         ProportionalNavigation, // ProNav interception
         Waypoint,               // Navigating to static point
-        Trajectory              // W40 predictive intercept management (midcourse)
+        Trajectory,             // W40 predictive intercept management (midcourse)
+        Cruise                  // aircraft cruise: altitude-hold + waypoint heading
     };
 
     // Explicit guidance-phase state (W36). Phase selection is separate from
@@ -28,7 +29,8 @@ namespace StrikeEngine::Kernel {
         PureProNav,     // N * Vc * (LOS-rate cross LOS)
         SeekerRateAPN,  // body-frame LOS-rate APN (seeker)
         AugmentedProNav,// PN + target-acceleration feed-forward (0.5*N*a_t_perp)
-        Trajectory      // W40 PN aimed at a predicted intercept point
+        Trajectory,     // W40 PN aimed at a predicted intercept point
+        Cruise          // aircraft altitude-hold + waypoint course
     };
 
     // Aim source for the W40 trajectory predictor (diagnostic).
@@ -75,6 +77,13 @@ namespace StrikeEngine::Kernel {
         // Per-entity guidance-law tuning (design-time configurable).
         std::vector<double> navigationConstant;  // APN navigation constant N
         std::vector<double> waypointGain;        // m/s^2 per unit range fraction
+
+        // Aircraft cruise (GuidanceMode::Cruise) configuration: hold a reference
+        // geodetic altitude and fly a level course toward the waypoint target.
+        std::vector<double> cruiseAltitudeM;       // reference altitude (m)
+        std::vector<double> cruiseAltitudeGain;    // vertical accel per m of altitude error (1/s^2)
+        std::vector<double> cruiseAltitudeDamping; // vertical accel per m/s of climb rate (1/s)
+        std::vector<double> cruiseWaypointGain;    // horizontal accel toward the waypoint (1/s^2)
 
         // W36 phase/track configuration (defaults keep the legacy path).
         std::vector<double> handoffBlendTimeSec;   // acquisition->terminal ramp; 0 = instant

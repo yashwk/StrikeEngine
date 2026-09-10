@@ -277,7 +277,8 @@ int main()
         status.isAlive = {true};
         ControlBlock control;
         GuidanceSystem system;
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        StrikeEngine::Kernel::EnvironmentConfig env;
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
 
         check(g.law[0] == GuidanceLaw::Trajectory && g.phase[0] == GuidancePhase::Midcourse,
               "Trajectory mode publishes law Trajectory + phase Midcourse");
@@ -321,7 +322,8 @@ int main()
         status.isAlive = {true};
         ControlBlock control;
         GuidanceSystem system;
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        StrikeEngine::Kernel::EnvironmentConfig env;
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
 
         check(!g.trajectoryFeasible[0] && g.trajectoryReason[0] == TrajectoryReason::AccelLimited,
               "required accel over budget -> infeasible AccelLimited");
@@ -352,7 +354,8 @@ int main()
         status.isAlive = {true};
         ControlBlock control;
         GuidanceSystem system;
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        StrikeEngine::Kernel::EnvironmentConfig env;
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
 
         check(g.trajectoryAimSource[0] == GuidanceAimSource::Command,
               "Lost track falls back to the command aim");
@@ -364,7 +367,7 @@ int main()
         // is NOT measurement-anchored -> command aim.
         tracks.state = {TrackState::Acquire};
         tracks.updateCount = {0};
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
         check(g.trajectoryAimSource[0] == GuidanceAimSource::Command,
               "Acquire with no measurement updates stays command-anchored");
     }
@@ -405,6 +408,7 @@ int main()
         TrackManagerSystem tm;
 
         constexpr double dt = 0.01;
+        StrikeEngine::Kernel::EnvironmentConfig env;
         double t = 0.0;
         bool coastStreamed = false;
         bool trackAimWhileCoasting = false;
@@ -412,7 +416,7 @@ int main()
         while (trackState(tracks) == TrackState::Maintain) {
             t += dt;
             tm.update(nav, seeker, tracks, t, dt);
-            gs.update(status, nav, seeker, tracks, g, control, dt);
+            gs.update(status, nav, seeker, tracks, g, control, dt, env);
             if (tracks.state[0] == TrackState::Maintain || tracks.state[0] == TrackState::Coast) {
                 if (g.trajectoryAimSource[0] == GuidanceAimSource::Track &&
                     g.trajectoryFeasible[0])
@@ -427,7 +431,7 @@ int main()
             t += dt;
             tm.update(nav, seeker, tracks, t, dt);
         }
-        gs.update(status, nav, seeker, tracks, g, control, dt);
+        gs.update(status, nav, seeker, tracks, g, control, dt, env);
         check(trackState(tracks) == TrackState::Lost, "dropout advances Coast -> Lost");
         check(g.trajectoryAimSource[0] == GuidanceAimSource::Command,
               "Lost track -> command aim (bounded fallback)");
@@ -450,7 +454,7 @@ int main()
         // measurement-anchored track (updateCount > 0) is again the midcourse
         // aim, rebuilding the trajectory prediction from the reacquired track.
         seeker.isLocked = {false};
-        gs.update(status, nav, seeker, tracks, g, control, dt);
+        gs.update(status, nav, seeker, tracks, g, control, dt, env);
         check(g.trajectoryAimSource[0] == GuidanceAimSource::Track &&
                   g.trajectoryFeasible[0],
               "Reacquire -> Maintain restores track aim for midcourse");
@@ -472,6 +476,7 @@ int main()
         status.isAlive = {true};
         ControlBlock control;
         GuidanceSystem system;
+        StrikeEngine::Kernel::EnvironmentConfig env;
 
         // Seeker-locked: terminal seeker-rate APN overrides Trajectory mode.
         SeekerBlock seeker;
@@ -485,7 +490,7 @@ int main()
         seeker.targetElevation = {-0.05};
         seeker.targetAzimuthRate = {0.02};
         seeker.targetElevationRate = {-0.01};
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
         check(g.phase[0] == GuidancePhase::Terminal && g.law[0] == GuidanceLaw::SeekerRateAPN,
               "a seeker lock overrides Trajectory with terminal APN");
         check(g.trajectoryAimSource[0] == GuidanceAimSource::None &&
@@ -506,7 +511,7 @@ int main()
         tracks.velX = {-100.0}; tracks.velY = {10.0}; tracks.velZ = {0.0};
         seeker.type = {SeekerType::None};
         seeker.isLocked = {false};
-        system.update(status, nav, seeker, tracks, g, control, 0.01);
+        system.update(status, nav, seeker, tracks, g, control, 0.01, env);
         check(near(g.commandedAccelY[0], 7.0, 1e-9),
               "PN midcourse demand is unchanged (legacy parity)");
         check(g.trajectoryAimSource[0] == GuidanceAimSource::None &&
@@ -527,6 +532,7 @@ int main()
         status.isAlive = {true};
         ControlBlock control;
         GuidanceSystem system;
+        StrikeEngine::Kernel::EnvironmentConfig env;
 
         GuidanceBlock a = makeGuidance();
         TrackBlock ta = makeTracks();
@@ -537,8 +543,8 @@ int main()
 
         GuidanceBlock b = a;
         TrackBlock tb = ta;
-        system.update(status, nav, seeker, ta, a, control, 0.01);
-        system.update(status, nav, seeker, tb, b, control, 0.01);
+        system.update(status, nav, seeker, ta, a, control, 0.01, env);
+        system.update(status, nav, seeker, tb, b, control, 0.01, env);
         check(near(a.predictedInterceptX[0], b.predictedInterceptX[0], 1e-12) &&
                   near(a.predictedTgoSec[0], b.predictedTgoSec[0], 1e-12) &&
                   near(a.commandedAccelY[0], b.commandedAccelY[0], 1e-12),
