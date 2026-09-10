@@ -79,6 +79,7 @@ std::string guidanceModeToString(GuidanceMode m) {
         case GuidanceMode::ProportionalNavigation: return "proportional_navigation";
         case GuidanceMode::Waypoint: return "waypoint";
         case GuidanceMode::Trajectory: return "trajectory";
+        case GuidanceMode::Cruise: return "cruise";
     }
     throw std::runtime_error("ConfigSerialization: unhandled GuidanceMode");
 }
@@ -88,6 +89,7 @@ GuidanceMode guidanceModeFromString(const std::string& s) {
     if (s == "proportional_navigation") return GuidanceMode::ProportionalNavigation;
     if (s == "waypoint") return GuidanceMode::Waypoint;
     if (s == "trajectory") return GuidanceMode::Trajectory;
+    if (s == "cruise") return GuidanceMode::Cruise;
     throw std::runtime_error("ConfigSerialization: unknown GuidanceMode string '" + s + "'");
 }
 
@@ -419,6 +421,12 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["refDynamicPressurePa"] = g.refDynamicPressurePa;
     j["minDynamicPressurePa"] = g.minDynamicPressurePa;
     j["maxDynamicPressurePa"] = g.maxDynamicPressurePa;
+    // Aircraft cruise keys (optional with defaults; required so a Cruise
+    // scenario round-trips instead of silently losing altitude-hold).
+    j["cruiseAltitudeM"] = g.cruiseAltitudeM;
+    j["cruiseAltitudeGain"] = g.cruiseAltitudeGain;
+    j["cruiseAltitudeDamping"] = g.cruiseAltitudeDamping;
+    j["cruiseWaypointGain"] = g.cruiseWaypointGain;
 }
 
 void from_json(const json& j, GuidanceAutopilotConfig& g) {
@@ -447,6 +455,10 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.refDynamicPressurePa = j.value("refDynamicPressurePa", 50000.0);
     g.minDynamicPressurePa = j.value("minDynamicPressurePa", 2000.0);
     g.maxDynamicPressurePa = j.value("maxDynamicPressurePa", 300000.0);
+    g.cruiseAltitudeM = j.value("cruiseAltitudeM", 0.0);
+    g.cruiseAltitudeGain = j.value("cruiseAltitudeGain", 0.05);
+    g.cruiseAltitudeDamping = j.value("cruiseAltitudeDamping", 0.30);
+    g.cruiseWaypointGain = j.value("cruiseWaypointGain", 0.8);
 }
 
 // --- StageConfig / PropulsionConfig ----------------------------------------

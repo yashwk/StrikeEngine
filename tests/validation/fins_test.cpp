@@ -318,7 +318,7 @@ static void controlPolarityChecks()
         check(w.torque_y < 0.0, "stability: +alpha (nose up) -> nose-DOWN torque");
         auto w2 = m.computeWrench(V, 4.0, 0.0, 0.0, 0.0, 0.0,
                                   0.0, 0.0, 0.0, 1.225, 340.0, p);
-        check(w2.torque_z < 0.0, "stability: +beta (wind from right) -> nose-LEFT torque");
+        check(w2.torque_z > 0.0, "stability: +beta (wind from right) -> nose-RIGHT restoring torque");
     }
     {   // a nose-up command at small positive alpha still commands nose-up
         auto w = m.computeWrench(V, 0.0, 2.0, 0.0, 0.0, 0.0,

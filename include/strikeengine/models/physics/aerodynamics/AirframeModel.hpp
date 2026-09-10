@@ -170,13 +170,16 @@ namespace StrikeEngine::Models {
         const double cM = a.cm0 + cmAlpha * alpha + cMdelta * finPitch;
 
         // --- Side / yaw (directional) ------------------------------------------
-        // Vertical tail provides directional (weathercock) stability: a positive
-        // sideslip must yaw the nose to REDUCE that sideslip (restoring), i.e.
-        // cn_beta < 0 for a stable aircraft. Rudder (finYaw) adds a positive
-        // (nose-RIGHT) directional command with realistic authority.
-        const double cnBeta = -cLalpha * a.tailVolumeV;            // <0 stable
+        // Vertical tail provides directional (weathercock) stability. Body
+        // axes are X-forward/Y-right/Z-down and beta = atan2(v, u), so a
+        // positive sideslip (velocity right of the nose, wind from the
+        // front-right) pushes the tail left (-Y force) and must yaw the nose
+        // RIGHT (+tz, toward the velocity) to reduce the slip. Hence cyBeta
+        // < 0 and cnBeta > 0 for a stable aircraft (verified open-loop: a
+        // +5 deg uncommanded sideslip must develop +wz, not -wz).
+        const double cnBeta = cLalpha * a.tailVolumeV;               // >0 stable
         const double cn = cnBeta * beta + 0.50 * finYaw;
-        const double cyBeta = cLalpha * a.tailVolumeV;             // side force per rad sideslip
+        const double cyBeta = -cLalpha * a.tailVolumeV;              // side force per rad sideslip
 
         // --- Roll (dihedral + aileron) ------------------------------------------
         // Dihedral produces a restoring roll from sideslip; aileron (finRoll)

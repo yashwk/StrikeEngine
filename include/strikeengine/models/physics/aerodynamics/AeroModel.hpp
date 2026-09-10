@@ -264,7 +264,13 @@ namespace StrikeEngine::Models {
                     totalRollTorque += (qS * l * f->rollForcingPerRad(mach) * (f->cantRad + effRoll)
                                         - qS * l * l * 0.5 * f->rollDampingCoeff(mach) * wx);
                     totalPitchTorque += (qS * clFin * (xcp * alpha + std::abs(xcp) * effPitch));
-                    totalYawTorque += (qS * clFin * (xcp * beta + std::abs(xcp) * effYaw));
+                    // Yaw static term carries an explicit minus that pitch
+                    // does not: tau_z = +x*Fy with Fy = -qS*cy, while
+                    // tau_y = -x*Fz with Fz = -qS*cl. With a bare +xcp*beta a
+                    // tail fin (xcp < 0) yaws the nose AWAY from the velocity
+                    // (anti-weathercock); -xcp*beta restores it, and stays
+                    // correct for canards (xcp > 0 destabilize, as they must).
+                    totalYawTorque += (qS * clFin * (-xcp * beta + std::abs(xcp) * effYaw));
                 }
                 tx = std::clamp(totalRollTorque, -maxControlMoment, maxControlMoment);
                 ty = std::clamp(totalPitchTorque, -maxControlMoment, maxControlMoment);
