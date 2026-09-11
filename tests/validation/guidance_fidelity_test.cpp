@@ -368,6 +368,20 @@ int main()
               "loft keys round-trip");
     }
 
+    // ---- 10. Terminal law collapses on receding geometry ----
+    {
+        GuidanceBlock g = makeBlock();
+        g.mode = {GuidanceMode::ProportionalNavigation};
+        SeekerBlock receding = seeker;
+        receding.targetRangeRate = {50.0}; // opening, not closing
+        runTerminal(nav, receding, noTracks, g, dt);
+        check(g.commandedAccelX[0] == 0.0 && g.commandedAccelY[0] == 0.0 &&
+              g.commandedAccelZ[0] == 0.0 && g.nonClosing[0],
+              "receding lock commands zero and flags non-closing (midcourse parity)");
+        check(near(g.closingSpeed[0], -50.0, 1e-9),
+              "closing-speed diagnostic is signed (negative when opening)");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

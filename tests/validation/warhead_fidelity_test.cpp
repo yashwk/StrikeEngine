@@ -444,6 +444,41 @@ int main()
               "closing threat inside the lethal radius is killed");
     }
 
+    // ---- 16. Slot reuse hygiene + backend pool reset ----
+    {
+        // Occupant 1 flies a motor so cached accel/aiding readouts go stale.
+        SimulationKernel kernel;
+        VehicleConfig powered = ballistic();
+        StageConfig stage{};
+        stage.thrustCurve = {{0.0, 5000.0}, {10.0, 5000.0}};
+        stage.propellantMassKg = 50.0;
+        powered.propulsion.stages = {stage};
+        powered.sensor.baroEnabled = true;
+        powered.sensor.magEnabled = true;
+        const auto first = kernel.createVehicle(
+            makeInit(0.0, 0.0, 5000.0, 100.0, 0.0, 0.0), powered);
+        stepN(kernel, 5);
+        check(kernel.getPhysics().propulsionId[first] == 0,
+              "first registration takes pool slot 0");
+        kernel.removeVehicle(first);
+        const auto second = kernel.createVehicle(
+            makeInit(0.0, 0.0, 5000.0, 0.0, 0.0, 0.0), ballistic());
+        const auto& p = kernel.getPhysics();
+        const auto& s = kernel.getSensors();
+        check(second == first && p.ax[first] == 0.0 && p.ay[first] == 0.0 &&
+              p.az[first] == 0.0 && !s.baroUpdated[first] && s.baroAlt[first] == 0.0 &&
+              !s.magUpdated[first] && s.magX[first] == 0.0,
+              "recycled slot drops cached accel and baro/mag readouts");
+
+        // Reset clears the backend propulsion pool: the next registration
+        // restarts at slot 0 instead of leaking ids across runs.
+        kernel.reset();
+        const auto third = kernel.createVehicle(
+            makeInit(0.0, 0.0, 5000.0, 100.0, 0.0, 0.0), powered);
+        check(kernel.getPhysics().propulsionId[third] == 0,
+              "backend pool resets with the kernel (no id leak across runs)");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

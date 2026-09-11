@@ -32,6 +32,14 @@ namespace StrikeEngine::Kernel
         return static_cast<int>(propulsionPool.size()) - 1;
     }
 
+    void CPUBackend::reset()
+    {
+        // Every createVehicle registers fresh propulsion models, so without
+        // this the pool (and propulsionId space) grows across reset->create
+        // cycles. Integrator/scheduler hold no per-run state.
+        propulsionPool.clear();
+    }
+
     void CPUBackend::setEnvironment(const EnvironmentConfig& environmentConfig)
     {
         environment = environmentConfig;

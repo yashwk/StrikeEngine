@@ -103,6 +103,7 @@ namespace StrikeEngine::Kernel {
         warheadRng.seed(randomSeed ^ 0x9E3779B9u);
         fuzeRng.seed(randomSeed ^ 0xF00D5EEDu);
         eventSystem.resetTransientState();
+        if (backend) backend->reset();
         freeList.clear();
         stagePlans.clear();
         warheads.clear();
@@ -746,6 +747,14 @@ namespace StrikeEngine::Kernel {
         physicsBlock.qw[id] = init.qw; physicsBlock.qx[id] = init.qx; physicsBlock.qy[id] = init.qy; physicsBlock.qz[id] = init.qz;
         physicsBlock.wx[id] = init.wx; physicsBlock.wy[id] = init.wy; physicsBlock.wz[id] = init.wz;
         physicsBlock.alphax[id] = 0.0; physicsBlock.alphay[id] = 0.0; physicsBlock.alphaz[id] = 0.0;
+        // Cached truth accel + last aiding readouts must not leak from the
+        // removed occupant: accel refreshes on the first post-step, but stale
+        // baro/mag readouts would persist until the next aiding update.
+        physicsBlock.ax[id] = 0.0; physicsBlock.ay[id] = 0.0; physicsBlock.az[id] = 0.0;
+        sensorBlock.baroUpdated[id] = false;
+        sensorBlock.baroAlt[id] = 0.0;
+        sensorBlock.magUpdated[id] = false;
+        sensorBlock.magX[id] = 0.0; sensorBlock.magY[id] = 0.0; sensorBlock.magZ[id] = 0.0;
         // Ambient mirrors are populated by the first post-step refresh.
         physicsBlock.mach[id] = 0.0;
         physicsBlock.dynamicPressure[id] = 0.0;

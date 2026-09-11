@@ -599,6 +599,16 @@ namespace StrikeEngine::Kernel {
                 out.valid = false;
                 return out;
             }
+            // Collapse on non-closing geometry, mirroring the midcourse law:
+            // a locked missile must not steer hard at a receding target. The
+            // blend logic falls back to midcourse PN (which collapses the
+            // same way) when the seeker solution is unusable.
+            if (rangeRate > 0.0) {
+                if (id < guidance.closingSpeed.size()) guidance.closingSpeed[id] = -rangeRate;
+                out.nonClosing = true;
+                out.valid = false;
+                return out;
+            }
             const double N = rangeShapedN(id, guidance, range);
             if (!std::isfinite(N) || N <= 0.0) {
                 out.lawInvalid = true;

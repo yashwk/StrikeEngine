@@ -34,6 +34,8 @@ namespace StrikeEngine::Kernel
 
 		int registerPropulsion(std::shared_ptr<const Models::PropulsionModel> model) override;
 
+		void reset() override;
+
 		void setEnvironment(const EnvironmentConfig& environment) override;
 		void setThreadCount(std::size_t threads) override;
 		[[nodiscard]] std::size_t threadCount() const override;

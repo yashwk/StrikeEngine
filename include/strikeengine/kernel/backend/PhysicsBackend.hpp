@@ -25,7 +25,7 @@ namespace StrikeEngine::Kernel
 		virtual ~PhysicsBackend() = default;
 
 		/**
-		 * @brief Registers a per-entity propulsion model (W1).
+		 * @brief Registers a per-entity propulsion model.
 		 * @return Pool index for the entity's propulsionId, or -1 if the
 		 *         backend does not support per-entity propulsion models.
 		 */
@@ -33,6 +33,14 @@ namespace StrikeEngine::Kernel
 		{
 			(void)model;
 			return -1;
+		}
+
+		/**
+		 * @brief Drops per-run cached state (e.g. registered propulsion
+		 * models) so a reset kernel starts clean. No-op by default.
+		 */
+		virtual void reset()
+		{
 		}
 
 		virtual void setEnvironment(const EnvironmentConfig& environment)
