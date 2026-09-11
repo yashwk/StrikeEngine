@@ -472,6 +472,17 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["trackConfirmations"] = g.trackConfirmations;
     j["trackCoastTimeoutSec"] = g.trackCoastTimeoutSec;
     j["trackLossTimeoutSec"] = g.trackLossTimeoutSec;
+    j["trackFilterEnabled"] = g.trackFilterEnabled;
+    j["trackProcessNoiseMps2"] = g.trackProcessNoiseMps2;
+    j["trackAngleStdRad"] = g.trackAngleStdRad;
+    j["trackMeasNoiseScale"] = g.trackMeasNoiseScale;
+    j["trackResidualGateSigma"] = g.trackResidualGateSigma;
+    j["trackMaxAccelMps2"] = g.trackMaxAccelMps2;
+    j["trackRetargetConfirmations"] = g.trackRetargetConfirmations;
+    j["trackSeedPolicy"] = g.trackSeedPolicy;
+    j["trackMinQuality01"] = g.trackMinQuality01;
+    j["trackQualityTauSec"] = g.trackQualityTauSec;
+    j["trackVelocityBlend"] = g.trackVelocityBlend;
     // W40 trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
@@ -513,6 +524,17 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackConfirmations = j.value("trackConfirmations", 3);
     g.trackCoastTimeoutSec = j.value("trackCoastTimeoutSec", 0.5);
     g.trackLossTimeoutSec = j.value("trackLossTimeoutSec", 2.0);
+    g.trackFilterEnabled = j.value("trackFilterEnabled", false);
+    g.trackProcessNoiseMps2 = j.value("trackProcessNoiseMps2", 15.0);
+    g.trackAngleStdRad = j.value("trackAngleStdRad", 0.003);
+    g.trackMeasNoiseScale = j.value("trackMeasNoiseScale", 1.0);
+    g.trackResidualGateSigma = j.value("trackResidualGateSigma", 0.0);
+    g.trackMaxAccelMps2 = j.value("trackMaxAccelMps2", 0.0);
+    g.trackRetargetConfirmations = j.value("trackRetargetConfirmations", 1);
+    g.trackSeedPolicy = j.value("trackSeedPolicy", 0);
+    g.trackMinQuality01 = j.value("trackMinQuality01", 0.0);
+    g.trackQualityTauSec = j.value("trackQualityTauSec", 1.0);
+    g.trackVelocityBlend = j.value("trackVelocityBlend", 0.08);
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
     g.datalinkSourceId = j.value("datalinkSourceId", -1);

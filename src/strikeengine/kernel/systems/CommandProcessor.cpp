@@ -49,27 +49,45 @@ namespace StrikeEngine::Kernel {
 
             // W39: an external command seeds (or refreshes) the persistent
             // target track. Identity comes from cmd.targetId when provided;
-            // the state machines then purges/fuses seeker measurements.
+            // the state machines then purges/fuses seeker measurements. The
+            // seed policy controls whether a live measurement track is
+            // overwritten: 0 = legacy clobber, 1 = init-only (no active
+            // track), 2 = refresh when not measurement-maintained.
             if (id < tracks.size) {
-                tracks.state[id] = TrackState::Acquire;
-                tracks.trackId[id] = cmd.targetId;
-                tracks.posX[id] = cmd.targetX;
-                tracks.posY[id] = cmd.targetY;
-                tracks.posZ[id] = cmd.targetZ;
-                tracks.velX[id] = cmd.targetVx;
-                tracks.velY[id] = cmd.targetVy;
-                tracks.velZ[id] = cmd.targetVz;
-                tracks.accelX[id] = cmd.targetAccelX;
-                tracks.accelY[id] = cmd.targetAccelY;
-                tracks.accelZ[id] = cmd.targetAccelZ;
-                tracks.accelAvailable[id] = cmd.targetAccelAvailable;
-                // A command refresh restarts the quality/coast lifecycle, but
-                // measurement updates keep their continuity counters.
-                tracks.timestampSec[id] = simTimeSec;
-                tracks.ageSec[id] = 0.0;
-                tracks.positionStdM[id] = 5.0;
-                tracks.velocityStdMs[id] = 25.0;
-                tracks.quality01[id] = 1.0;
+                const int seedPolicy = id < tracks.seedPolicy.size()
+                    ? tracks.seedPolicy[id] : 0;
+                const TrackState ts = tracks.state[id];
+                const bool measurementMaintained =
+                    ts == TrackState::Acquire || ts == TrackState::Maintain ||
+                    ts == TrackState::Reacquire;
+                bool applySeed = true;
+                if (seedPolicy == 1) {
+                    applySeed = ts == TrackState::None || ts == TrackState::Lost;
+                } else if (seedPolicy == 2) {
+                    applySeed = !measurementMaintained;
+                }
+                if (applySeed) {
+                    tracks.state[id] = TrackState::Acquire;
+                    tracks.trackId[id] = cmd.targetId;
+                    tracks.posX[id] = cmd.targetX;
+                    tracks.posY[id] = cmd.targetY;
+                    tracks.posZ[id] = cmd.targetZ;
+                    tracks.velX[id] = cmd.targetVx;
+                    tracks.velY[id] = cmd.targetVy;
+                    tracks.velZ[id] = cmd.targetVz;
+                    tracks.accelX[id] = cmd.targetAccelX;
+                    tracks.accelY[id] = cmd.targetAccelY;
+                    tracks.accelZ[id] = cmd.targetAccelZ;
+                    tracks.accelAvailable[id] = cmd.targetAccelAvailable;
+                    // A command refresh restarts the quality/coast lifecycle, but
+                    // measurement updates keep their continuity counters.
+                    tracks.timestampSec[id] = simTimeSec;
+                    tracks.ageSec[id] = 0.0;
+                    tracks.positionStdM[id] = 5.0;
+                    tracks.velocityStdMs[id] = 25.0;
+                    tracks.quality01[id] = 1.0;
+                    if (id < tracks.kfCov.size()) tracks.kfCov[id] = {};
+                }
             }
         }
         commandQueue.clear();

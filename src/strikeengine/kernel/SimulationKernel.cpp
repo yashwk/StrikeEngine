@@ -428,6 +428,17 @@ namespace StrikeEngine::Kernel {
             trackBlock.confirmations.push_back(3);
             trackBlock.coastTimeoutSec.push_back(0.5);
             trackBlock.lossTimeoutSec.push_back(2.0);
+            trackBlock.filterEnabled.push_back(false);
+            trackBlock.processNoiseMps2.push_back(15.0);
+            trackBlock.angleStdRad.push_back(0.003);
+            trackBlock.measNoiseScale.push_back(1.0);
+            trackBlock.residualGateSigma.push_back(0.0);
+            trackBlock.maxAccelMps2.push_back(0.0);
+            trackBlock.retargetConfirmations.push_back(1);
+            trackBlock.seedPolicy.push_back(0);
+            trackBlock.minQuality01.push_back(0.0);
+            trackBlock.qualityTauSec.push_back(1.0);
+            trackBlock.velocityBlend.push_back(0.08);
             trackBlock.state.push_back(TrackState::None);
             trackBlock.trackId.push_back(-1);
             trackBlock.posX.push_back(0); trackBlock.posY.push_back(0); trackBlock.posZ.push_back(0);
@@ -443,6 +454,11 @@ namespace StrikeEngine::Kernel {
             trackBlock.dropoutCount.push_back(0);
             trackBlock.measPosX.push_back(0); trackBlock.measPosY.push_back(0); trackBlock.measPosZ.push_back(0);
             trackBlock.measTimeSec.push_back(0.0);
+            trackBlock.kfCov.push_back({});
+            trackBlock.retargetCandidateId.push_back(-1);
+            trackBlock.retargetCount.push_back(0);
+            trackBlock.lastInnovationM.push_back(0.0);
+            trackBlock.residualRejectCount.push_back(0);
         }
 
         // Per-entity defaults apply to BOTH fresh and reused slots so a
@@ -527,6 +543,17 @@ namespace StrikeEngine::Kernel {
         trackBlock.confirmations[id] = resolved.guidanceAutopilot.trackConfirmations;
         trackBlock.coastTimeoutSec[id] = resolved.guidanceAutopilot.trackCoastTimeoutSec;
         trackBlock.lossTimeoutSec[id] = resolved.guidanceAutopilot.trackLossTimeoutSec;
+        trackBlock.filterEnabled[id] = resolved.guidanceAutopilot.trackFilterEnabled;
+        trackBlock.processNoiseMps2[id] = resolved.guidanceAutopilot.trackProcessNoiseMps2;
+        trackBlock.angleStdRad[id] = resolved.guidanceAutopilot.trackAngleStdRad;
+        trackBlock.measNoiseScale[id] = resolved.guidanceAutopilot.trackMeasNoiseScale;
+        trackBlock.residualGateSigma[id] = resolved.guidanceAutopilot.trackResidualGateSigma;
+        trackBlock.maxAccelMps2[id] = resolved.guidanceAutopilot.trackMaxAccelMps2;
+        trackBlock.retargetConfirmations[id] = resolved.guidanceAutopilot.trackRetargetConfirmations;
+        trackBlock.seedPolicy[id] = resolved.guidanceAutopilot.trackSeedPolicy;
+        trackBlock.minQuality01[id] = resolved.guidanceAutopilot.trackMinQuality01;
+        trackBlock.qualityTauSec[id] = resolved.guidanceAutopilot.trackQualityTauSec;
+        trackBlock.velocityBlend[id] = resolved.guidanceAutopilot.trackVelocityBlend;
         trackBlock.state[id] = TrackState::None;
         trackBlock.trackId[id] = -1;
         trackBlock.posX[id] = 0; trackBlock.posY[id] = 0; trackBlock.posZ[id] = 0;
@@ -542,6 +569,11 @@ namespace StrikeEngine::Kernel {
         trackBlock.dropoutCount[id] = 0;
         trackBlock.measPosX[id] = 0; trackBlock.measPosY[id] = 0; trackBlock.measPosZ[id] = 0;
         trackBlock.measTimeSec[id] = 0.0;
+        trackBlock.kfCov[id] = {};
+        trackBlock.retargetCandidateId[id] = -1;
+        trackBlock.retargetCount[id] = 0;
+        trackBlock.lastInnovationM[id] = 0.0;
+        trackBlock.residualRejectCount[id] = 0;
 
         // Fresh and reused slots: clear the navigation filter so a recycled
         // entity ID re-aligns from truth instead of inheriting the previous

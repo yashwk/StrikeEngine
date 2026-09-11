@@ -53,6 +53,17 @@ namespace StrikeEngine::Kernel {
             cfg.trackConfirmations = getIntKey(data, "track_confirmations", "trackConfirmations", cfg.trackConfirmations);
             cfg.trackCoastTimeoutSec = getDoubleKey(data, "track_coast_timeout_sec", "trackCoastTimeoutSec", cfg.trackCoastTimeoutSec);
             cfg.trackLossTimeoutSec = getDoubleKey(data, "track_loss_timeout_sec", "trackLossTimeoutSec", cfg.trackLossTimeoutSec);
+            cfg.trackFilterEnabled = getBoolKey(data, "track_filter_enabled", "trackFilterEnabled", cfg.trackFilterEnabled);
+            cfg.trackProcessNoiseMps2 = getDoubleKey(data, "track_process_noise_mps2", "trackProcessNoiseMps2", cfg.trackProcessNoiseMps2);
+            cfg.trackAngleStdRad = getDoubleKey(data, "track_angle_std_rad", "trackAngleStdRad", cfg.trackAngleStdRad);
+            cfg.trackMeasNoiseScale = getDoubleKey(data, "track_meas_noise_scale", "trackMeasNoiseScale", cfg.trackMeasNoiseScale);
+            cfg.trackResidualGateSigma = getDoubleKey(data, "track_residual_gate_sigma", "trackResidualGateSigma", cfg.trackResidualGateSigma);
+            cfg.trackMaxAccelMps2 = getDoubleKey(data, "track_max_accel_mps2", "trackMaxAccelMps2", cfg.trackMaxAccelMps2);
+            cfg.trackRetargetConfirmations = getIntKey(data, "track_retarget_confirmations", "trackRetargetConfirmations", cfg.trackRetargetConfirmations);
+            cfg.trackSeedPolicy = getIntKey(data, "track_seed_policy", "trackSeedPolicy", cfg.trackSeedPolicy);
+            cfg.trackMinQuality01 = getDoubleKey(data, "track_min_quality01", "trackMinQuality01", cfg.trackMinQuality01);
+            cfg.trackQualityTauSec = getDoubleKey(data, "track_quality_tau_sec", "trackQualityTauSec", cfg.trackQualityTauSec);
+            cfg.trackVelocityBlend = getDoubleKey(data, "track_velocity_blend", "trackVelocityBlend", cfg.trackVelocityBlend);
 
             cfg.trajectoryMinSpeedMps = getDoubleKey(data, "trajectory_min_speed_mps", "trajectoryMinSpeedMps", cfg.trajectoryMinSpeedMps);
             cfg.trajectoryFeasibilityAccelFactor = getDoubleKey(data, "trajectory_feasibility_accel_factor", "trajectoryFeasibilityAccelFactor", cfg.trajectoryFeasibilityAccelFactor);

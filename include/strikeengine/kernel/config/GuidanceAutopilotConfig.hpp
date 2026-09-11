@@ -36,6 +36,20 @@ namespace StrikeEngine::Kernel {
         double trackCoastTimeoutSec = 0.5; // no measurement: Maintain/Acquire -> Coast
         double trackLossTimeoutSec  = 2.0; // no measurement: Coast -> Lost
 
+        // W39 track estimator + association options (defaults reproduce the
+        // legacy overwrite/lifecycle behavior).
+        bool   trackFilterEnabled = false;       // constant-acceleration Kalman filter
+        double trackProcessNoiseMps2 = 15.0;     // target accel PSD (m^2/s^3)
+        double trackAngleStdRad = 0.003;         // assumed seeker angular sigma when unmodeled
+        double trackMeasNoiseScale = 1.0;        // scales the derived measurement variance
+        double trackResidualGateSigma = 0.0;     // 0 = off; else innovation gate
+        double trackMaxAccelMps2 = 0.0;          // 0 = no clamp on the estimated acceleration
+        int    trackRetargetConfirmations = 1;   // consistent ids before switching target
+        int    trackSeedPolicy = 0;              // 0 clobber, 1 init-only, 2 refresh-stale
+        double trackMinQuality01 = 0.0;          // active() quality gate (0 = off)
+        double trackQualityTauSec = 1.0;         // track quality decay (legacy 1.0 s)
+        double trackVelocityBlend = 0.08;        // legacy finite-difference low-pass
+
         // W41 cooperative-engagement datalink: when datalinkSourceId >= 0 the
         // entity uses the source entity's persistent track (of datalinkTargetId)
         // as its midcourse aim, instead of its own command/track, until its own

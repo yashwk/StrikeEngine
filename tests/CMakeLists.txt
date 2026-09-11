@@ -41,6 +41,9 @@ target_link_libraries(seeker_fidelity_test PRIVATE strikeengine)
 target_compile_definitions(seeker_fidelity_test PRIVATE
     STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
+add_executable(track_manager_fidelity_test validation/track_manager_fidelity_test.cpp)
+target_link_libraries(track_manager_fidelity_test PRIVATE strikeengine)
+
 add_executable(navigation_test validation/navigation_test.cpp)
 target_link_libraries(navigation_test PRIVATE strikeengine)
 
@@ -212,6 +215,7 @@ add_test(NAME seeker_intercept COMMAND seeker_intercept_test)
 set_tests_properties(seeker_intercept PROPERTIES TIMEOUT 120)
 
 add_test(NAME track_manager COMMAND track_manager_test)
+add_test(NAME track_manager_fidelity COMMAND track_manager_fidelity_test)
 set_tests_properties(track_manager PROPERTIES TIMEOUT 120)
 
 add_test(NAME trajectory COMMAND trajectory_test)

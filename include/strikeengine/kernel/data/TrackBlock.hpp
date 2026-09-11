@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <array>
 #include <cstdint>
 #include <cstddef>
 
@@ -31,6 +32,18 @@ namespace StrikeEngine::Kernel {
         std::vector<int>    confirmations;     // measurement updates to promote to Maintain
         std::vector<double> coastTimeoutSec;   // no measurement: Maintain/Acquire -> Coast
         std::vector<double> lossTimeoutSec;    // no measurement: Coast -> Lost
+        // Estimator + association options (legacy defaults).
+        std::vector<bool>   filterEnabled;         // constant-acceleration Kalman
+        std::vector<double> processNoiseMps2;      // target accel PSD
+        std::vector<double> angleStdRad;           // assumed seeker angular sigma
+        std::vector<double> measNoiseScale;        // derived-R scale
+        std::vector<double> residualGateSigma;     // 0 = off
+        std::vector<double> maxAccelMps2;          // 0 = no clamp
+        std::vector<int>    retargetConfirmations; // consistent ids before retarget
+        std::vector<int>    seedPolicy;            // 0 clobber, 1 init-only, 2 refresh-stale
+        std::vector<double> minQuality01;          // active() quality gate
+        std::vector<double> qualityTauSec;         // quality decay
+        std::vector<double> velocityBlend;         // legacy finite-diff low-pass
 
         // --- Per-entity track state -----------------------------------------
         std::vector<TrackState> state;         // None = no track
@@ -56,11 +69,27 @@ namespace StrikeEngine::Kernel {
         std::vector<double> measPosX, measPosY, measPosZ;
         std::vector<double> measTimeSec;
 
+        // Filter state (constant-acceleration Kalman, 3x3 per axis packed as
+        // [axis*9 + i*3 + j]). Only touched when filterEnabled.
+        std::vector<std::array<double, 27>> kfCov;
+        // Retarget debounce: candidate identity + consecutive-update count.
+        std::vector<std::int64_t> retargetCandidateId;
+        std::vector<std::uint32_t> retargetCount;
+        // Diagnostics.
+        std::vector<double> lastInnovationM;
+        std::vector<std::uint32_t> residualRejectCount;
+
         std::size_t size = 0;
 
         bool active(std::size_t i) const {
-            return i < size && state[i] != TrackState::None &&
-                   state[i] != TrackState::Lost;
+            if (i >= size || state[i] == TrackState::None ||
+                state[i] == TrackState::Lost) {
+                return false;
+            }
+            if (i < minQuality01.size() && quality01[i] < minQuality01[i]) {
+                return false;
+            }
+            return true;
         }
     };
 
