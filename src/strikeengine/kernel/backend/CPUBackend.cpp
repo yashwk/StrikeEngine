@@ -81,24 +81,9 @@ namespace StrikeEngine::Kernel
         derivBuffer.dynamicPressure.assign(n, 0.0);
         derivBuffer.airDensity.assign(n, 0.0);
         derivBuffer.localSpeedOfSound.assign(n, 0.0);
-        derivBuffer.Ixx.assign(n, 0.0); derivBuffer.Iyy.assign(n, 0.0); derivBuffer.Izz.assign(n, 0.0);
-        derivBuffer.Ixy.assign(n, 0.0); derivBuffer.Ixz.assign(n, 0.0); derivBuffer.Iyz.assign(n, 0.0);
         derivBuffer.mass.assign(n, 0.0);
-        derivBuffer.massDry.assign(n, 0.0);
-        derivBuffer.referenceArea.assign(n, 0.0);
-        derivBuffer.referenceLength.assign(n, 0.0);
-        derivBuffer.cd.assign(n, 0.0);
-        derivBuffer.clAlpha.assign(n, 0.0);
-        derivBuffer.clFin.assign(n, 0.0);
-        derivBuffer.clMax.assign(n, 0.0);
-        derivBuffer.aeroTables.assign(n, nullptr);
-        derivBuffer.fins.assign(n, nullptr);
-        derivBuffer.finSets.assign(n, {});
-        derivBuffer.propulsionId.assign(n, -1);
-        derivBuffer.ignitionTime.assign(n, 0.0);
         derivBuffer.gimbalPitch.assign(n, 0.0); derivBuffer.gimbalYaw.assign(n, 0.0);
         derivBuffer.finPitch.assign(n, 0.0); derivBuffer.finYaw.assign(n, 0.0); derivBuffer.finRoll.assign(n, 0.0);
-        derivBuffer.active.assign(n, false);
         derivBuffer.size = n;
     }
 

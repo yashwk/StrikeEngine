@@ -367,6 +367,8 @@ void to_json(json& j, const SensorConfig& s) {
     j["gps_vel_noise_std_dev"] = s.gpsVelNoiseStdDev;
     j["gps_update_rate_hz"] = s.gpsUpdateRateHz;
     j["gps_innovation_gate_sigma"] = s.gpsInnovationGateSigma;
+    j["baro_innovation_gate_sigma"] = s.baroInnovationGateSigma;
+    j["mag_innovation_gate_sigma"] = s.magInnovationGateSigma;
     j["imu_lever_arm_x"] = s.imuLeverArmX;
     j["imu_lever_arm_y"] = s.imuLeverArmY;
     j["imu_lever_arm_z"] = s.imuLeverArmZ;
@@ -415,6 +417,8 @@ void from_json(const json& j, SensorConfig& s) {
     s.gpsVelNoiseStdDev = j.at("gps_vel_noise_std_dev").get<double>();
     s.gpsUpdateRateHz = j.at("gps_update_rate_hz").get<double>();
     s.gpsInnovationGateSigma = j.value("gps_innovation_gate_sigma", 5.0);
+    s.baroInnovationGateSigma = j.value("baro_innovation_gate_sigma", -1.0);
+    s.magInnovationGateSigma = j.value("mag_innovation_gate_sigma", -1.0);
     s.imuLeverArmX = j.at("imu_lever_arm_x").get<double>();
     s.imuLeverArmY = j.at("imu_lever_arm_y").get<double>();
     s.imuLeverArmZ = j.at("imu_lever_arm_z").get<double>();

@@ -183,6 +183,30 @@ int main() {
               "curve-end case: inertia rescaled by the post-dump mass ratio");
     }
 
+    // ---- Part A4: final-stage burnout reports MotorBurnout once ----
+    {
+        SimulationKernel kernel;
+        int burnouts = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::MotorBurnout) ++burnouts;
+        });
+
+        VehicleConfig cfg;
+        cfg.initialMass = 200.0;
+        cfg.massDry = 100.0;
+        cfg.Ixx = 10.0; cfg.Iyy = 20.0; cfg.Izz = 20.0;
+        StageConfig s0;
+        s0.thrustCurve = {{0.0, 50000.0}, {0.5, 50000.0}, {0.501, 0.0}, {100.0, 0.0}};
+        s0.dryMassKg = 0.0;
+        cfg.propulsion.stages = {s0};
+
+        kernel.createVehicle(makeInit(0, 0, 1000.0), cfg);
+        for (int step = 0; step < 100; ++step) kernel.step(0.01);  // 1 s (> 0.5 s burn)
+        check(burnouts == 1, "final-stage burnout dispatches exactly one MotorBurnout");
+        for (int step = 0; step < 100; ++step) kernel.step(0.01);
+        check(burnouts == 1, "MotorBurnout does not repeat on later steps");
+    }
+
     // ---- Part B: proximity fuse ----
     {
         SimulationKernel kernel;

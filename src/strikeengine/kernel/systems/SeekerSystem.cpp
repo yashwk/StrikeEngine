@@ -601,6 +601,10 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
             }
             if (servicedLock) continue;
 
+            // No grace here: a lock lost to geometry (gimbal/FOV exit) drops
+            // immediately into clearTrack + rescan, while a signal break
+            // inside valid geometry gets the dropout grace above. Geometry
+            // is truth-known, so there is nothing to coast on.
             clearTrack();
             setReason(SeekerRejectReason::NoTarget);
 

@@ -123,6 +123,22 @@ int main()
         check(std::abs(nav.estPz[0] - before) < 1.0, "rejected baro fix leaves state alone");
     }
 
+    // ---- 2b. Baro/mag gates decouple from the GPS gate ----
+    {
+        PhysicsBlock physics; SensorBlock sensors; EntityStatusBlock status; NavigationBlock nav;
+        makeStaticBlocks(physics, sensors, status);
+        NavigationSystem system;
+        system.update(sensors, physics, nav, 0.01); // align
+        sensors.baroEnabled[0] = true;
+        sensors.baroUpdated[0] = true;
+        sensors.baroAlt[0] = 100000.0;
+        sensors.baroNoiseStdDev[0] = 1.0;
+        sensors.gpsInnovationGateSigma[0] = 0.0; // GPS gating disabled...
+        sensors.baroInnovationGateSigma = {3.0}; // ...but the baro keeps its own
+        system.update(sensors, physics, nav, 0.01);
+        check(nav.lastBaroRejected[0], "explicit baro gate rejects despite disabled GPS gate");
+    }
+
     // ---- 3/4. Magnetometer corrects yaw; disturbed fields rejected ----
     {
         PhysicsBlock physics; SensorBlock sensors; EntityStatusBlock status; NavigationBlock nav;

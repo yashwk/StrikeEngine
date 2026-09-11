@@ -19,6 +19,10 @@ namespace StrikeEngine::Kernel {
         // Normalized innovation gate for each scalar GPS position/velocity
         // measurement. <= 0 disables rejection; the default is a 5-sigma gate.
         double gpsInnovationGateSigma = 5.0;
+        // Independent baro/mag gates. Negative follows the GPS gate (legacy);
+        // an explicit value (including 0 = disabled) decouples the source.
+        double baroInnovationGateSigma = -1.0;
+        double magInnovationGateSigma = -1.0;
         double imuLeverArmX = 0.0;
         double imuLeverArmY = 0.0;
         double imuLeverArmZ = 0.0;

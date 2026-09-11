@@ -96,8 +96,6 @@ namespace StrikeEngine::Kernel {
                 sx += a * (tx - sx);
                 sy += a * (ty - sy);
                 sz += a * (tz - sz);
-            } else if (slew <= 0.0) {
-                sx = tx; sy = ty; sz = tz;
             }
             if (slew > 0.0 && dt > 0.0) {
                 const double step = slew * dt;

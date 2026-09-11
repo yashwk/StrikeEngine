@@ -712,10 +712,18 @@ namespace StrikeEngine::Kernel {
         // vector<bool> element proxies cannot bind to bool&, so rejection
         // flows through locals published to the nav block at the end.
         bool gpsRej = false, baroRej = false, magRej = false;
+        // Baro/mag rejection used to share the GPS gate, so disabling GPS
+        // gating silently disabled theirs too. Each now has its own gate;
+        // negative follows the GPS gate (legacy).
+        const double baroGateCfg = sensVal(sensors.baroInnovationGateSigma, id, -1.0);
+        const double magGateCfg = sensVal(sensors.magInnovationGateSigma, id, -1.0);
+        const double baroGate = baroGateCfg >= 0.0 ? baroGateCfg : innovationGate;
+        const double magGate = magGateCfg >= 0.0 ? magGateCfg : innovationGate;
         auto updateRow = [&](const double (&H)[kErrorStateSize], double z,
                              double variance, bool* rejectedFlag,
                              std::array<double, kErrorStateSize>& acc,
-                             bool freezeAttitude = false) -> double {
+                             bool freezeAttitude = false,
+                             double gateOverride = -1.0) -> double {
             if (!std::isfinite(z)) {
                 if (rejectedFlag) *rejectedFlag = true;
                 return -1.0;
@@ -736,8 +744,9 @@ namespace StrikeEngine::Kernel {
             if (innovationVariance <= kMinCovariance) return -1.0;
             const double innovationSigma = std::abs(innovation) /
                 std::sqrt(innovationVariance);
-            if (innovationGate > 0.0 &&
-                (!std::isfinite(innovationSigma) || innovationSigma > innovationGate)) {
+            const double gate = gateOverride >= 0.0 ? gateOverride : innovationGate;
+            if (gate > 0.0 &&
+                (!std::isfinite(innovationSigma) || innovationSigma > gate)) {
                 if (rejectedFlag) *rejectedFlag = true;
                 // Report the sigma even for gate rejects: the max-innovation
                 // diagnostic must reflect rejected fixes (legacy contract).
@@ -951,7 +960,7 @@ namespace StrikeEngine::Kernel {
             const bool freezeAttitude =
                 !sensFlag(sensors.baroAttitudeCorrectionEnabled, id);
             updateRow(H, sensVal(sensors.baroAlt, id, 0.0) - linShift, rBaro,
-                      &baroRej, correction, freezeAttitude);
+                      &baroRej, correction, freezeAttitude, baroGate);
         }
 
         // Magnetometer heading aid (opt-in): body-frame residual against the
@@ -1009,7 +1018,7 @@ namespace StrikeEngine::Kernel {
                     // Predicted body component from the estimate (nonlinear
                     // part); the row linearizes the error about it.
                     const double pred = R[r][0] * field[0] + R[r][1] * field[1] + R[r][2] * field[2];
-                    updateRow(H, mvec[r] - pred, rMag, &magRej, magCorrection);
+                    updateRow(H, mvec[r] - pred, rMag, &magRej, magCorrection, false, magGate);
                 }
             }
         }
@@ -1049,12 +1058,23 @@ namespace StrikeEngine::Kernel {
         // (legacy literals 0.5 m/s^2 and 0.02 rad/s, now configurable).
         const double kMaxAccelBias = sensVal(sensors.maxAccelBiasEstimate, id, 0.5);
         const double kMaxGyroBias = sensVal(sensors.maxGyroBiasEstimate, id, 0.02);
-        nav.estAccelBiasX[id] = std::clamp(nav.estAccelBiasX[id], -kMaxAccelBias, kMaxAccelBias);
-        nav.estAccelBiasY[id] = std::clamp(nav.estAccelBiasY[id], -kMaxAccelBias, kMaxAccelBias);
-        nav.estAccelBiasZ[id] = std::clamp(nav.estAccelBiasZ[id], -kMaxAccelBias, kMaxAccelBias);
-        nav.estGyroBiasX[id] = std::clamp(nav.estGyroBiasX[id], -kMaxGyroBias, kMaxGyroBias);
-        nav.estGyroBiasY[id] = std::clamp(nav.estGyroBiasY[id], -kMaxGyroBias, kMaxGyroBias);
-        nav.estGyroBiasZ[id] = std::clamp(nav.estGyroBiasZ[id], -kMaxGyroBias, kMaxGyroBias);
+        // A pinned estimate must not look certain: when the clamp fires,
+        // open that variance to the bound so later fixes can pull the state
+        // back off the rail instead of trusting a stuck value.
+        auto clampBias = [&](double& est, double bound, std::size_t diag) {
+            const double c = std::clamp(est, -bound, bound);
+            if (c != est) {
+                est = c;
+                double& var = covariance[covarianceIndex(diag, diag)];
+                var = std::max(var, bound * bound);
+            }
+        };
+        clampBias(nav.estAccelBiasX[id], kMaxAccelBias, 9);
+        clampBias(nav.estAccelBiasY[id], kMaxAccelBias, 10);
+        clampBias(nav.estAccelBiasZ[id], kMaxAccelBias, 11);
+        clampBias(nav.estGyroBiasX[id], kMaxGyroBias, 12);
+        clampBias(nav.estGyroBiasY[id], kMaxGyroBias, 13);
+        clampBias(nav.estGyroBiasZ[id], kMaxGyroBias, 14);
     }
 
     void NavigationSystem::update(

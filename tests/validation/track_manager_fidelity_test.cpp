@@ -221,7 +221,19 @@ int main()
         check(tracks.trackId[0] == 9, "confirmed id switch retargets the track");
     }
 
-    // ---- 5. Command-seed policy vs a live measurement track ----
+    // ---- 5. First acquisition skips the retarget debounce ----
+    {
+        TrackBlock tracks = makeTracks();
+        tracks.retargetConfirmations = {3};
+        SeekerBlock seeker = makeSeeker();
+        seeker.lockedTargetId = {9};
+        double t = 0.0;
+        seekerFixAt(seeker, 1000.0, 0.0, 0.0);
+        t += dt; tm.update(nav, seeker, tracks, t, dt);
+        check(tracks.trackId[0] == 9, "first fix acquires immediately despite confirmations=3");
+    }
+
+    // ---- 6. Command-seed policy vs a live measurement track ----
     {
         auto seed = [&](int policy) {
             TrackBlock tracks = makeTracks();
@@ -251,7 +263,7 @@ int main()
               "refresh-stale seed policy also preserves a maintained track");
     }
 
-    // ---- 6. Quality gate on active() ----
+    // ---- 7. Quality gate on active() ----
     {
         TrackBlock tracks = makeTracks();
         tracks.state = {TrackState::Maintain};
@@ -262,7 +274,7 @@ int main()
         check(tracks.active(0), "track above the quality floor is active");
     }
 
-    // ---- 7. All-or-nothing gated fusion: a reject on one axis must not
+    // ---- 8. All-or-nothing gated fusion: a reject on one axis must not
     // leave the other axes fused while the step is booked as a dropout ----
     {
         TrackBlock tracks = makeTracks();
@@ -288,7 +300,7 @@ int main()
               "rejected fix leaves the track position alone");
     }
 
-    // ---- 8. Dropout grace coasts: a locked-but-stale fix is not fused ----
+    // ---- 9. Dropout grace coasts: a locked-but-stale fix is not fused ----
     {
         TrackBlock tracks = makeTracks();
         tracks.filterEnabled = {true};
@@ -310,7 +322,7 @@ int main()
               "stale grace fix is not fused into the track");
     }
 
-    // ---- 9. Config round-trip of the new track keys ----
+    // ---- 10. Config round-trip of the new track keys ----
     {
         VehicleConfig cfg;
         cfg.guidanceAutopilot.trackFilterEnabled = true;

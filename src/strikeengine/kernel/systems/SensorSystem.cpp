@@ -85,9 +85,19 @@ namespace StrikeEngine::Kernel {
             sensors.gpsUpdated.resize(size);
             sensors.imuLeverArmX.resize(size); sensors.imuLeverArmY.resize(size); sensors.imuLeverArmZ.resize(size);
             sensors.gpsInnovationGateSigma.resize(size, 5.0);
+            sensors.baroInnovationGateSigma.resize(size, -1.0);
+            sensors.magInnovationGateSigma.resize(size, -1.0);
             sensors.imuEnabled.resize(size, true);
             sensors.gpsEnabled.resize(size, true);
             sensors.gpsUpdateRateHz.resize(size, 1.0);
+            // Fallback defaults mirror createVehicle wiring so hand-built
+            // blocks never read these out of bounds.
+            sensors.accelNoiseStdDev.resize(size, 0.1);
+            sensors.accelBiasStdDev.resize(size, 0.01);
+            sensors.gyroNoiseStdDev.resize(size, 0.01);
+            sensors.gyroBiasStdDev.resize(size, 0.001);
+            sensors.gpsPosNoiseStdDev.resize(size, 5.0);
+            sensors.gpsVelNoiseStdDev.resize(size, 0.5);
             sensors.baroAlt.resize(size, 0.0);
             sensors.baroUpdated.resize(size, false);
             sensors.magX.resize(size, 0.0); sensors.magY.resize(size, 0.0); sensors.magZ.resize(size, 0.0);

@@ -168,7 +168,10 @@ namespace StrikeEngine::Models {
             // Lift (pitch plane): positive alpha => force -Z (up), saturated at
             // CL_max (stall / control limit). With geometric fins the fin lift
             // slope clAlpha(mach) acts on the fin's local AoA (alpha +
-            // finPitch); without them the flat clFin term is used.
+            // finPitch); without them the flat clFin term is used. The body
+            // slope p.clAlpha and the fin slopes SUM to the airframe slope by
+            // design (profile cl_alpha values are tuned with this sum), so
+            // the body term is kept on the finned path too.
             double cl;
             if (!fList.empty()) {
                 double finLift = 0.0;
@@ -214,9 +217,7 @@ namespace StrikeEngine::Models {
                 }
                 fy -= q * S * std::clamp(cySum, -p.clMax, p.clMax);
             } else {
-                constexpr double cyBody = 0.0;
                 const double cyFin  = std::clamp(p.clFin * finYaw, -p.clMax, p.clMax);
-                fy -= q * S * cyBody;
                 fy += q * S * cyFin;
             }
 

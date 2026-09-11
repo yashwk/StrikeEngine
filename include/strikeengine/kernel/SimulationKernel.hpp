@@ -48,6 +48,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> dropMasses;    // structure dropped after each stage (kg)
         std::vector<double> propellantCaps; // raw StageConfig::propellantMassKg per stage
         std::vector<double> reservedAfter;  // sum of later stages' positive propellant caps (kg)
+        bool burnoutReported = false;       // final-stage MotorBurnout dispatched
         std::vector<double> maxGimbalPitchRad;
         std::vector<double> maxGimbalYawRad;
         std::vector<double> gimbalTimeConstantSec;

@@ -113,6 +113,13 @@ namespace StrikeEngine::Kernel {
             if (t.kfCov.size() < n) t.kfCov.resize(n);
             if (t.lastInnovationM.size() < n) t.lastInnovationM.resize(n, 0.0);
             if (t.residualRejectCount.size() < n) t.residualRejectCount.resize(n, 0);
+            // Core lifecycle arrays are kernel-sized by callers, but
+            // hand-built blocks may omit them; grow with canonical defaults.
+            if (t.confirmations.size() < n) t.confirmations.resize(n, 3);
+            if (t.coastTimeoutSec.size() < n) t.coastTimeoutSec.resize(n, 0.5);
+            if (t.lossTimeoutSec.size() < n) t.lossTimeoutSec.resize(n, 2.0);
+            if (t.trackId.size() < n) t.trackId.resize(n, -1);
+            if (t.updateCount.size() < n) t.updateCount.resize(n, 0);
         }
 
     }
@@ -248,9 +255,11 @@ namespace StrikeEngine::Kernel {
                 continue;
             }
 
-            // --- Association / retarget debounce --------------------------
+            // --- Association / retarget debounce (established tracks only).
+            // A first acquisition (trackId < 0) must not wait out the
+            // retarget count; the debounce hardens re-targeting, not lock-on.
             const bool sameTarget = tracks.trackId[i] == newId;
-            if (!sameTarget) {
+            if (!sameTarget && tracks.trackId[i] >= 0) {
                 if (tracks.retargetCandidateId[i] == newId) {
                     tracks.retargetCount[i] += 1;
                 } else {
@@ -306,6 +315,9 @@ namespace StrikeEngine::Kernel {
                         dropoutStep(true);   // already predicted this step
                         continue;
                     }
+                    // A fused fix ends the reject streak: the counter reads
+                    // consecutive rejects, not lifetime rejects.
+                    tracks.residualRejectCount[i] = 0;
                     tracks.posX[i] = sX[0]; tracks.velX[i] = sX[1]; tracks.accelX[i] = sX[2];
                     tracks.posY[i] = sY[0]; tracks.velY[i] = sY[1]; tracks.accelY[i] = sY[2];
                     tracks.posZ[i] = sZ[0]; tracks.velZ[i] = sZ[1]; tracks.accelZ[i] = sZ[2];

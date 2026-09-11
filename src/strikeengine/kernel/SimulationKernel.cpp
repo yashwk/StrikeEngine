@@ -385,6 +385,8 @@ namespace StrikeEngine::Kernel {
             sensorBlock.gpsPosNoiseStdDev.push_back(5.0);
             sensorBlock.gpsVelNoiseStdDev.push_back(0.5);
             sensorBlock.gpsInnovationGateSigma.push_back(5.0);
+            sensorBlock.baroInnovationGateSigma.push_back(-1.0);
+            sensorBlock.magInnovationGateSigma.push_back(-1.0);
             sensorBlock.imuLeverArmX.push_back(0.0);
             sensorBlock.imuLeverArmY.push_back(0.0);
             sensorBlock.imuLeverArmZ.push_back(0.0);
@@ -705,6 +707,8 @@ namespace StrikeEngine::Kernel {
         sensorBlock.gpsPosNoiseStdDev[id] = resolved.sensor.gpsPosNoiseStdDev;
         sensorBlock.gpsVelNoiseStdDev[id] = resolved.sensor.gpsVelNoiseStdDev;
         sensorBlock.gpsInnovationGateSigma[id] = resolved.sensor.gpsInnovationGateSigma;
+        sensorBlock.baroInnovationGateSigma[id] = resolved.sensor.baroInnovationGateSigma;
+        sensorBlock.magInnovationGateSigma[id] = resolved.sensor.magInnovationGateSigma;
         sensorBlock.imuLeverArmX[id] = resolved.sensor.imuLeverArmX;
         sensorBlock.imuLeverArmY[id] = resolved.sensor.imuLeverArmY;
         sensorBlock.imuLeverArmZ[id] = resolved.sensor.imuLeverArmZ;
@@ -1111,20 +1115,36 @@ namespace StrikeEngine::Kernel {
             if (!physicsBlock.active[i]) continue;
             if (physicsBlock.stageCount[i] <= 0) continue;
             const int si = physicsBlock.stageIndex[i];
-            if (si < 0 || si + 1 >= physicsBlock.stageCount[i]) continue;
+            if (si < 0 || si >= physicsBlock.stageCount[i]) continue;
             const StagePlan& plan = stagePlans[i];
-            if (si + 1 >= static_cast<int>(plan.poolIds.size())) continue;
+            if (si >= static_cast<int>(plan.poolIds.size())) continue;
 
             // Burnout: the active stage's thrust curve has fully elapsed, or
             // the stage's propellant cap has been drawn down to its
             // stage-aware floor (mass can no longer decrease).
             const bool curveElapsed =
+                si < static_cast<int>(plan.burnDurations.size()) &&
                 time.currentTime() - physicsBlock.ignitionTime[i] >= plan.burnDurations[si];
             const bool propellantExhausted =
                 si < static_cast<int>(plan.propellantCaps.size()) &&
                 plan.propellantCaps[si] > 0.0 &&
                 physicsBlock.mass[i] <= physicsBlock.stageMinMass[i] + 1e-9;
             if (!curveElapsed && !propellantExhausted) {
+                continue;
+            }
+
+            // Final-stage burnout has no separation; it reports MotorBurnout
+            // once so the event stream covers the whole burn (previously the
+            // last stage ended silently).
+            if (si + 1 >= physicsBlock.stageCount[i]) {
+                if (!plan.burnoutReported) {
+                    SimulationEvent evt;
+                    evt.type = EventType::MotorBurnout;
+                    evt.entityId = i;
+                    evt.timestamp = time.currentTime();
+                    eventSystem.dispatch(evt);
+                    stagePlans[i].burnoutReported = true;
+                }
                 continue;
             }
 
