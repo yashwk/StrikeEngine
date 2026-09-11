@@ -17,8 +17,8 @@ namespace StrikeEngine::Kernel {
         double kRollP  = 0.10;   // rad per rad roll
         double kRollD  = 0.05;   // rad per (rad/s)
         double maxDeflectionRad = 0.43;      // ~25 deg fin clamp
-        double servoTimeConstantSec = 0.02;  // future servo lag (inert)
-        double maxServoRateRadPerSec = 5.24; // future servo rate (inert)
+        double servoTimeConstantSec = 0.02;  // fin servo lag, live in CPUBackend
+        double maxServoRateRadPerSec = 5.24; // fin servo rate limit, live in CPUBackend
 
         // --- Autopilot loop-quality options (defaults = legacy law) ---------
         double kRatePitchP = -1.0;   // pitch rate damping; <0 = use kRateP
@@ -55,23 +55,23 @@ namespace StrikeEngine::Kernel {
         // step's delivered/demanded fin margin (0.1..1).
         bool   guidanceAuthorityAwareLimitEnabled = false;
 
-        // W36 guidance-phase manager (defaults preserve the legacy behavior):
+        // Guidance-phase manager (defaults preserve the legacy behavior):
         // handoffBlendTimeSec = 0  -> instant seeker override (legacy)
         // lockLossRetentionSec = 0 -> no guidance-layer retention past seeker loss
         // apnFeedforwardEnabled = false -> pure PN midcourse (legacy)
         double handoffBlendTimeSec  = 0.0;  // acquisition -> terminal ramp time (s)
         double lockLossRetentionSec = 0.0;  // parent track retention after lock loss (s)
         bool   apnFeedforwardEnabled = false; // use target-accel feed-forward APN
-        bool   gravityCompensationEnabled = false; // TPN-G law selector (used by the StrikeSim designer; inert in the kernel seeker APN)
+        bool   gravityCompensationEnabled = false; // sim-side TPN-G selector (carried here for the StrikeSim designer; the kernel seeker APN does not consume it)
 
-        // W39 persistent target-track manager (defaults keep the external
+        // Persistent target-track manager (defaults keep the external
         // command state as the guidance aim; a track only supersedes it once
         // confirmations of consistent seeker measurements arrive).
         int    trackConfirmations  = 3;    // measurement updates to promote to Maintain
         double trackCoastTimeoutSec = 0.5; // no measurement: Maintain/Acquire -> Coast
         double trackLossTimeoutSec  = 2.0; // no measurement: Coast -> Lost
 
-        // W39 track estimator + association options (defaults reproduce the
+        // Track estimator + association options (defaults reproduce the
         // legacy overwrite/lifecycle behavior).
         bool   trackFilterEnabled = false;       // constant-acceleration Kalman filter
         double trackProcessNoiseMps2 = 15.0;     // target accel PSD (m^2/s^3)
@@ -100,10 +100,10 @@ namespace StrikeEngine::Kernel {
         double cruiseAltitudeDamping = 0.30;  // vertical accel per m/s of climb rate (1/s)
         double cruiseWaypointGain    = 0.8;   // horizontal accel toward the waypoint (1/s^2)
 
-        // W40 trajectory-core keys (optional with legacy defaults; active only
+        // Trajectory-core keys (optional with legacy defaults; active only
         // when GuidanceMode::Trajectory is explicitly selected). A seeker lock
         // still overrides midcourse trajectory management exactly as it does
-        // for ProportionalNavigation (W36 precedence).
+        // for ProportionalNavigation (phase-manager precedence).
         double trajectoryMinSpeedMps = 30.0;           // own est-speed floor for an intercept prediction
         double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
 

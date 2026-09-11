@@ -29,7 +29,7 @@ namespace StrikeEngine::Kernel {
         double baroBiasStdDev = 0.0;       // m/sqrt(s) random-walk bias drift
         double baroUpdateRateHz = 1.0;
 
-        // --- Magnetometer heading aiding (opt-in; tilted-dipole MVP model) --
+        // --- Magnetometer heading aiding (opt-in; tilted-dipole model) --
         bool   magEnabled = false;
         double magNoiseStdDev = 50e-9;     // T per axis (50 nT)
         double magUpdateRateHz = 10.0;

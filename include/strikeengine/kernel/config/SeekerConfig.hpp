@@ -9,7 +9,7 @@ namespace StrikeEngine::Kernel {
      * hardcoded createVehicle values, so existing scenarios are unchanged).
      *
      * `VehicleConfig::seeker` is copied into `SeekerBlock` per entity. The
-     * SARH illuminator is a STATIC configured position for this MVP; tracking
+     * SARH illuminator is a STATIC configured position; tracking
      * a dynamic illuminator entity is future work.
      */
     struct SeekerConfig {

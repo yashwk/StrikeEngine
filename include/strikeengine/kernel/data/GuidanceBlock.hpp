@@ -8,11 +8,11 @@ namespace StrikeEngine::Kernel {
         None,                   // Ballistic or Uncontrolled
         ProportionalNavigation, // ProNav interception
         Waypoint,               // Navigating to static point
-        Trajectory,             // W40 predictive intercept management (midcourse)
+        Trajectory,             // predictive intercept management (midcourse)
         Cruise                  // aircraft cruise: altitude-hold + waypoint heading
     };
 
-    // Explicit guidance-phase state (W36). Phase selection is separate from
+    // Explicit guidance-phase state. Phase selection is separate from
     // law computation; see GuidanceSystem.cpp.
     enum class GuidancePhase : uint8_t {
         None,        // ballistic / no guidance / comms failure
@@ -29,19 +29,19 @@ namespace StrikeEngine::Kernel {
         PureProNav,     // N * Vc * (LOS-rate cross LOS)
         SeekerRateAPN,  // body-frame LOS-rate APN (seeker)
         AugmentedProNav,// PN + target-acceleration feed-forward (0.5*N*a_t_perp)
-        Trajectory,     // W40 PN aimed at a predicted intercept point
+        Trajectory,     // PN aimed at a predicted intercept point
         Cruise,         // aircraft altitude-hold + waypoint course
         BodyPN          // 3D PN on the reconstructed seeker LOS (gyro-decoupled)
     };
 
-    // Aim source for the W40 trajectory predictor (diagnostic).
+    // Aim source for the trajectory predictor (diagnostic).
     enum class GuidanceAimSource : uint8_t {
         None,    // no aim selected (ballistic / not in Trajectory mode)
         Command, // external command state (SimulationCommand / scenario)
-        Track    // measurement-anchored persistent target track (W39)
+        Track    // measurement-anchored persistent target track
     };
 
-    // W40 trajectory-feasibility reason (diagnostic).
+    // Trajectory-feasibility reason (diagnostic).
     enum class TrajectoryReason : uint8_t {
         None,          // no prediction evaluated this step
         Ok,            // predicted intercept is feasible
@@ -93,13 +93,13 @@ namespace StrikeEngine::Kernel {
         std::vector<double> cruiseAltitudeDamping; // vertical accel per m/s of climb rate (1/s)
         std::vector<double> cruiseWaypointGain;    // horizontal accel toward the waypoint (1/s^2)
 
-        // W36 phase/track configuration (defaults keep the legacy path).
+        // Phase/track configuration (defaults keep the legacy path).
         std::vector<double> handoffBlendTimeSec;   // acquisition->terminal ramp; 0 = instant
         std::vector<double> lockLossRetentionSec;  // guidance-layer track retention past lock loss; 0 = none
         std::vector<bool>   apnFeedforwardEnabled; // APN target-accel feed-forward (needs targetAccelAvailable)
-        std::vector<bool>   gravityCompensationEnabled; // TPN-G law selector (set by StrikeSim; not consumed by the seeker APN)
+        std::vector<bool>   gravityCompensationEnabled; // sim-side TPN-G selector (carried for StrikeSim; not consumed by the kernel)
 
-        // W40 trajectory-core configuration (active only in Trajectory mode;
+        // Trajectory-core configuration (active only in Trajectory mode;
         // defaults preserve the legacy midcourse path for all other modes).
         std::vector<double> trajectoryMinSpeedMps;          // own est-speed floor for an intercept prediction (default 30.0)
         std::vector<double> trajectoryFeasibilityAccelFactor; // feasibility: requiredAccel <= factor * maxAccel when maxAccel > 0 (0.95)
@@ -133,7 +133,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> commandedAccelY;
         std::vector<double> commandedAccelZ;
 
-        // W36 phase/track state + diagnostics (see GuidanceSystem.cpp).
+        // Phase/track state + diagnostics (see GuidanceSystem.cpp).
         std::vector<GuidancePhase> phase;
         std::vector<GuidanceLaw>   law;
         std::vector<std::int64_t>  trackId;            // -1 = none
@@ -156,7 +156,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> retainedAccelY;
         std::vector<double> retainedAccelZ;
 
-        // W40 trajectory prediction + feasibility diagnostics (midcourse).
+        // Trajectory prediction + feasibility diagnostics (midcourse).
         std::vector<double> predictedInterceptX;  // predicted intercept point (world frame)
         std::vector<double> predictedInterceptY;
         std::vector<double> predictedInterceptZ;

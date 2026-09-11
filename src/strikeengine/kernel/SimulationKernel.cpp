@@ -187,7 +187,7 @@ namespace StrikeEngine::Kernel {
             sensorBlock.size = physicsBlock.size;
             navigationBlock.size = physicsBlock.size;
             seekerBlock.size = physicsBlock.size;
-            trackBlock.size = physicsBlock.size;   // W39 track manager reads tracks.size
+            trackBlock.size = physicsBlock.size;   // the track manager reads tracks.size
             
             // Resize arrays
             physicsBlock.px.push_back(0); physicsBlock.py.push_back(0); physicsBlock.pz.push_back(0);
@@ -486,7 +486,7 @@ namespace StrikeEngine::Kernel {
             seekerBlock.glintAzM.push_back(0.0);
             seekerBlock.glintElM.push_back(0.0);
 
-            // W39 persistent track state (config defaults; reset in the common path)
+            // Persistent track state (config defaults; reset in the common path)
             trackBlock.confirmations.push_back(3);
             trackBlock.coastTimeoutSec.push_back(0.5);
             trackBlock.lossTimeoutSec.push_back(2.0);
@@ -600,12 +600,12 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.cruiseAltitudeGain[id] = resolved.guidanceAutopilot.cruiseAltitudeGain;
         guidanceBlock.cruiseAltitudeDamping[id] = resolved.guidanceAutopilot.cruiseAltitudeDamping;
         guidanceBlock.cruiseWaypointGain[id] = resolved.guidanceAutopilot.cruiseWaypointGain;
-        // W36 phase-manager config (defaults preserve the legacy path).
+        // Phase-manager config (defaults preserve the legacy path).
         guidanceBlock.handoffBlendTimeSec[id] = resolved.guidanceAutopilot.handoffBlendTimeSec;
         guidanceBlock.lockLossRetentionSec[id] = resolved.guidanceAutopilot.lockLossRetentionSec;
         guidanceBlock.apnFeedforwardEnabled[id] = resolved.guidanceAutopilot.apnFeedforwardEnabled;
         guidanceBlock.gravityCompensationEnabled[id] = resolved.guidanceAutopilot.gravityCompensationEnabled;
-        // W36 state/diagnostics reset (fresh and reused slots).
+        // Phase state/diagnostics reset (fresh and reused slots).
         guidanceBlock.phase[id] = GuidancePhase::None;
         guidanceBlock.law[id] = GuidanceLaw::None;
         guidanceBlock.trackId[id] = -1;
@@ -620,7 +620,7 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.retainedAccelX[id] = 0;
         guidanceBlock.retainedAccelY[id] = 0;
         guidanceBlock.retainedAccelZ[id] = 0;
-        // W40 trajectory-core config + state/diagnostics reset (fresh and reused).
+        // Trajectory-core config + state/diagnostics reset (fresh and reused).
         guidanceBlock.trajectoryMinSpeedMps[id] = resolved.guidanceAutopilot.trajectoryMinSpeedMps;
         guidanceBlock.trajectoryFeasibilityAccelFactor[id] = resolved.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
         guidanceBlock.gyroDecouplingEnabled[id] = resolved.guidanceAutopilot.guidanceGyroDecouplingEnabled;
@@ -1179,6 +1179,19 @@ namespace StrikeEngine::Kernel {
     }
 
     void SimulationKernel::processWarheads() {
+        // Analytic closest-approach projection of the relative state onto
+        // the miss vector. Returns {time-to-CPA (clamped >= 0), CPA range}.
+        const auto projectCpa = [](double dx, double dy, double dz,
+                                   double dvx, double dvy, double dvz) {
+            const double rdotv = dx * dvx + dy * dvy + dz * dvz;
+            const double v2 = dvx * dvx + dvy * dvy + dvz * dvz;
+            double tcpa = 0.0;
+            if (v2 > 1e-12) tcpa = std::max(0.0, -rdotv / v2);
+            const double mx = dx + dvx * tcpa;
+            const double my = dy + dvy * tcpa;
+            const double mz = dz + dvz * tcpa;
+            return std::pair<double, double>{tcpa, std::sqrt(mx*mx + my*my + mz*mz)};
+        };
         for (std::size_t i = 0; i < warheads.size(); ++i) {
             WarheadState& wh = warheads[i];
             if (wh.detonated || wh.lethalRadiusM <= 0.0) continue;
@@ -1201,12 +1214,11 @@ namespace StrikeEngine::Kernel {
                         if (wh.proximityTriggerM > 0.0) {
                             const double r2 = wh.proximityTriggerM * wh.proximityTriggerM;
                             if (wh.cpaFuzingEnabled) {
-                                // Analytic closest-approach projection: pick
-                                // the hostile whose time-to-CPA is soonest
-                                // inside the lookahead window; evaluate the
-                                // kill on the projected miss vector so a
-                                // high-closing-speed pass is not penalized by
-                                // the pre-CPA range.
+                                // CPA fuzing: fire on the hostile whose
+                                // time-to-CPA is soonest inside the lookahead
+                                // window, and score the kill on the projected
+                                // miss so a fast pass is not penalized by the
+                                // pre-CPA range.
                                 double bestTcpa = std::numeric_limits<double>::infinity();
                                 double bestCpa = 0.0;
                                 std::size_t bestId = 0;
@@ -1221,21 +1233,12 @@ namespace StrikeEngine::Kernel {
                                     const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
                                     const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
                                     const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
-                                    const double rdotv = dx*dvx + dy*dvy + dz*dvz;
                                     const double dist = std::sqrt(dist2);
-                                    const double closing = dist > 1e-9 ? -rdotv / dist : 0.0;
+                                    const double closing = dist > 1e-9
+                                        ? -(dx*dvx + dy*dvy + dz*dvz) / dist : 0.0;
                                     if (wh.minClosingSpeedMps > 0.0 && closing < wh.minClosingSpeedMps) continue;
-                                    const double v2 = dvx*dvx + dvy*dvy + dvz*dvz;
-                                    double tcpa = 0.0;
-                                    if (v2 > 1e-12) {
-                                        tcpa = -rdotv / v2;
-                                        if (tcpa < 0.0) tcpa = 0.0;
-                                    }
+                                    const auto [tcpa, cpaDist] = projectCpa(dx, dy, dz, dvx, dvy, dvz);
                                     if (tcpa > wh.fuseLookaheadSec) continue;
-                                    const double mx = dx + dvx * tcpa;
-                                    const double my = dy + dvy * tcpa;
-                                    const double mz = dz + dvz * tcpa;
-                                    const double cpaDist = std::sqrt(mx*mx + my*my + mz*mz);
                                     if (tcpa < bestTcpa) {
                                         bestTcpa = tcpa;
                                         bestCpa = cpaDist;
@@ -1317,13 +1320,12 @@ namespace StrikeEngine::Kernel {
             }
 
             // Lethality with an optional fragmentation/overpressure falloff
-            // band: guaranteed kill inside lethalRadiusM, probabilistic kill
-            // across (lethalRadiusM, falloffRadiusM], no effect beyond. The
-            // RNG draw is taken only when the outcome is genuinely uncertain
-            // (0 < p < 1) so flat-law warheads (falloffRadiusM <= 0) never
-            // consume the kernel RNG stream and keep today's behavior. The
-            // per-hostile index order and no-draw-for-certain-outcomes rule
-            // are preserved exactly.
+            // band (guaranteed kill inside the lethal radius, linear decay to
+            // the falloff edge). The RNG draw happens only for genuinely
+            // uncertain outcomes (0 < p < 1), so flat-law warheads never
+            // consume the kernel stream. Hostiles are evaluated in index
+            // order; results are collected first so the event payload and
+            // the kill rolls share one pass.
             struct HitResult {
                 std::size_t id;
                 double miss;
@@ -1346,17 +1348,7 @@ namespace StrikeEngine::Kernel {
                     const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
                     const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
                     const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
-                    const double rdotv = dx*dvx + dy*dvy + dz*dvz;
-                    const double v2 = dvx*dvx + dvy*dvy + dvz*dvz;
-                    double tcpa = 0.0;
-                    if (v2 > 1e-12) {
-                        tcpa = -rdotv / v2;
-                        if (tcpa < 0.0) tcpa = 0.0;
-                    }
-                    const double mx = dx + dvx * tcpa;
-                    const double my = dy + dvy * tcpa;
-                    const double mz = dz + dvz * tcpa;
-                    missDistance = std::sqrt(mx*mx + my*my + mz*mz);
+                    missDistance = projectCpa(dx, dy, dz, dvx, dvy, dvz).second;
                 } else {
                     missDistance = std::sqrt(dx*dx + dy*dy + dz*dz);
                 }
@@ -1418,11 +1410,9 @@ namespace StrikeEngine::Kernel {
             }
             eventSystem.dispatch(evt);
 
-            // A detonating warhead consumes its own carrier. Without this the
-            // spent round keeps flying and every role/kill readout keeps
-            // seeing a live interceptor after the detonation (portfolio ran
-            // "det=1 mslAlive=1"). Impact-fused detonations find the carrier
-            // already dead, so the guard keeps those a no-op.
+            // A detonating warhead consumes its own carrier. Impact-fused
+            // detonations find the carrier already dead, so the guard keeps
+            // those a no-op.
             if (statusBlock.isAlive[i]) {
                 statusBlock.isAlive[i] = false;
                 statusBlock.health[i] = 0.0;

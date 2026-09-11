@@ -9,25 +9,16 @@ namespace StrikeEngine::Kernel {
     void EventSystem::evaluate(
         PhysicsBlock& physics,
         EntityStatusBlock& status,
-        double currentTime)
-    {
-        evaluate(physics, status, currentTime, 0.0, {});
-    }
-
-    void EventSystem::evaluate(
-        PhysicsBlock& physics,
-        EntityStatusBlock& status,
         double currentTime,
         double dt,
         const std::vector<double>& previousPz)
     {
-        EnvironmentConfig environment;
-        // The legacy overload is flat-ground only, so X/Y are irrelevant but
-        // still need matching lengths for the terrain-aware crossing path.
+        // Flat-ground only: X/Y are irrelevant but need matching lengths
+        // for the terrain-aware crossing path.
         const std::vector<double> previousPx(previousPz.size(), 0.0);
         const std::vector<double> previousPy(previousPz.size(), 0.0);
         evaluate(physics, status, currentTime, dt,
-                 previousPx, previousPy, previousPz, environment);
+                 previousPx, previousPy, previousPz, EnvironmentConfig{});
     }
 
     void EventSystem::evaluate(

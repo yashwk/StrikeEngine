@@ -44,7 +44,7 @@ namespace StrikeEngine::Kernel {
         std::vector<int> wavelengthBand; // To pass to atmosphere
         std::vector<double> irExtinctionPerM; // Beer-Lambert extinction (m^-1)
 
-        // SARH illuminator (static configured position for this MVP)
+        // SARH illuminator (static configured position)
         std::vector<double> illuminatorPx;
         std::vector<double> illuminatorPy;
         std::vector<double> illuminatorPz;

@@ -242,7 +242,7 @@ namespace StrikeEngine::Models {
             // Limit control authority as dynamic pressure rises. The linear
             // coefficient model is only valid around modest AoA; allowing its
             // moment to grow without bound at boost speed spins the vehicle
-            // faster than this MVP's guidance loop can observe and correct.
+            // faster than the guidance loop can observe and correct.
             const double qS = q * S;
             const double maxControlMoment = 600.0 * std::clamp(
                 6000.0 / std::max(qS, 6000.0), 0.10, 1.0);

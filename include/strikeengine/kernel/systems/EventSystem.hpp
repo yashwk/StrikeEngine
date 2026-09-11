@@ -54,17 +54,22 @@ namespace StrikeEngine::Kernel {
 
     using EventCallback = std::function<void(const SimulationEvent&)>;
 
+    /**
+     * @brief Truth-event detection (ground impact, kinetic contact).
+     *
+     * Evaluates the end-of-step truth state and queues GroundImpact /
+     * TargetImpact events. Ground impact snaps the entity to the terrain,
+     * zeroes its motion and kills it; kinetic contact is report-only
+     * (lethality stays warhead-governed). All overloads delegate to the
+     * full form below.
+     */
     class EventSystem {
     public:
-        // Evaluates continuous conditions (like ground impact) and fires events
-        void evaluate(
-            PhysicsBlock& physics,
-            EntityStatusBlock& status,
-            double currentTime
-        );
-
-        // Evaluates events using the previous step's ground heights so a
-        // crossing event can be timestamped within the step.
+        /**
+         * @brief Flat-ground crossing test from previous heights only.
+         * @param previousPz  Per-entity Z at the previous step; X/Y are
+         *                    treated as irrelevant (flat ground).
+         */
         void evaluate(
             PhysicsBlock& physics,
             EntityStatusBlock& status,
@@ -73,6 +78,13 @@ namespace StrikeEngine::Kernel {
             const std::vector<double>& previousPz
         );
 
+        /**
+         * @brief Full terrain-aware evaluation.
+         * @param previousPx/Py/Pz  Per-entity position at the previous step,
+         *                          used to timestamp the crossing within dt.
+         * @param environment  Terrain source, kinetic band + latch, swept
+         *                     crossing and rate-zeroing switches.
+         */
         void evaluate(
             PhysicsBlock& physics,
             EntityStatusBlock& status,
@@ -84,17 +96,17 @@ namespace StrikeEngine::Kernel {
             const EnvironmentConfig& environment
         );
 
-        // Dispatches an event directly
+        /// Queues one event for end-of-step fan-out.
         void dispatch(const SimulationEvent& evt);
 
-        // Subscribes a listener to all events
+        /// Registers a listener invoked for every queued event.
         void subscribe(EventCallback callback);
 
-        // Process queued events
+        /// Fans queued events out to listeners, then clears the queue.
         void processQueue();
 
-        // Clears per-run transient detection state (the kinetic-contact
-        // latch) so a reset/seed replay starts from a clean slate.
+        /// Clears the kinetic-contact latch and any queued events so a
+        /// reset/seed replay starts from a clean slate.
         void resetTransientState();
 
     private:

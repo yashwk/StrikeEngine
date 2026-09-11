@@ -147,7 +147,6 @@ namespace StrikeEngine::Kernel {
         EventSystem& getEventSystem() { return eventSystem; }
         // Warhead fusing/lethality state and last-detonation diagnostics.
         const WarheadState& getWarhead(PhysicsId id) const;
-        std::size_t getWarheadCount() const { return warheads.size(); }
         double getSimulationTime() const { return time.currentTime(); }
         std::size_t getEntityCount() const { return physicsBlock.size - freeList.size(); }
 

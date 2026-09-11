@@ -210,7 +210,7 @@ namespace StrikeEngine::Kernel {
                 bwz += ewz;
             }
 
-            // IMU lever-arm correction (MVP): the IMU is mounted at a fixed
+            // IMU lever-arm correction: the IMU is mounted at a fixed
             // body-frame offset l from the centre of mass, so it senses the
             // CM specific force plus the rigid-body terms
             //     f_imu = f_cm + alpha x l + omega x (omega x l)

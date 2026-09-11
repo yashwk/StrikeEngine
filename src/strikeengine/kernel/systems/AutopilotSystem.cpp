@@ -212,7 +212,7 @@ namespace StrikeEngine::Kernel {
         // X-forward/Y-right/Z-down convention.
         const double pitchFeedForward = std::clamp(
             -effectiveKAccel * azSpecificCmd, -0.35, 0.35);
-        double yawFeedForward = std::clamp(
+        const double yawFeedForward = std::clamp(
             effectiveKAccel * aySpecificCmd, -0.35, 0.35);
         const double pitchAoaDamping = std::clamp(
             -control.kAlphaP[id] * alpha * dampScale, -0.15, 0.15);
