@@ -42,8 +42,10 @@ namespace StrikeEngine::Kernel {
         void updateFlightController(
             std::size_t id,
             const NavigationBlock& nav,
+            const SensorBlock& sensor,
             const GuidanceBlock& guidance,
             ControlBlock& control,
+            double dt,
             const EnvironmentConfig& environment);
 
         // Direct acceleration-command controller: feed-forward fin demand

@@ -118,6 +118,9 @@ namespace StrikeEngine::Kernel {
         std::vector<double> loftAltitudeM;           // loft apex above launch altitude (m)
         std::vector<double> loftGain;                // vertical accel per m of loft error
         std::vector<double> loftRangeM;              // range beyond which loft applies
+        // Guidance authority awareness: scale the demand by the autopilot's
+        // previous-step delivered/demanded fin margin (0.1..1).
+        std::vector<bool>   authorityAwareLimitEnabled;
 
         // W41 cooperative-engagement datalink (see GuidanceAutopilotConfig):
         // the source entity whose persistent track provides the midcourse aim,

@@ -119,14 +119,16 @@ namespace StrikeEngine::Kernel {
 
         // Publish a law result as the entity's guidance demand (raw + clamped)
         // with diagnostics; zero demand marks invalid results.
-        void applyDemand(std::size_t id, const LawResult& r, GuidanceBlock& g, double dt)
+        void applyDemand(std::size_t id, const LawResult& r, GuidanceBlock& g, double dt,
+                         double authorityScale = 1.0)
         {
             g.rawAccelX[id] = r.ax;
             g.rawAccelY[id] = r.ay;
             g.rawAccelZ[id] = r.az;
-            g.commandedAccelX[id] = r.valid ? r.ax : 0.0;
-            g.commandedAccelY[id] = r.valid ? r.ay : 0.0;
-            g.commandedAccelZ[id] = r.valid ? r.az : 0.0;
+            const double s = std::clamp(authorityScale, 0.0, 1.0);
+            g.commandedAccelX[id] = r.valid ? r.ax * s : 0.0;
+            g.commandedAccelY[id] = r.valid ? r.ay * s : 0.0;
+            g.commandedAccelZ[id] = r.valid ? r.az * s : 0.0;
             g.lawInvalid[id] = r.lawInvalid;
             g.nonClosing[id] = r.nonClosing;
             g.tgoSec[id] = r.tgoSec;
@@ -722,6 +724,15 @@ namespace StrikeEngine::Kernel {
             const bool seekerPresent = seeker.type[i] != SeekerType::None;
             const bool locked = seekerPresent && seeker.isLocked[i];
 
+            // Authority feedback from the previous autopilot step: scale the
+            // demand by the delivered/demanded fin margin when enabled.
+            double authorityScale = 1.0;
+            if (i < guidance.authorityAwareLimitEnabled.size() &&
+                guidance.authorityAwareLimitEnabled[i] &&
+                i < control.authorityMargin01.size()) {
+                authorityScale = std::clamp(control.authorityMargin01[i], 0.1, 1.0);
+            }
+
             // Track bookkeeping. trackAgeSec counts time since the last valid
             // seeker track (diagnostic + retention window).
             if (locked) {
@@ -822,7 +833,7 @@ namespace StrikeEngine::Kernel {
                         // below (they only run from Acquisition/Terminal).
                     }
                 }
-                applyDemand(i, out, guidance, dt);
+                applyDemand(i, out, guidance, dt, authorityScale);
                 // Refresh the bounded retained terminal command (post-clamp)
                 // used during a lock-loss retention window.
                 guidance.retainedAccelX[i] = guidance.commandedAccelX[i];
@@ -862,7 +873,7 @@ namespace StrikeEngine::Kernel {
                     retained.az = guidance.retainedAccelZ[i];
                     retained.valid = isFinite3(retained.ax, retained.ay, retained.az);
                     retained.tgoSec = guidance.tgoSec[i];  // last valid tgo
-                    applyDemand(i, retained, guidance, dt);
+                    applyDemand(i, retained, guidance, dt, authorityScale);
                     continue;
                 }
                 phase = GuidancePhase::LostTrack; // recovery via midcourse PN
@@ -886,7 +897,7 @@ namespace StrikeEngine::Kernel {
                 law = (guidance.apnFeedforwardEnabled[i] &&
                        guidance.targetAccelAvailable[i])
                     ? GuidanceLaw::AugmentedProNav : GuidanceLaw::PureProNav;
-                applyDemand(i, computeMidcourse(i, nav, &tracks, guidance, environment), guidance, dt);
+                applyDemand(i, computeMidcourse(i, nav, &tracks, guidance, environment), guidance, dt, authorityScale);
             } else if (mode == GuidanceMode::Waypoint) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Waypoint;
@@ -900,7 +911,7 @@ namespace StrikeEngine::Kernel {
                     // acceleration command; mark it explicitly and zero it.
                     wp.lawInvalid = true;
                     wp.valid = false;
-                    applyDemand(i, wp, guidance, dt);
+                    applyDemand(i, wp, guidance, dt, authorityScale);
                     continue;
                 }
                 double rMag = std::sqrt(rx * rx + ry * ry + rz * rz);
@@ -909,15 +920,15 @@ namespace StrikeEngine::Kernel {
                 wp.ay = k * (ry / rMag);
                 wp.az = k * (rz / rMag);
                 wp.tgoSec = rMag / 300.0;  // diagnostic only (nominal 300 m/s)
-                applyDemand(i, wp, guidance, dt);
+                applyDemand(i, wp, guidance, dt, authorityScale);
             } else if (mode == GuidanceMode::Trajectory) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Trajectory;
-                applyDemand(i, computeTrajectory(i, nav, &tracks, guidance, environment), guidance, dt);
+                applyDemand(i, computeTrajectory(i, nav, &tracks, guidance, environment), guidance, dt, authorityScale);
             } else if (mode == GuidanceMode::Cruise) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Cruise;
-                applyDemand(i, computeCruise(i, nav, guidance, environment), guidance, dt);
+                applyDemand(i, computeCruise(i, nav, guidance, environment), guidance, dt, authorityScale);
             } else {
                 zeroDemand(i, guidance);
                 phase = GuidancePhase::None;

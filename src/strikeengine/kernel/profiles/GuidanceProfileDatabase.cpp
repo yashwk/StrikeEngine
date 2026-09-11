@@ -81,7 +81,29 @@ namespace StrikeEngine::Kernel {
             cfg.guidanceLoftGain = getDoubleKey(data, "guidance_loft_gain", "guidanceLoftGain", cfg.guidanceLoftGain);
             cfg.guidanceLoftRangeM = getDoubleKey(data, "guidance_loft_range_m", "guidanceLoftRangeM", cfg.guidanceLoftRangeM);
 
-            cfg.gainSchedulingEnabled = getBoolKey(data, "gain_scheduling_enabled", "gainSchedulingEnabled", cfg.gainSchedulingEnabled);            cfg.refDynamicPressurePa = getDoubleKey(data, "ref_dynamic_pressure_pa", "refDynamicPressurePa", cfg.refDynamicPressurePa);
+            cfg.gainSchedulingEnabled = getBoolKey(data, "gain_scheduling_enabled", "gainSchedulingEnabled", cfg.gainSchedulingEnabled);
+            cfg.refDynamicPressurePa = getDoubleKey(data, "ref_dynamic_pressure_pa", "refDynamicPressurePa", cfg.refDynamicPressurePa);
+            cfg.kRatePitchP = getDoubleKey(data, "k_rate_pitch_p", "kRatePitchP", cfg.kRatePitchP);
+            cfg.kRateYawP = getDoubleKey(data, "k_rate_yaw_p", "kRateYawP", cfg.kRateYawP);
+            cfg.scheduleAllTerms = getBoolKey(data, "schedule_all_terms", "scheduleAllTerms", cfg.scheduleAllTerms);
+            cfg.autopilotIntegralEnabled = getBoolKey(data, "autopilot_integral_enabled", "autopilotIntegralEnabled", cfg.autopilotIntegralEnabled);
+            cfg.kIntegralPitch = getDoubleKey(data, "k_integral_pitch", "kIntegralPitch", cfg.kIntegralPitch);
+            cfg.kIntegralYaw = getDoubleKey(data, "k_integral_yaw", "kIntegralYaw", cfg.kIntegralYaw);
+            cfg.integralClampRad = getDoubleKey(data, "integral_clamp_rad", "integralClampRad", cfg.integralClampRad);
+            cfg.controlEffectivenessEnabled = getBoolKey(data, "control_effectiveness_enabled", "controlEffectivenessEnabled", cfg.controlEffectivenessEnabled);
+            cfg.controlEffBase = getDoubleKey(data, "control_eff_base", "controlEffBase", cfg.controlEffBase);
+            cfg.controlEffMachSlope = getDoubleKey(data, "control_eff_mach_slope", "controlEffMachSlope", cfg.controlEffMachSlope);
+            cfg.controlEffMachQuad = getDoubleKey(data, "control_eff_mach_quad", "controlEffMachQuad", cfg.controlEffMachQuad);
+            cfg.controlEffMin = getDoubleKey(data, "control_eff_min", "controlEffMin", cfg.controlEffMin);
+            cfg.controlEffMax = getDoubleKey(data, "control_eff_max", "controlEffMax", cfg.controlEffMax);
+            cfg.yawDeadbandSmoothEnabled = getBoolKey(data, "yaw_deadband_smooth_enabled", "yawDeadbandSmoothEnabled", cfg.yawDeadbandSmoothEnabled);
+            cfg.yawDeadbandWidthMps2 = getDoubleKey(data, "yaw_deadband_width_mps2", "yawDeadbandWidthMps2", cfg.yawDeadbandWidthMps2);
+            cfg.commandLagSec = getDoubleKey(data, "command_lag_sec", "commandLagSec", cfg.commandLagSec);
+            cfg.commandRateLimitRadPerSec = getDoubleKey(data, "command_rate_limit_rad_per_sec", "commandRateLimitRadPerSec", cfg.commandRateLimitRadPerSec);
+            cfg.useMeasuredRatesEnabled = getBoolKey(data, "use_measured_rates_enabled", "useMeasuredRatesEnabled", cfg.useMeasuredRatesEnabled);
+            cfg.rollSuppressLateralAccelMps2 = getDoubleKey(data, "roll_suppress_lateral_accel_mps2", "rollSuppressLateralAccelMps2", cfg.rollSuppressLateralAccelMps2);
+            cfg.useTruthGravityModel = getBoolKey(data, "use_truth_gravity_model", "useTruthGravityModel", cfg.useTruthGravityModel);
+            cfg.guidanceAuthorityAwareLimitEnabled = getBoolKey(data, "guidance_authority_aware_limit_enabled", "guidanceAuthorityAwareLimitEnabled", cfg.guidanceAuthorityAwareLimitEnabled);
             cfg.minDynamicPressurePa = getDoubleKey(data, "min_dynamic_pressure_pa", "minDynamicPressurePa", cfg.minDynamicPressurePa);
             cfg.maxDynamicPressurePa = getDoubleKey(data, "max_dynamic_pressure_pa", "maxDynamicPressurePa", cfg.maxDynamicPressurePa);
 

@@ -20,6 +20,41 @@ namespace StrikeEngine::Kernel {
         double servoTimeConstantSec = 0.02;  // future servo lag (inert)
         double maxServoRateRadPerSec = 5.24; // future servo rate (inert)
 
+        // --- Autopilot loop-quality options (defaults = legacy law) ---------
+        double kRatePitchP = -1.0;   // pitch rate damping; <0 = use kRateP
+        double kRateYawP   = -1.0;   // yaw rate damping;  <0 = use kRateP
+        bool   scheduleAllTerms = false;    // q-schedule rate/aoa/roll too
+        // Bounded integral trim on the specific-force error (anti-windup
+        // against the fin clamp). Default off = legacy proportional law.
+        bool   autopilotIntegralEnabled = false;
+        double kIntegralPitch = 0.0;        // rad per (m/s^2 * s)
+        double kIntegralYaw = 0.0;
+        double integralClampRad = 0.05;
+        // Control effectiveness shape: eff = clamp(base + slope*M + quad*M^2).
+        bool   controlEffectivenessEnabled = false;
+        double controlEffBase = 1.0;
+        double controlEffMachSlope = 0.0;
+        double controlEffMachQuad = 0.0;
+        double controlEffMin = 0.2;
+        double controlEffMax = 5.0;
+        // Smooth yaw dead-band (legacy is a hard 0.5 m/s^2 switch).
+        bool   yawDeadbandSmoothEnabled = false;
+        double yawDeadbandWidthMps2 = 0.5;
+        // Actuator model in the loop (legacy commands ideal deflection).
+        double commandLagSec = 0.0;
+        double commandRateLimitRadPerSec = 0.0;
+        // Damping feedback source (legacy uses the nav rate estimate).
+        bool   useMeasuredRatesEnabled = false;
+        // Roll/yaw coordination: suppress wings-level roll above a lateral
+        // demand (0 = legacy ungated roll).
+        double rollSuppressLateralAccelMps2 = 0.0;
+        // Use the environment's gravity model (J2/spherical) in the
+        // specific-force conversion instead of always normal gravity.
+        bool   useTruthGravityModel = false;
+        // Guidance authority awareness: scale the demand by the previous
+        // step's delivered/demanded fin margin (0.1..1).
+        bool   guidanceAuthorityAwareLimitEnabled = false;
+
         // W36 guidance-phase manager (defaults preserve the legacy behavior):
         // handoffBlendTimeSec = 0  -> instant seeker override (legacy)
         // lockLossRetentionSec = 0 -> no guidance-layer retention past seeker loss

@@ -8,15 +8,61 @@
 
 namespace StrikeEngine::Kernel {
 
+    namespace {
+
+        double valAt(const std::vector<double>& v, std::size_t i, double def)
+        {
+            return i < v.size() ? v[i] : def;
+        }
+
+        bool flagAt(const std::vector<bool>& v, std::size_t i)
+        {
+            return i < v.size() && v[i];
+        }
+
+        // Node gravity for the body-frame specific-force conversion. Mirrors
+        // the environment configuration when requested (J2 > WGS84-normal >
+        // spherical for ECEF; flat otherwise); legacy keeps normal gravity for
+        // every ECEF mode.
+        void autopilotGravity(std::size_t id, const NavigationBlock& nav,
+                              const ControlBlock& control,
+                              const EnvironmentConfig& environment,
+                              double& gx, double& gy, double& gz)
+        {
+            const bool truth = flagAt(control.useTruthGravityModel, id);
+            if (environment.earth.useEcefTruth) {
+                const Models::EcefCoordinate pos{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
+                if (truth) {
+                    if (environment.earth.includeJ2Gravity) {
+                        const auto v = Models::j2GravityAccelerationEcef(pos);
+                        gx = v.x; gy = v.y; gz = v.z;
+                        return;
+                    }
+                    if (environment.earth.useSphericalGravity) {
+                        const auto v = Models::sphericalGravityAccelerationEcef(pos);
+                        gx = v.x; gy = v.y; gz = v.z;
+                        return;
+                    }
+                }
+                const auto geodetic = Models::ecefToGeodetic(pos);
+                const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
+                gx = grav[0]; gy = grav[1]; gz = grav[2];
+            } else {
+                gx = 0.0; gy = 0.0; gz = -9.80665;
+            }
+        }
+
+    }
+
     AutopilotSystem::AutopilotSystem() = default;
 
     void AutopilotSystem::update(
         const EntityStatusBlock& status,
         const NavigationBlock& nav,
-        const SensorBlock& /*sensor*/,
+        const SensorBlock& sensor,
         const GuidanceBlock& guidance,
         ControlBlock& control,
-        double /*dt*/,
+        double dt,
         const EnvironmentConfig& environment)
     {
         // Resize control block if needed (usually handled in SimulationKernel, but safe to check)
@@ -46,15 +92,17 @@ namespace StrikeEngine::Kernel {
                 continue;
             }
 
-            updateFlightController(i, nav, guidance, control, environment);
+            updateFlightController(i, nav, sensor, guidance, control, dt, environment);
         }
     }
 
     void AutopilotSystem::updateFlightController(
         std::size_t id,
         const NavigationBlock& nav,
+        const SensorBlock& sensor,
         const GuidanceBlock& guidance,
         ControlBlock& control,
+        double dt,
         const EnvironmentConfig& environment)
     {
         // 1. Commanded acceleration (world, from guidance) -> body frame
@@ -64,6 +112,7 @@ namespace StrikeEngine::Kernel {
                          guidance.commandedAccelY[id],
                          guidance.commandedAccelZ[id],
                          axCmdB, ayCmdB, azCmdB);
+        (void)axCmdB; // axial demand is not fin-controlled
 
         // Guidance commands are total world-frame accelerations, while the
         // accelerometer measures specific force (total acceleration minus
@@ -72,35 +121,19 @@ namespace StrikeEngine::Kernel {
         // intentionally feed-forward: feeding the fin's own measured force
         // back into this simplified airframe model creates a short-period
         // limit cycle. Rates and AoA below provide the stabilizing feedback.
-        //
-        // WGS84/ECEF awareness: gravity points toward the local geodetic
-        // nadir, not a fixed [0,0,-g] axis (in ECEF, +Z is the polar axis). Use
-        // the ellipsoidal normal-gravity vector so the autopilot's specific-force
-        // conversion is correct over long/curved engagements.
         double gx, gy, gz;
-        if (environment.earth.useEcefTruth) {
-            const Models::EcefCoordinate pos{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
-            const auto geodetic = Models::ecefToGeodetic(pos);
-            const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
-            // The WGS84 normal-gravity vector points toward the geodetic nadir
-            // (down). Resolved into the aerospace (X-forward/Y-right/Z-down)
-            // body axes via estQ it lands on +Z, matching the autopilot's Z-down
-            // specific-force/roll convention (the scenario pose builder now
-            // emits a NED body frame).
-            gx = grav[0]; gy = grav[1]; gz = grav[2];
-        } else {
-            gx = 0.0; gy = 0.0; gz = -9.80665;
-        }
+        autopilotGravity(id, nav, control, environment, gx, gy, gz);
         double gravityBx, gravityBy, gravityBz;
         quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
                          gx, gy, gz, gravityBx, gravityBy, gravityBz);
         const double aySpecificCmd = ayCmdB - gravityBy;
         const double azSpecificCmd = azCmdB - gravityBz;
+        if (id < control.specificForceDemandY.size()) {
+            control.specificForceDemandY[id] = aySpecificCmd;
+            control.specificForceDemandZ[id] = azSpecificCmd;
+        }
 
-        // 3. Direct acceleration-command controller. The feed-forward term
-        //    supplies the requested normal force; body-rate and AoA terms
-        //    damp the short-period response before the fins saturate.
-        // 4. AoA / sideslip estimates from estimated body-frame velocity
+        // 2. AoA / sideslip estimates from estimated body-frame velocity
         double ub, vb, wb;
         quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
                          nav.estVx[id], nav.estVy[id], nav.estVz[id],
@@ -108,79 +141,134 @@ namespace StrikeEngine::Kernel {
         const double alpha = std::atan2(wb, ub);
         const double beta  = std::atan2(vb, ub);
 
-        // Dynamic pressure (q) gain scheduling: scales feed-forward fin command
-        // by sqrt(q_ref / q) to prevent max-Q control flutter and high-altitude sluggishness.
+        // 3. Speed, altitude, Mach and dynamic pressure (shared by the
+        //    q-schedule and the control-effectiveness schedule).
+        const double vx = nav.estVx[id];
+        const double vy = nav.estVy[id];
+        const double vz = nav.estVz[id];
+        const double speed = std::sqrt(vx * vx + vy * vy + vz * vz);
+        double alt;
+        if (environment.earth.useEcefTruth) {
+            const auto geo = Models::ecefToGeodetic({nav.estPx[id], nav.estPy[id], nav.estPz[id]});
+            alt = std::max(0.0, geo.altitudeM);
+        } else {
+            alt = std::max(0.0, nav.estPz[id]);
+        }
+        static const Models::ISA1976 isa;
+        const auto atmos = isa.evaluate(alt);
+        const double qEst = 0.5 * atmos.density * speed * speed;
+        const double soundSpeed = atmos.temperature > 0.0
+            ? std::sqrt(1.4 * 287.05287 * atmos.temperature) : 340.29;
+        const double mach = soundSpeed > 1.0 ? speed / soundSpeed : 0.0;
+        if (id < control.machNumber.size()) control.machNumber[id] = mach;
+
         double sqScale = 1.0;
-        if (id < control.gainSchedulingEnabled.size() && control.gainSchedulingEnabled[id]) {
-            const double vx = nav.estVx[id];
-            const double vy = nav.estVy[id];
-            const double vz = nav.estVz[id];
-            const double speedSq = vx * vx + vy * vy + vz * vz;
-            // In ECEF the Cartesian +Z is the polar axis (not altitude); use the
-            // geodetic height so the ISA atmosphere/dynamic-pressure gain
-            // schedule is evaluated at the correct altitude.
-            double alt;
-            if (environment.earth.useEcefTruth) {
-                const auto geo =
-                    Models::ecefToGeodetic({nav.estPx[id], nav.estPy[id], nav.estPz[id]});
-                alt = std::max(0.0, geo.altitudeM);
-            } else {
-                alt = std::max(0.0, nav.estPz[id]);
-            }
-
-            static const Models::ISA1976 isa;
-            const auto atmos = isa.evaluate(alt);
-            const double qEst = 0.5 * atmos.density * speedSq;
-
+        if (flagAt(control.gainSchedulingEnabled, id)) {
             const double qRef = (id < control.refDynamicPressurePa.size() && control.refDynamicPressurePa[id] > 0.0)
                 ? control.refDynamicPressurePa[id] : 50000.0;
             const double qMin = (id < control.minDynamicPressurePa.size() && control.minDynamicPressurePa[id] > 0.0)
                 ? control.minDynamicPressurePa[id] : 2000.0;
             const double qMax = (id < control.maxDynamicPressurePa.size() && control.maxDynamicPressurePa[id] >= qMin)
                 ? control.maxDynamicPressurePa[id] : 300000.0;
-
             const double qClamped = std::clamp(qEst, qMin, qMax);
             sqScale = std::clamp(std::sqrt(qRef / qClamped), 0.2, 5.0);
         }
+
+        // Control effectiveness schedule (Mach): one factor applied to the
+        // feed-forward (and optionally the damping terms).
+        double effectiveness = 1.0;
+        if (flagAt(control.controlEffectivenessEnabled, id)) {
+            const double base = valAt(control.controlEffBase, id, 1.0);
+            const double slope = valAt(control.controlEffMachSlope, id, 0.0);
+            const double quad = valAt(control.controlEffMachQuad, id, 0.0);
+            const double lo = valAt(control.controlEffMin, id, 0.2);
+            const double hi = valAt(control.controlEffMax, id, 5.0);
+            effectiveness = std::clamp(base + slope * mach + quad * mach * mach, lo, hi);
+        }
+        if (id < control.controlEffectiveness.size()) control.controlEffectiveness[id] = effectiveness;
+
+        const double effectiveKAccel = control.kAccelP[id] * sqScale * effectiveness;
+        if (id < control.effectiveKAccel.size()) control.effectiveKAccel[id] = effectiveKAccel;
+
+        // 4. Damping feedback source: legacy nav rate estimate, optionally the
+        //    measured gyro (isolates the inner loop from nav attitude errors).
+        double wx = nav.estWx[id], wy = nav.estWy[id], wz = nav.estWz[id];
+        if (flagAt(control.useMeasuredRatesEnabled, id) &&
+            id < sensor.gyroX.size() && std::isfinite(sensor.gyroX[id]) &&
+            std::isfinite(sensor.gyroY[id]) && std::isfinite(sensor.gyroZ[id])) {
+            wx = sensor.gyroX[id]; wy = sensor.gyroY[id]; wz = sensor.gyroZ[id];
+        }
+
+        const double kRatePitch = valAt(control.kRatePitchP, id, -1.0) >= 0.0
+            ? control.kRatePitchP[id] : control.kRateP[id];
+        const double kRateYaw = valAt(control.kRateYawP, id, -1.0) >= 0.0
+            ? control.kRateYawP[id] : control.kRateP[id];
+        const bool scheduleDamping = flagAt(control.scheduleAllTerms, id);
+        const double dampScale = scheduleDamping ? sqScale * effectiveness : 1.0;
 
         // Positive body-Z specific force is down and requires nose-down
         // (negative wy / fin); positive body-Y force requires nose-right
         // (positive wz / fin). The signs below match AeroModel's documented
         // X-forward/Y-right/Z-down convention.
-        const double effectiveKAccel = control.kAccelP[id] * sqScale;
         const double pitchFeedForward = std::clamp(
             -effectiveKAccel * azSpecificCmd, -0.35, 0.35);
-        const double yawFeedForward = std::clamp(
+        double yawFeedForward = std::clamp(
             effectiveKAccel * aySpecificCmd, -0.35, 0.35);
-        const double pitchRateDamping = std::clamp(
-            -control.kRateP[id] * nav.estWy[id], -0.20, 0.20);
-        const double yawRateDamping = std::clamp(
-            -control.kRateP[id] * nav.estWz[id], -0.20, 0.20);
         const double pitchAoaDamping = std::clamp(
-            -control.kAlphaP[id] * alpha, -0.15, 0.15);
+            -control.kAlphaP[id] * alpha * dampScale, -0.15, 0.15);
         const double yawAoaDamping = std::clamp(
-            -control.kAlphaP[id] * beta, -0.15, 0.15);
+            -control.kAlphaP[id] * beta * dampScale, -0.15, 0.15);
+        // Rate damping uses the (optionally split) pitch/yaw gains; both
+        // default to the legacy kRateP when unset.
+        const double pitchRateDampingOut = std::clamp(
+            -kRatePitch * wy * dampScale, -0.20, 0.20);
+        const double yawRateDampingOut = std::clamp(
+            -kRateYaw * wz * dampScale, -0.20, 0.20);
 
         // Do not create a lateral steering demand from sensor noise when guidance
         // is asking for a straight-plane flight path; keep rate and AoA damping
         // active so the vehicle stays aerodynamically stable and roll/yaw trimmed.
-        // Gate on the specific-force demand (what the fins actually serve),
-        // not the total command: under bank the gravity component alone can
-        // exceed the dead-band and the gate would disagree with its steering.
-        const double yawFeed = (std::abs(aySpecificCmd) < 0.5) ? 0.0 : yawFeedForward;
-        double pitchDeflection = pitchFeedForward + pitchRateDamping + pitchAoaDamping;
-        double yawDeflection   = yawFeed + yawRateDamping + yawAoaDamping;
+        // Legacy: a hard 0.5 m/s^2 gate. Optional: a smooth ramp over the
+        // configured width (no chattering at the threshold).
+        double yawGate = 1.0;
+        if (flagAt(control.yawDeadbandSmoothEnabled, id)) {
+            const double width = std::max(1e-6, valAt(control.yawDeadbandWidthMps2, id, 0.5));
+            yawGate = std::clamp(std::abs(aySpecificCmd) / width, 0.0, 1.0);
+        } else if (std::abs(aySpecificCmd) < 0.5) {
+            yawGate = 0.0;
+        }
+
+        // 5. Integral trim on the specific-force error (measured accelerometer
+        //    minus demand), with a clamp and saturation anti-windup.
+        double pitchIntegral = id < control.pitchIntegral.size() ? control.pitchIntegral[id] : 0.0;
+        double yawIntegral = id < control.yawIntegral.size() ? control.yawIntegral[id] : 0.0;
+        if (flagAt(control.integralEnabled, id) && dt > 0.0 &&
+            id < sensor.accelY.size()) {
+            const double clampI = std::max(0.0, valAt(control.integralClampRad, id, 0.05));
+            const double errPitch = azSpecificCmd - sensor.accelZ[id];
+            const double errYaw = aySpecificCmd - sensor.accelY[id];
+            if (!control.pitchSaturated[id]) {
+                pitchIntegral += control.kIntegralPitch[id] * errPitch * dt;
+            }
+            if (!control.yawSaturated[id]) {
+                yawIntegral += control.kIntegralYaw[id] * errYaw * dt;
+            }
+            pitchIntegral = std::clamp(pitchIntegral, -clampI, clampI);
+            yawIntegral = std::clamp(yawIntegral, -clampI, clampI);
+        } else {
+            pitchIntegral = 0.0;
+            yawIntegral = 0.0;
+        }
+        control.pitchIntegral[id] = pitchIntegral;
+        control.yawIntegral[id] = yawIntegral;
+
+        double pitchDeflection = pitchFeedForward + pitchRateDampingOut + pitchAoaDamping + pitchIntegral;
+        double yawDeflection   = yawGate * yawFeedForward + yawRateDampingOut + yawAoaDamping + yawIntegral;
 
         // 6. Roll stabilization: wings-level P-D, referenced to the local
-        // gravity direction (attitude-independent — works for any initial
-        // orientation, unlike a quaternion-identity reference).
-        // g_b = gravity direction in body axes: level flight => (0, 0, +1).
-        // A right roll by phi gives g_b.y = -sin(phi): rollError = atan2(-g_b.y, g_b.z).
-        // In a steep dive g_b.z -> 0 and the reference degenerates; scale the
-        // command by the vertical component so wings-level authority fades
-        // near-vertical instead of slamming full deflection.
-        // WGS84/ECEF: the local "down" is the geodetic nadir, not a fixed
-        // [0,0,-1] (which would point the wings at the North Pole).
+        // gravity direction (attitude-independent). Roll is optionally
+        // suppressed while a lateral demand is being served (skid steering) so
+        // it does not fight the yaw channel.
         double gBx, gBy, gBz;
         if (environment.earth.useEcefTruth) {
             const Models::EcefCoordinate pos{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
@@ -198,18 +286,72 @@ namespace StrikeEngine::Kernel {
         }
         const double verticality = std::clamp(gBz, 0.0, 1.0);
         const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
-        double rollDeflection = verticality * (-control.kRollP[id] * rollError - control.kRollD[id] * nav.estWx[id]);
+        double rollScale = scheduleDamping ? sqScale * effectiveness : 1.0;
+        const double rollSuppress = valAt(control.rollSuppressLateralAccelMps2, id, 0.0);
+        if (rollSuppress > 0.0 && std::abs(aySpecificCmd) > rollSuppress) {
+            rollScale *= std::clamp(rollSuppress / std::abs(aySpecificCmd), 0.0, 1.0);
+        }
+        double rollDeflection = verticality * rollScale *
+            (-control.kRollP[id] * rollError - control.kRollD[id] * wx);
 
         // 7. Clamp to physical limits (+/- 25 deg = ~0.43 rad, servo authority).
+        //    Publish the demand breakdown and the delivered/demanded margin.
+        if (id < control.feedForwardPitch.size()) {
+            control.feedForwardPitch[id] = pitchFeedForward;
+            control.feedForwardYaw[id] = yawGate * yawFeedForward;
+            control.rateDampingPitch[id] = pitchRateDampingOut;
+            control.rateDampingYaw[id] = yawRateDampingOut;
+            control.aoaDampingPitch[id] = pitchAoaDamping;
+            control.aoaDampingYaw[id] = yawAoaDamping;
+        }
         const double maxDeflection = control.maxDeflectionRad[id];
         const double pitchClamped = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
         const double yawClamped   = std::clamp(yawDeflection,   -maxDeflection, maxDeflection);
         control.pitchSaturated[id] = std::abs(pitchDeflection) > maxDeflection;
         control.yawSaturated[id]   = std::abs(yawDeflection)   > maxDeflection;
-        control.pitchCommand[id] = pitchClamped;
-        control.yawCommand[id]   = yawClamped;
+        if (id < control.authorityMargin01.size()) {
+            double margin = 1.0;
+            const double pMag = std::abs(pitchDeflection);
+            const double yMag = std::abs(yawDeflection);
+            if (pMag > maxDeflection) margin = std::min(margin, maxDeflection / pMag);
+            if (yMag > maxDeflection) margin = std::min(margin, maxDeflection / yMag);
+            control.authorityMargin01[id] = std::clamp(margin, 0.0, 1.0);
+        }
+
+        // 8. Actuator model on the command: first-order lag then a rate limit
+        //    (legacy commands the ideal deflection). State is per entity.
+        double pitchOut = pitchClamped;
+        double yawOut = yawClamped;
+        const double lagSec = valAt(control.commandLagSec, id, 0.0);
+        const double rateLimit = valAt(control.commandRateLimitRadPerSec, id, 0.0);
+        if (lagSec > 0.0 || rateLimit > 0.0) {
+            const double prevPitch = id < control.pitchCommandPrev.size() ? control.pitchCommandPrev[id] : pitchOut;
+            const double prevYaw = id < control.yawCommandPrev.size() ? control.yawCommandPrev[id] : yawOut;
+            if (lagSec > 0.0 && dt > 0.0) {
+                const double a = 1.0 - std::exp(-dt / lagSec);
+                pitchOut = prevPitch + a * (pitchClamped - prevPitch);
+                yawOut = prevYaw + a * (yawClamped - prevYaw);
+            }
+            if (rateLimit > 0.0 && dt > 0.0) {
+                const double step = rateLimit * dt;
+                pitchOut = prevPitch + std::clamp(pitchOut - prevPitch, -step, step);
+                yawOut = prevYaw + std::clamp(yawOut - prevYaw, -step, step);
+            }
+        }
+        if (id < control.pitchCommandPrev.size()) control.pitchCommandPrev[id] = pitchOut;
+        if (id < control.yawCommandPrev.size()) control.yawCommandPrev[id] = yawOut;
+        control.pitchCommand[id] = pitchOut;
+        control.yawCommand[id] = yawOut;
         control.rollSaturated[id] = std::abs(rollDeflection) > maxDeflection;
-        control.rollCommand[id]  = std::clamp(rollDeflection,  -maxDeflection, maxDeflection);
+        const double rollClamped = std::clamp(rollDeflection, -maxDeflection, maxDeflection);
+        const double prevRoll = id < control.rollCommandPrev.size() ? control.rollCommandPrev[id] : rollClamped;
+        double rollOut = rollClamped;
+        if (lagSec > 0.0 && dt > 0.0) {
+            const double a = 1.0 - std::exp(-dt / lagSec);
+            rollOut = prevRoll + a * (rollClamped - prevRoll);
+        }
+        if (id < control.rollCommandPrev.size()) control.rollCommandPrev[id] = rollOut;
+        control.rollCommand[id] = rollOut;
     }
 
 } // namespace StrikeEngine::Kernel
