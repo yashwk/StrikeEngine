@@ -72,6 +72,21 @@ namespace StrikeEngine::Kernel {
         double trajectoryMinSpeedMps = 30.0;           // own est-speed floor for an intercept prediction
         double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
 
+        // --- Terminal conditioning + law selection (defaults = legacy) ------
+        bool   guidanceGyroDecouplingEnabled = false;   // remove body rate from the seeker LOS rate
+        int    terminalLaw = 0;                         // 0 = SeekerRateAPN, 1 = BodyPN (3D)
+        double guidanceCommandLagSec = 0.0;             // first-order demand lag (s); 0 = off
+        double guidanceCommandSlewLimitMps3 = 0.0;      // demand slew limit (m/s^3); 0 = off
+        bool   guidanceScaleDemandOnInfeasible = false; // scale over-budget demand to the limit
+        bool   guidanceRangeGainShapingEnabled = false; // N'(r) gain shaping
+        double guidanceRangeGainRefM = 10000.0;         // reference range for shaping
+        double guidanceTrackAimMinQuality01 = 0.0;      // min track quality to use as aim
+        double guidanceApnFeedforwardMinQuality01 = 0.0;// min track quality to trust APN ff
+        bool   guidanceLoftEnabled = false;             // midcourse loft shaping
+        double guidanceLoftAltitudeM = 0.0;             // loft apex above launch altitude (m)
+        double guidanceLoftGain = 0.0;                  // vertical accel per m of loft error
+        double guidanceLoftRangeM = 40000.0;            // range beyond which loft applies
+
         // Dynamic pressure (q) gain scheduling: scales feed-forward fin command
         // by sqrt(q_ref / q) to prevent max-Q control flutter and high-altitude sluggishness.
         bool   gainSchedulingEnabled = false;

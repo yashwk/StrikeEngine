@@ -486,6 +486,19 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     // W40 trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
+    j["guidanceGyroDecouplingEnabled"] = g.guidanceGyroDecouplingEnabled;
+    j["terminalLaw"] = g.terminalLaw;
+    j["guidanceCommandLagSec"] = g.guidanceCommandLagSec;
+    j["guidanceCommandSlewLimitMps3"] = g.guidanceCommandSlewLimitMps3;
+    j["guidanceScaleDemandOnInfeasible"] = g.guidanceScaleDemandOnInfeasible;
+    j["guidanceRangeGainShapingEnabled"] = g.guidanceRangeGainShapingEnabled;
+    j["guidanceRangeGainRefM"] = g.guidanceRangeGainRefM;
+    j["guidanceTrackAimMinQuality01"] = g.guidanceTrackAimMinQuality01;
+    j["guidanceApnFeedforwardMinQuality01"] = g.guidanceApnFeedforwardMinQuality01;
+    j["guidanceLoftEnabled"] = g.guidanceLoftEnabled;
+    j["guidanceLoftAltitudeM"] = g.guidanceLoftAltitudeM;
+    j["guidanceLoftGain"] = g.guidanceLoftGain;
+    j["guidanceLoftRangeM"] = g.guidanceLoftRangeM;
     // W41 cooperative-engagement datalink (optional with defaults).
     j["datalinkSourceId"] = g.datalinkSourceId;
     j["datalinkTargetId"] = g.datalinkTargetId;
@@ -537,6 +550,19 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackVelocityBlend = j.value("trackVelocityBlend", 0.08);
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
+    g.guidanceGyroDecouplingEnabled = j.value("guidanceGyroDecouplingEnabled", false);
+    g.terminalLaw = j.value("terminalLaw", 0);
+    g.guidanceCommandLagSec = j.value("guidanceCommandLagSec", 0.0);
+    g.guidanceCommandSlewLimitMps3 = j.value("guidanceCommandSlewLimitMps3", 0.0);
+    g.guidanceScaleDemandOnInfeasible = j.value("guidanceScaleDemandOnInfeasible", false);
+    g.guidanceRangeGainShapingEnabled = j.value("guidanceRangeGainShapingEnabled", false);
+    g.guidanceRangeGainRefM = j.value("guidanceRangeGainRefM", 10000.0);
+    g.guidanceTrackAimMinQuality01 = j.value("guidanceTrackAimMinQuality01", 0.0);
+    g.guidanceApnFeedforwardMinQuality01 = j.value("guidanceApnFeedforwardMinQuality01", 0.0);
+    g.guidanceLoftEnabled = j.value("guidanceLoftEnabled", false);
+    g.guidanceLoftAltitudeM = j.value("guidanceLoftAltitudeM", 0.0);
+    g.guidanceLoftGain = j.value("guidanceLoftGain", 0.0);
+    g.guidanceLoftRangeM = j.value("guidanceLoftRangeM", 40000.0);
     g.datalinkSourceId = j.value("datalinkSourceId", -1);
     g.datalinkTargetId = j.value("datalinkTargetId", -1);
     g.navScheduleEnabled = j.value("navScheduleEnabled", false);

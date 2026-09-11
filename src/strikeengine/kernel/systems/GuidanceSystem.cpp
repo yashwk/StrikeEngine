@@ -57,9 +57,69 @@ namespace StrikeEngine::Kernel {
             }
         }
 
+        // Range-dependent PN gain shaping (opt-in): classical N'(r), clamped so
+        // it only lightly biases the gain. Disabled = the base/scheduled N.
+        inline double rangeShapedN(std::size_t id, const GuidanceBlock& g, double range)
+        {
+            double N = effNavN(id, g);
+            if (id < g.rangeGainShapingEnabled.size() && g.rangeGainShapingEnabled[id] &&
+                range > 1e-6) {
+                const double ref = (id < g.rangeGainRefM.size()) ? g.rangeGainRefM[id] : 10000.0;
+                if (ref > 0.0) N *= std::clamp(ref / range, 0.5, 2.0);
+            }
+            return N;
+        }
+
+        // First-order lag + slew limiting on the commanded demand. Both are
+        // opt-in (0 = off); with both off the shaped command equals the
+        // clamped demand, so legacy behavior is unchanged.
+        void shapeCommand(std::size_t id, GuidanceBlock& g, double dt)
+        {
+            if (id >= g.shapedAccelX.size() || id >= g.commandedAccelX.size()) return;
+            const double lag = (id < g.commandLagSec.size()) ? g.commandLagSec[id] : 0.0;
+            const double slew = (id < g.commandSlewLimitMps3.size())
+                ? g.commandSlewLimitMps3[id] : 0.0;
+            if (lag <= 0.0 && slew <= 0.0) {
+                g.shapedAccelX[id] = g.commandedAccelX[id];
+                g.shapedAccelY[id] = g.commandedAccelY[id];
+                g.shapedAccelZ[id] = g.commandedAccelZ[id];
+                return;
+            }
+            double tx = g.commandedAccelX[id];
+            double ty = g.commandedAccelY[id];
+            double tz = g.commandedAccelZ[id];
+            double sx = g.shapedAccelX[id];
+            double sy = g.shapedAccelY[id];
+            double sz = g.shapedAccelZ[id];
+            if (lag > 0.0 && dt > 0.0) {
+                const double a = 1.0 - std::exp(-dt / lag);
+                sx += a * (tx - sx);
+                sy += a * (ty - sy);
+                sz += a * (tz - sz);
+            } else if (slew <= 0.0) {
+                sx = tx; sy = ty; sz = tz;
+            }
+            if (slew > 0.0 && dt > 0.0) {
+                const double step = slew * dt;
+                const auto clampStep = [step](double& s, double target) {
+                    const double d = target - s;
+                    s += std::clamp(d, -step, step);
+                };
+                clampStep(sx, tx);
+                clampStep(sy, ty);
+                clampStep(sz, tz);
+            }
+            g.shapedAccelX[id] = sx;
+            g.shapedAccelY[id] = sy;
+            g.shapedAccelZ[id] = sz;
+            g.commandedAccelX[id] = sx;
+            g.commandedAccelY[id] = sy;
+            g.commandedAccelZ[id] = sz;
+        }
+
         // Publish a law result as the entity's guidance demand (raw + clamped)
         // with diagnostics; zero demand marks invalid results.
-        void applyDemand(std::size_t id, const LawResult& r, GuidanceBlock& g)
+        void applyDemand(std::size_t id, const LawResult& r, GuidanceBlock& g, double dt)
         {
             g.rawAccelX[id] = r.ax;
             g.rawAccelY[id] = r.ay;
@@ -71,12 +131,19 @@ namespace StrikeEngine::Kernel {
             g.nonClosing[id] = r.nonClosing;
             g.tgoSec[id] = r.tgoSec;
             clampCommandMagnitude(id, g);
+            const bool wasLimited = g.limitedByMaxAccel[id];
+            shapeCommand(id, g, dt);
+            clampCommandMagnitude(id, g); // shaped demand must respect the limit
+            g.limitedByMaxAccel[id] = g.limitedByMaxAccel[id] || wasLimited;
         }
 
         void zeroDemand(std::size_t id, GuidanceBlock& g)
         {
             g.rawAccelX[id] = g.rawAccelY[id] = g.rawAccelZ[id] = 0.0;
             g.commandedAccelX[id] = g.commandedAccelY[id] = g.commandedAccelZ[id] = 0.0;
+            if (id < g.shapedAccelX.size()) {
+                g.shapedAccelX[id] = g.shapedAccelY[id] = g.shapedAccelZ[id] = 0.0;
+            }
             g.limitedByMaxAccel[id] = false;
             g.lawInvalid[id] = false;
             g.nonClosing[id] = false;
@@ -168,16 +235,27 @@ namespace StrikeEngine::Kernel {
             return out;
         }
 
+        // Track-quality gate helper: no threshold configured (vector short) or
+        // a missing quality array means the gate is inactive.
+        inline bool qualityAbove(const TrackBlock* t, std::size_t e,
+                                 const std::vector<double>& threshold)
+        {
+            if (!t || e >= t->size) return false;
+            if (e >= threshold.size() || e >= t->quality01.size()) return true;
+            return t->quality01[e] >= threshold[e];
+        }
+
         // Midcourse PN / APN on the commanded target track (world frame).
         // Aim source: a measurement-anchored persistent target track (W39)
         // wins over the raw external command state; see update().
         LawResult computeMidcourse(
             std::size_t id, const NavigationBlock& nav,
-            const TrackBlock* tracks, GuidanceBlock& guidance)
+            const TrackBlock* tracks, GuidanceBlock& guidance,
+            const EnvironmentConfig& env)
         {
             LawResult out;
-            const double N = effNavN(id, guidance);
-            if (!std::isfinite(N) || N <= 0.0) {
+            const double baseN = effNavN(id, guidance);
+            if (!std::isfinite(baseN) || baseN <= 0.0) {
                 out.lawInvalid = true;
                 out.valid = false;
                 return out;
@@ -185,7 +263,8 @@ namespace StrikeEngine::Kernel {
 
             // Select the aim state: datalink source track (W41 cooperative
             // engagement) > own persistent track (measurement-anchored, W39) >
-            // the external command state (legacy).
+            // the external command state (legacy). A configured track-quality
+            // floor can disqualify a track (default 0 = no gate).
             double tx, ty, tz, tvx, tvy, tvz;
             bool trackAim = false;
             bool datalinkAim = false;
@@ -195,7 +274,8 @@ namespace StrikeEngine::Kernel {
             if (dlSrc >= 0 && tracks) {
                 const std::size_t src = static_cast<std::size_t>(dlSrc);
                 if (src < tracks->size && tracks->active(src) &&
-                    tracks->updateCount[src] > 0)
+                    tracks->updateCount[src] > 0 &&
+                    qualityAbove(tracks, src, guidance.trackAimMinQuality01))
                 {
                     datalinkAim = true;
                     datalinkSrc = src;
@@ -204,7 +284,8 @@ namespace StrikeEngine::Kernel {
                 }
             }
             if (!datalinkAim && tracks && id < tracks->size && tracks->active(id) &&
-                tracks->updateCount[id] > 0)
+                tracks->updateCount[id] > 0 &&
+                qualityAbove(tracks, id, guidance.trackAimMinQuality01))
             {
                 trackAim = true;
                 tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
@@ -232,20 +313,25 @@ namespace StrikeEngine::Kernel {
             const double range = std::sqrt(rx * rx + ry * ry + rz * rz);
             const double closingSpeed = (range > 1e-9)
                 ? -(rx * vx + ry * vy + rz * vz) / range : 0.0;
+            if (id < guidance.closingSpeed.size()) guidance.closingSpeed[id] = closingSpeed;
 
             // Feed-forward target acceleration: from the AIMED track when
-            // measurement-anchored and available (own track, else the
-            // datalink source track whose position/velocity steers above),
-            // else from the command. Falling back to the command under a
-            // datalink aim can augment with the wrong target's accel.
+            // measurement-anchored, quality-trusted and available (own track,
+            // else the datalink source track whose position/velocity steers
+            // above), else from the command. Falling back to the command under
+            // a datalink aim can augment with the wrong target's accel.
             bool ffAvailable = false;
             double atx = 0.0, aty = 0.0, atz = 0.0;
-            if (trackAim && tracks->accelAvailable[id]) {
+            if (trackAim && id < tracks->accelAvailable.size() &&
+                tracks->accelAvailable[id] &&
+                qualityAbove(tracks, id, guidance.apnFeedforwardMinQuality01)) {
                 ffAvailable = isFinite3(tracks->accelX[id], tracks->accelY[id],
                                         tracks->accelZ[id]);
                 atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
             } else if (datalinkAim && datalinkSrc < tracks->size &&
-                       tracks->accelAvailable[datalinkSrc]) {
+                       datalinkSrc < tracks->accelAvailable.size() &&
+                       tracks->accelAvailable[datalinkSrc] &&
+                       qualityAbove(tracks, datalinkSrc, guidance.apnFeedforwardMinQuality01)) {
                 ffAvailable = isFinite3(tracks->accelX[datalinkSrc],
                                         tracks->accelY[datalinkSrc],
                                         tracks->accelZ[datalinkSrc]);
@@ -259,6 +345,7 @@ namespace StrikeEngine::Kernel {
                 atx = guidance.targetAccelX[id]; aty = guidance.targetAccelY[id];
                 atz = guidance.targetAccelZ[id];
             }
+            const double N = rangeShapedN(id, guidance, range);
             const bool feedforward = guidance.apnFeedforwardEnabled[id] && ffAvailable;
             const Models::GuidanceSolution sol = feedforward
                 ? Models::augmentedProportionalNavigation(r, v, {atx, aty, atz}, N)
@@ -272,6 +359,34 @@ namespace StrikeEngine::Kernel {
             out.ax = sol.acceleration[0];
             out.ay = sol.acceleration[1];
             out.az = sol.acceleration[2];
+
+            // Midcourse loft (opt-in): add a vertical climb demand that fades
+            // as the intercept nears, for long-range energy shaping.
+            if (id < guidance.loftEnabled.size() && guidance.loftEnabled[id] &&
+                range > 0.0) {
+                const double loftRange = (id < guidance.loftRangeM.size())
+                    ? std::max(1.0, guidance.loftRangeM[id]) : 40000.0;
+                const double loftAlt = (id < guidance.loftAltitudeM.size())
+                    ? guidance.loftAltitudeM[id] : 0.0;
+                const double loftGain = (id < guidance.loftGain.size())
+                    ? guidance.loftGain[id] : 0.0;
+                const double scale = std::clamp(range / loftRange, 0.0, 1.0);
+                if (loftGain > 0.0 && loftAlt != 0.0 && scale > 0.0) {
+                    double upx = 0.0, upy = 0.0, upz = 1.0;
+                    if (env.earth.useEcefTruth) {
+                        const auto geo = Models::ecefToGeodetic(
+                            {nav.estPx[id], nav.estPy[id], nav.estPz[id]});
+                        upx = std::cos(geo.latitudeRad) * std::cos(geo.longitudeRad);
+                        upy = std::cos(geo.latitudeRad) * std::sin(geo.longitudeRad);
+                        upz = std::sin(geo.latitudeRad);
+                    }
+                    const double aLoft = loftGain * loftAlt * scale;
+                    out.ax += aLoft * upx;
+                    out.ay += aLoft * upy;
+                    out.az += aLoft * upz;
+                }
+            }
+
             out.tgoSec = range / std::max(sol.closingSpeed, 1e-6);
             return out;
         }
@@ -286,7 +401,8 @@ namespace StrikeEngine::Kernel {
         // reason flagged. Midcourse-only: a seeker lock overrides it upstream.
         LawResult computeTrajectory(
             std::size_t id, const NavigationBlock& nav,
-            const TrackBlock* tracks, GuidanceBlock& g)
+            const TrackBlock* tracks, GuidanceBlock& g,
+            const EnvironmentConfig& env)
         {
             LawResult out;
             const double N = effNavN(id, g);
@@ -317,8 +433,13 @@ namespace StrikeEngine::Kernel {
                     g.trajectoryAimSource[id] = GuidanceAimSource::Track;
                     tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
                     tvx = tracks->velX[src]; tvy = tracks->velY[src]; tvz = tracks->velZ[src];
-                    accelAvailable = tracks->accelAvailable[src];
-                    atx = tracks->accelX[src]; aty = tracks->accelY[src]; atz = tracks->accelZ[src];
+                    accelAvailable = src < tracks->accelAvailable.size() &&
+                                     tracks->accelAvailable[src];
+                    if (accelAvailable && src < tracks->accelX.size()) {
+                        atx = tracks->accelX[src]; aty = tracks->accelY[src]; atz = tracks->accelZ[src];
+                    } else {
+                        accelAvailable = false;
+                    }
                 }
             }
             const bool trackAim = tracks && id < tracks->size &&
@@ -327,8 +448,13 @@ namespace StrikeEngine::Kernel {
                 g.trajectoryAimSource[id] = GuidanceAimSource::Track;
                 tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
                 tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
-                accelAvailable = tracks->accelAvailable[id];
-                atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
+                accelAvailable = id < tracks->accelAvailable.size() &&
+                                 tracks->accelAvailable[id];
+                if (accelAvailable && id < tracks->accelX.size()) {
+                    atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
+                } else {
+                    accelAvailable = false;
+                }
             }
             if (!datalinkAim && !trackAim) {
                 g.trajectoryAimSource[id] = GuidanceAimSource::Command;
@@ -419,7 +545,18 @@ namespace StrikeEngine::Kernel {
             // Infeasible / unpredicable: bounded best-effort PN toward the raw
             // aim (same shape as legacy midcourse) while the trajectory
             // diagnostics keep the infeasibility explicit and the demand finite.
-            const LawResult fallback = computeMidcourse(id, nav, tracks, g);
+            LawResult fallback = computeMidcourse(id, nav, tracks, g, env);
+            if (id < g.scaleDemandOnInfeasible.size() && g.scaleDemandOnInfeasible[id] &&
+                lim > 0.0 && fallback.valid) {
+                const double mag = std::sqrt(fallback.ax * fallback.ax +
+                                             fallback.ay * fallback.ay +
+                                             fallback.az * fallback.az);
+                const double budget = factor * lim;
+                if (mag > budget && mag > 1e-9) {
+                    const double s = budget / mag;
+                    fallback.ax *= s; fallback.ay *= s; fallback.az *= s;
+                }
+            }
             out.ax = fallback.ax;
             out.ay = fallback.ay;
             out.az = fallback.az;
@@ -434,17 +571,23 @@ namespace StrikeEngine::Kernel {
         // contract (azimuth -> +body-Y, elevation -> -body-Z), rotated to the
         // world frame with the navigation attitude.
         // True APN adds 0.5 * N * a_T_perp target acceleration feedforward when available.
-        // Gyro decoupling removes parasitic body-rate coupling (radome/airframe feedback).
+        //
+        // Optional gyro decoupling / 3D body PN: the seeker measures the LOS
+        // rate in the BODY frame, so it contains the airframe's own rotation.
+        // The decoupled path reconstructs the LOS unit vector and its body
+        // derivative from (az, el, dAz, dEl), forms the relative angular
+        // velocity omega_rel = u x du/dt, adds the body rate (nav gyro) to get
+        // the inertial LOS rate, and commands N*Vc*(omega_in x u). With the
+        // body rate zero this reproduces the legacy component mapping to first
+        // order; the legacy path is kept byte-identical when disabled.
         LawResult computeSeekerAPN(
             std::size_t id, const NavigationBlock& nav,
             const SeekerBlock& seeker, const TrackBlock* tracks, GuidanceBlock& guidance)
         {
             LawResult out;
-            const double N = effNavN(id, guidance);
             const double range = seeker.targetRange[id];
             const double rangeRate = seeker.targetRangeRate[id];
-            if (!std::isfinite(N) || N <= 0.0 ||
-                !std::isfinite(range) || !std::isfinite(rangeRate) ||
+            if (!std::isfinite(range) || !std::isfinite(rangeRate) ||
                 !std::isfinite(seeker.targetAzimuthRate[id]) ||
                 !std::isfinite(seeker.targetElevationRate[id]))
             {
@@ -454,21 +597,60 @@ namespace StrikeEngine::Kernel {
                 out.valid = false;
                 return out;
             }
+            const double N = rangeShapedN(id, guidance, range);
+            if (!std::isfinite(N) || N <= 0.0) {
+                out.lawInvalid = true;
+                out.valid = false;
+                return out;
+            }
             const double vc = std::max(std::abs(rangeRate), 1.0);
             const double dAz = seeker.targetAzimuthRate[id];
             const double dEl = seeker.targetElevationRate[id];
             out.nonClosing = rangeRate > 0.0;
             out.tgoSec = range / std::max(std::abs(rangeRate), 1.0);
-            const double ayBody = N * vc * dAz;
-            const double azBody = -N * vc * dEl;
+            if (id < guidance.closingSpeed.size()) guidance.closingSpeed[id] = vc;
+            if (id < guidance.losRateMag.size()) {
+                guidance.losRateMag[id] = std::sqrt(dAz * dAz + dEl * dEl);
+            }
+
+            const double az = seeker.targetAzimuth[id];
+            const double el = seeker.targetElevation[id];
+            const double cEl = std::cos(el), sEl = std::sin(el);
             glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
-            glm::dvec3 aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
+            const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
+
+            const bool bodyPN = id < guidance.terminalLaw.size() &&
+                                guidance.terminalLaw[id] == 1;
+            const bool decoupled = bodyPN ||
+                (id < guidance.gyroDecouplingEnabled.size() &&
+                 guidance.gyroDecouplingEnabled[id]);
+
+            glm::dvec3 aWorld;
+            if (!decoupled) {
+                const double ayBody = N * vc * dAz;
+                const double azBody = -N * vc * dEl;
+                aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
+            } else {
+                const double ca = std::cos(az), sa = std::sin(az);
+                // du/dt in the body frame from the angular rates.
+                const glm::dvec3 du(
+                    -sEl * ca * dEl - cEl * sa * dAz,
+                    -sEl * sa * dEl + cEl * ca * dAz,
+                    -cEl * dEl);
+                glm::dvec3 omegaIn = glm::cross(losBody, du);
+                if (id < nav.estWx.size()) {
+                    omegaIn += glm::dvec3(nav.estWx[id], nav.estWy[id], nav.estWz[id]);
+                }
+                aWorld = estQ * (N * vc * glm::cross(omegaIn, losBody));
+            }
 
             // True APN target-acceleration feedforward augmentation:
             // a_cmd = a_PN + 0.5 * N * a_T_perp
             bool ffAvailable = false;
             double atx = 0.0, aty = 0.0, atz = 0.0;
-            if (tracks && tracks->active(id) && tracks->accelAvailable[id]) {
+            if (tracks && id < tracks->accelAvailable.size() &&
+                tracks->active(id) && tracks->accelAvailable[id] &&
+                qualityAbove(tracks, id, guidance.apnFeedforwardMinQuality01)) {
                 ffAvailable = isFinite3(tracks->accelX[id], tracks->accelY[id], tracks->accelZ[id]);
                 atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
             } else if (guidance.targetAccelAvailable[id]) {
@@ -477,10 +659,6 @@ namespace StrikeEngine::Kernel {
             }
 
             if (guidance.apnFeedforwardEnabled[id] && ffAvailable) {
-                const double az = seeker.targetAzimuth[id];
-                const double el = seeker.targetElevation[id];
-                const double cEl = std::cos(el), sEl = std::sin(el);
-                const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
                 const glm::dvec3 losWorld = glm::normalize(estQ * losBody);
                 const glm::dvec3 aT(atx, aty, atz);
                 const glm::dvec3 aTperp = aT - glm::dot(aT, losWorld) * losWorld;
@@ -549,6 +727,7 @@ namespace StrikeEngine::Kernel {
             if (locked) {
                 guidance.trackAgeSec[i] = 0.0;
                 guidance.trackId[i] = static_cast<std::int64_t>(seeker.lockedTargetId[i]);
+                if (i < guidance.trackLossActive.size()) guidance.trackLossActive[i] = false;
             } else if (seekerPresent) {
                 guidance.trackAgeSec[i] += dt;
             }
@@ -585,12 +764,13 @@ namespace StrikeEngine::Kernel {
                 }
                 if (w >= 1.0) phase = GuidancePhase::Terminal;
 
-                law = GuidanceLaw::SeekerRateAPN;
+                law = (i < guidance.terminalLaw.size() && guidance.terminalLaw[i] == 1)
+                    ? GuidanceLaw::BodyPN : GuidanceLaw::SeekerRateAPN;
                 LawResult apn = computeSeekerAPN(i, nav, seeker, &tracks, guidance);
                 LawResult out = apn;
                 if (phase == GuidancePhase::Acquisition) {
                     // Blend midcourse PN -> terminal APN (deterministic ramp).
-                    const LawResult pn = computeMidcourse(i, nav, &tracks, guidance);
+                    const LawResult pn = computeMidcourse(i, nav, &tracks, guidance, environment);
                     if (!apn.valid && pn.valid) {
                         // Seeker solution unusable: fly pure midcourse rather
                         // than zeroing a valid demand.
@@ -625,7 +805,7 @@ namespace StrikeEngine::Kernel {
                     const double w = (coneRad > 1e-6)
                         ? std::clamp(1.0 - targetOff / coneRad, 0.0, 1.0) : 0.0;
                     if (w < 1.0) {
-                        const LawResult mc = computeMidcourse(i, nav, &tracks, guidance);
+                        const LawResult mc = computeMidcourse(i, nav, &tracks, guidance, environment);
                         if (mc.valid) {
                             out.ax = w * out.ax + (1.0 - w) * mc.ax;
                             out.ay = w * out.ay + (1.0 - w) * mc.ay;
@@ -642,7 +822,7 @@ namespace StrikeEngine::Kernel {
                         // below (they only run from Acquisition/Terminal).
                     }
                 }
-                applyDemand(i, out, guidance);
+                applyDemand(i, out, guidance, dt);
                 // Refresh the bounded retained terminal command (post-clamp)
                 // used during a lock-loss retention window.
                 guidance.retainedAccelX[i] = guidance.commandedAccelX[i];
@@ -655,9 +835,17 @@ namespace StrikeEngine::Kernel {
             if (seekerPresent &&
                 (phase == GuidancePhase::Acquisition || phase == GuidancePhase::Terminal))
             {
-                // Terminal track just lost: count it once, then either retain
-                // (bounded, by configuration) or fall to LostTrack.
-                if (guidance.trackAgeSec[i] <= dt * 1.5) {
+                // Terminal track just lost: count the episode once. With the
+                // episode flag available it is dt-robust; hand-built blocks
+                // without it fall back to the legacy age heuristic.
+                bool countLoss;
+                if (i < guidance.trackLossActive.size()) {
+                    countLoss = !guidance.trackLossActive[i];
+                    guidance.trackLossActive[i] = true;
+                } else {
+                    countLoss = guidance.trackAgeSec[i] <= dt * 1.5;
+                }
+                if (countLoss) {
                     ++guidance.lockLossCount[i];
                 }
                 const double retain = guidance.lockLossRetentionSec[i];
@@ -666,14 +854,15 @@ namespace StrikeEngine::Kernel {
                     // command (last valid seeker-APN demand, already clamped by
                     // maxAccel) while the track identity/age is retained.
                     phase = GuidancePhase::Terminal;
-                    law = GuidanceLaw::SeekerRateAPN;
+                    law = (i < guidance.terminalLaw.size() && guidance.terminalLaw[i] == 1)
+                        ? GuidanceLaw::BodyPN : GuidanceLaw::SeekerRateAPN;
                     LawResult retained;
                     retained.ax = guidance.retainedAccelX[i];
                     retained.ay = guidance.retainedAccelY[i];
                     retained.az = guidance.retainedAccelZ[i];
                     retained.valid = isFinite3(retained.ax, retained.ay, retained.az);
                     retained.tgoSec = guidance.tgoSec[i];  // last valid tgo
-                    applyDemand(i, retained, guidance);
+                    applyDemand(i, retained, guidance, dt);
                     continue;
                 }
                 phase = GuidancePhase::LostTrack; // recovery via midcourse PN
@@ -697,7 +886,7 @@ namespace StrikeEngine::Kernel {
                 law = (guidance.apnFeedforwardEnabled[i] &&
                        guidance.targetAccelAvailable[i])
                     ? GuidanceLaw::AugmentedProNav : GuidanceLaw::PureProNav;
-                applyDemand(i, computeMidcourse(i, nav, &tracks, guidance), guidance);
+                applyDemand(i, computeMidcourse(i, nav, &tracks, guidance, environment), guidance, dt);
             } else if (mode == GuidanceMode::Waypoint) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Waypoint;
@@ -711,7 +900,7 @@ namespace StrikeEngine::Kernel {
                     // acceleration command; mark it explicitly and zero it.
                     wp.lawInvalid = true;
                     wp.valid = false;
-                    applyDemand(i, wp, guidance);
+                    applyDemand(i, wp, guidance, dt);
                     continue;
                 }
                 double rMag = std::sqrt(rx * rx + ry * ry + rz * rz);
@@ -720,15 +909,15 @@ namespace StrikeEngine::Kernel {
                 wp.ay = k * (ry / rMag);
                 wp.az = k * (rz / rMag);
                 wp.tgoSec = rMag / 300.0;  // diagnostic only (nominal 300 m/s)
-                applyDemand(i, wp, guidance);
+                applyDemand(i, wp, guidance, dt);
             } else if (mode == GuidanceMode::Trajectory) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Trajectory;
-                applyDemand(i, computeTrajectory(i, nav, &tracks, guidance), guidance);
+                applyDemand(i, computeTrajectory(i, nav, &tracks, guidance, environment), guidance, dt);
             } else if (mode == GuidanceMode::Cruise) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Cruise;
-                applyDemand(i, computeCruise(i, nav, guidance, environment), guidance);
+                applyDemand(i, computeCruise(i, nav, guidance, environment), guidance, dt);
             } else {
                 zeroDemand(i, guidance);
                 phase = GuidancePhase::None;

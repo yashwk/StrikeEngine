@@ -30,7 +30,8 @@ namespace StrikeEngine::Kernel {
         SeekerRateAPN,  // body-frame LOS-rate APN (seeker)
         AugmentedProNav,// PN + target-acceleration feed-forward (0.5*N*a_t_perp)
         Trajectory,     // W40 PN aimed at a predicted intercept point
-        Cruise          // aircraft altitude-hold + waypoint course
+        Cruise,         // aircraft altitude-hold + waypoint course
+        BodyPN          // 3D PN on the reconstructed seeker LOS (gyro-decoupled)
     };
 
     // Aim source for the W40 trajectory predictor (diagnostic).
@@ -103,6 +104,21 @@ namespace StrikeEngine::Kernel {
         std::vector<double> trajectoryMinSpeedMps;          // own est-speed floor for an intercept prediction (default 30.0)
         std::vector<double> trajectoryFeasibilityAccelFactor; // feasibility: requiredAccel <= factor * maxAccel when maxAccel > 0 (0.95)
 
+        // Terminal conditioning + law selection (defaults = legacy path).
+        std::vector<bool>   gyroDecouplingEnabled;   // remove body-rate from the seeker LOS rate
+        std::vector<int>    terminalLaw;             // 0 = SeekerRateAPN, 1 = BodyPN (3D)
+        std::vector<double> commandLagSec;           // first-order demand lag (s); 0 = off
+        std::vector<double> commandSlewLimitMps3;    // demand slew limit (m/s^3); 0 = off
+        std::vector<bool>   scaleDemandOnInfeasible; // scale, not just flag, an over-budget demand
+        std::vector<bool>   rangeGainShapingEnabled; // N'(r) gain shaping
+        std::vector<double> rangeGainRefM;           // reference range for shaping
+        std::vector<double> trackAimMinQuality01;    // min track quality to use as aim
+        std::vector<double> apnFeedforwardMinQuality01; // min track quality to trust APN ff
+        std::vector<bool>   loftEnabled;             // midcourse loft shaping
+        std::vector<double> loftAltitudeM;           // loft apex above launch altitude (m)
+        std::vector<double> loftGain;                // vertical accel per m of loft error
+        std::vector<double> loftRangeM;              // range beyond which loft applies
+
         // W41 cooperative-engagement datalink (see GuidanceAutopilotConfig):
         // the source entity whose persistent track provides the midcourse aim,
         // and the target entity that track is of. -1 = disabled.
@@ -146,6 +162,14 @@ namespace StrikeEngine::Kernel {
         std::vector<GuidanceAimSource> trajectoryAimSource; // Track/Command/None
         std::vector<bool>   trajectoryFeasible;   // predicted intercept fits the accel budget
         std::vector<TrajectoryReason> trajectoryReason;
+
+        // Terminal conditioning state + diagnostics.
+        std::vector<double> shapedAccelX;         // post-lag/slew demand (== commanded when off)
+        std::vector<double> shapedAccelY;
+        std::vector<double> shapedAccelZ;
+        std::vector<double> losRateMag;           // |seeker LOS rate| used (rad/s)
+        std::vector<double> closingSpeed;         // closing speed used (m/s)
+        std::vector<bool>   trackLossActive;      // a terminal lock-loss episode is being counted
     };
 
 } // namespace StrikeEngine::Kernel

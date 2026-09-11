@@ -67,6 +67,19 @@ namespace StrikeEngine::Kernel {
 
             cfg.trajectoryMinSpeedMps = getDoubleKey(data, "trajectory_min_speed_mps", "trajectoryMinSpeedMps", cfg.trajectoryMinSpeedMps);
             cfg.trajectoryFeasibilityAccelFactor = getDoubleKey(data, "trajectory_feasibility_accel_factor", "trajectoryFeasibilityAccelFactor", cfg.trajectoryFeasibilityAccelFactor);
+            cfg.guidanceGyroDecouplingEnabled = getBoolKey(data, "guidance_gyro_decoupling_enabled", "guidanceGyroDecouplingEnabled", cfg.guidanceGyroDecouplingEnabled);
+            cfg.terminalLaw = getIntKey(data, "terminal_law", "terminalLaw", cfg.terminalLaw);
+            cfg.guidanceCommandLagSec = getDoubleKey(data, "guidance_command_lag_sec", "guidanceCommandLagSec", cfg.guidanceCommandLagSec);
+            cfg.guidanceCommandSlewLimitMps3 = getDoubleKey(data, "guidance_command_slew_limit_mps3", "guidanceCommandSlewLimitMps3", cfg.guidanceCommandSlewLimitMps3);
+            cfg.guidanceScaleDemandOnInfeasible = getBoolKey(data, "guidance_scale_demand_on_infeasible", "guidanceScaleDemandOnInfeasible", cfg.guidanceScaleDemandOnInfeasible);
+            cfg.guidanceRangeGainShapingEnabled = getBoolKey(data, "guidance_range_gain_shaping_enabled", "guidanceRangeGainShapingEnabled", cfg.guidanceRangeGainShapingEnabled);
+            cfg.guidanceRangeGainRefM = getDoubleKey(data, "guidance_range_gain_ref_m", "guidanceRangeGainRefM", cfg.guidanceRangeGainRefM);
+            cfg.guidanceTrackAimMinQuality01 = getDoubleKey(data, "guidance_track_aim_min_quality01", "guidanceTrackAimMinQuality01", cfg.guidanceTrackAimMinQuality01);
+            cfg.guidanceApnFeedforwardMinQuality01 = getDoubleKey(data, "guidance_apn_feedforward_min_quality01", "guidanceApnFeedforwardMinQuality01", cfg.guidanceApnFeedforwardMinQuality01);
+            cfg.guidanceLoftEnabled = getBoolKey(data, "guidance_loft_enabled", "guidanceLoftEnabled", cfg.guidanceLoftEnabled);
+            cfg.guidanceLoftAltitudeM = getDoubleKey(data, "guidance_loft_altitude_m", "guidanceLoftAltitudeM", cfg.guidanceLoftAltitudeM);
+            cfg.guidanceLoftGain = getDoubleKey(data, "guidance_loft_gain", "guidanceLoftGain", cfg.guidanceLoftGain);
+            cfg.guidanceLoftRangeM = getDoubleKey(data, "guidance_loft_range_m", "guidanceLoftRangeM", cfg.guidanceLoftRangeM);
 
             cfg.gainSchedulingEnabled = getBoolKey(data, "gain_scheduling_enabled", "gainSchedulingEnabled", cfg.gainSchedulingEnabled);            cfg.refDynamicPressurePa = getDoubleKey(data, "ref_dynamic_pressure_pa", "refDynamicPressurePa", cfg.refDynamicPressurePa);
             cfg.minDynamicPressurePa = getDoubleKey(data, "min_dynamic_pressure_pa", "minDynamicPressurePa", cfg.minDynamicPressurePa);
