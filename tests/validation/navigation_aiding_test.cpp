@@ -299,6 +299,26 @@ int main()
         check(s.baroEnabled && s.baroNoiseStdDev == 2.5, "baro keys round-trip");
         check(s.magEnabled && s.gpsLatencySec == 0.2 && s.gpsLeverArmX == 1.5, "mag/GPS keys round-trip");
         check(s.insAdaptiveQEnabled && s.initialAttitudeErrorDeg == 0.5, "INS/alignment keys round-trip");
+        e.vehicleConfig.sensor.insGravityGradientEnabled = true;
+        e.vehicleConfig.sensor.insEarthRotationCouplingEnabled = true;
+        e.vehicleConfig.sensor.gpsBatchUpdateEnabled = true;
+        e.vehicleConfig.sensor.gpsLeverArmCompensationEnabled = true;
+        e.vehicleConfig.sensor.gpsYawCorrectionDamping = 0.4;
+        e.vehicleConfig.sensor.gpsFixConsistencyThreshold = 0.0;
+        e.vehicleConfig.sensor.maxGyroBiasEstimate = 0.005;
+        e.vehicleConfig.sensor.baroAttitudeCorrectionEnabled = true;
+        scn.entities = {e};
+        check(scn.save(path), "scenario with error-model keys saves");
+        const ScenarioConfig back2 = ScenarioConfig::load(path);
+        const auto& s2 = back2.entities[0].vehicleConfig.sensor;
+        check(s2.insGravityGradientEnabled && s2.insEarthRotationCouplingEnabled,
+              "INS error-model keys round-trip");
+        check(s2.gpsBatchUpdateEnabled && s2.gpsYawCorrectionDamping == 0.4,
+              "GPS fusion keys round-trip");
+        check(s2.gpsLeverArmCompensationEnabled, "GPS lever-compensation key round-trips");
+        check(s2.gpsFixConsistencyThreshold == 0.0 && s2.maxGyroBiasEstimate == 0.005 &&
+              s2.baroAttitudeCorrectionEnabled,
+              "gate/clamp/baro keys round-trip");
         check(g.navScheduleEnabled && g.navConstantTerminal == 2.5 && g.navScheduleTgoSec == 6.0,
               "scheduled-N keys round-trip");
         check(back.randomSeed == 0x12345678u, "scenario global seed round-trips");
@@ -308,7 +328,7 @@ int main()
     {
         {
             std::ofstream f("/tmp/opencode/sensor_newkeys.json");
-            f << R"({"imu_enabled": true, "gps_enabled": true, "baro_enabled": true, "baro_noise_std_dev": 3.0, "mag_enabled": true, "gps_latency_sec": 0.25, "ins_adaptive_q_enabled": true, "initial_attitude_error_deg": 1.0})";
+            f << R"({"imu_enabled": true, "gps_enabled": true, "baro_enabled": true, "baro_noise_std_dev": 3.0, "mag_enabled": true, "gps_latency_sec": 0.25, "ins_adaptive_q_enabled": true, "initial_attitude_error_deg": 1.0, "ins_gravity_gradient_enabled": true, "gps_batch_update_enabled": true, "gps_yaw_correction_damping": 0.25, "max_gyro_bias_estimate": 0.01})";
         }
         SensorProfileDatabase db;
         check(db.loadProfile("/tmp/opencode/sensor_newkeys.json"), "sensor profile with new keys loads");
@@ -316,6 +336,10 @@ int main()
         check(db.sensor().magEnabled && db.sensor().gpsLatencySec == 0.25, "sensor DB reads mag/latency keys");
         check(db.sensor().insAdaptiveQEnabled && db.sensor().initialAttitudeErrorDeg == 1.0,
               "sensor DB reads INS/alignment keys");
+        check(db.sensor().insGravityGradientEnabled && db.sensor().gpsBatchUpdateEnabled &&
+              db.sensor().gpsYawCorrectionDamping == 0.25 &&
+              db.sensor().maxGyroBiasEstimate == 0.01,
+              "sensor DB reads INS error-model + GPS fusion keys");
         {
             std::ofstream f("/tmp/opencode/guidance_newkeys.json");
             f << R"({"navigationConstant": 4.0, "navScheduleEnabled": true, "navConstantTerminal": 2.0, "navScheduleTgoSec": 7.0})";
@@ -351,6 +375,116 @@ int main()
         };
         check(runLoad(false) == runLoad(true),
               "loadInto reseeds sensor+nav+warhead streams from the scenario seed");
+    }
+
+    // ---- 12. Alignment sigmas seed the state covariance ----
+    {
+        PhysicsBlock physics; SensorBlock sensors; EntityStatusBlock status; NavigationBlock nav;
+        makeStaticBlocks(physics, sensors, status);
+        sensors.initialAttitudeErrorDeg = {2.0};
+        sensors.initialPositionErrorM = {5.0};
+        sensors.initialVelocityErrorMps = {0.5};
+        NavigationSystem system;
+        system.update(sensors, physics, nav, 0.01); // align only
+        const double attRad = 2.0 * 3.14159265358979323846 / 180.0;
+        check(std::abs(nav.covarianceDiag[0][6] - attRad * attRad) < 1e-15,
+              "attitude covariance seeded from the injected alignment sigma");
+        check(nav.covarianceDiag[0][0] == 25.0 && nav.covarianceDiag[0][3] == 0.25,
+              "position/velocity covariance seeded from their sigmas");
+    }
+
+    // ---- 13. Gravity-gradient + earth-rotation Jacobian blocks ----
+    {
+        auto runTransition = [](bool gravityGradient, bool earthRotation, int r, int c) {
+            PhysicsBlock physics; SensorBlock sensors; EntityStatusBlock status; NavigationBlock nav;
+            makeStaticBlocks(physics, sensors, status);
+            physics.px[0] = 6371000.0; physics.py[0] = 0.0; physics.pz[0] = 0.0;
+            physics.ax[0] = 9.80665;   // specific force cancels radial gravity
+            sensors.accelX[0] = 9.80665;
+            sensors.gpsEnabled[0] = false;
+            sensors.insGravityGradientEnabled = {gravityGradient};
+            sensors.insEarthRotationCouplingEnabled = {earthRotation};
+            NavigationSystem system;
+            EnvironmentConfig env;
+            env.earth.useEcefTruth = true;
+            env.earth.useSphericalGravity = true;
+            env.earth.includeCoriolis = earthRotation;
+            env.earth.includeCentrifugal = earthRotation;
+            system.update(sensors, physics, nav, 0.01); // align
+            system.update(sensors, physics, nav, 0.01, env); // one propagation
+            return nav.covarianceFull[0][r * 15 + c];
+        };
+        check(runTransition(true, false, 3, 0) > runTransition(false, false, 3, 0),
+              "gravity gradient couples position error into velocity covariance");
+        check(std::abs(runTransition(false, true, 0, 4)) >
+              std::abs(runTransition(false, false, 0, 4)),
+              "earth-rate coupling adds Coriolis velocity covariance");
+    }
+
+    // ---- 14. GPS lever-arm compensation in the filter ----
+    {
+        PhysicsBlock physics; SensorBlock sensors; EntityStatusBlock status; NavigationBlock nav;
+        makeStaticBlocks(physics, sensors, status);
+        sensors.gpsEnabled[0] = true;
+        sensors.gpsUpdateRateHz[0] = 100.0;
+        sensors.gpsPosNoiseStdDev[0] = 0.0;
+        sensors.gpsVelNoiseStdDev[0] = 0.0;
+        sensors.gpsLeverArmX[0] = 2.0; // 2 m forward, identity attitude
+        sensors.gpsLeverArmCompensationEnabled = {true};
+        NavigationSystem system;
+        system.update(sensors, physics, nav, 0.01); // align at the CM (x=0)
+        sensors.gpsUpdated[0] = true;
+        sensors.gpsPosX[0] = 2.0; sensors.gpsPosY[0] = 0.0; sensors.gpsPosZ[0] = 1000.0;
+        system.update(sensors, physics, nav, 0.01);
+        check(std::abs(nav.estPx[0]) < 1e-9,
+              "nav refers the antenna fix to the CM before fusion");
+    }
+
+    // ---- 15. Batch GPS update fuses a clean fix and gates a bad one ----
+    {
+        PhysicsBlock physics; SensorBlock sensors; EntityStatusBlock status; NavigationBlock nav;
+        makeStaticBlocks(physics, sensors, status);
+        sensors.gpsEnabled[0] = true;
+        sensors.gpsUpdateRateHz[0] = 100.0;
+        sensors.gpsBatchUpdateEnabled = {true};
+        sensors.gpsFixConsistencyEnabled = {true};
+        NavigationSystem system;
+        SensorSystem gen;
+        gen.setSeed(5);
+        EnvironmentConfig env;
+        double t = 0.0;
+        for (int k = 0; k < 12; ++k) {
+            t += 0.01;
+            gen.update(physics, sensors, status, t, 0.01, env);
+            system.update(sensors, physics, nav, 0.01, env);
+        }
+        check(std::isfinite(nav.estPx[0]) && std::isfinite(nav.estPz[0]),
+              "batch GPS update stays finite on a clean fix");
+        // Corrupt one axis: the joint NIS gate must drop the whole fix.
+        sensors.gpsPosX[0] = 100000.0;
+        sensors.gpsUpdated[0] = true;
+        NavigationBlock twin = nav;
+        system.update(sensors, physics, nav, 0.01, env);
+        sensors.gpsUpdated[0] = false;
+        system.update(sensors, physics, twin, 0.01, env);
+        check(nav.lastGpsUpdateRejected[0], "batch joint gate rejects the corrupted fix");
+        check(nav.estPx[0] == twin.estPx[0] && nav.estVx[0] == twin.estVx[0],
+              "rejected batch fix fuses nothing");
+    }
+
+    // ---- 16. resetEntity clears recycled-slot filter state ----
+    {
+        NavigationBlock nav;
+        NavigationSystem system;
+        system.resetEntity(nav, 0);
+        nav.isAligned[0] = true;
+        nav.estAccelBiasX[0] = 0.3;
+        nav.estGyroBiasZ[0] = 0.01;
+        nav.covarianceFull[0][0] = 123.0;
+        system.resetEntity(nav, 0);
+        check(!nav.isAligned[0] && nav.estAccelBiasX[0] == 0.0 &&
+              nav.estGyroBiasZ[0] == 0.0 && nav.covarianceFull[0][0] != 123.0,
+              "resetEntity clears alignment, biases and covariance");
     }
 
     if (g_failures == 0) std::printf("ALL AIDING TESTS PASSED\n");

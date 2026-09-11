@@ -57,6 +57,19 @@ namespace StrikeEngine::Kernel {
         std::vector<double> initialPositionErrorM;
         std::vector<double> initialVelocityErrorMps;
 
+        // INS error-model fidelity + GPS fusion options (from SensorConfig).
+        std::vector<bool> insGravityGradientEnabled;
+        std::vector<bool> insEarthRotationCouplingEnabled;
+        std::vector<bool> gpsBatchUpdateEnabled;
+        std::vector<bool> gpsLeverArmCompensationEnabled;
+        std::vector<double> gpsYawCorrectionDamping;
+        std::vector<double> gpsFixConsistencyThreshold;
+        std::vector<double> gpsFixConsistencyConfidence;
+        std::vector<int> gpsFixConsistencyDof;
+        std::vector<double> maxAccelBiasEstimate;
+        std::vector<double> maxGyroBiasEstimate;
+        std::vector<bool> baroAttitudeCorrectionEnabled;
+
         std::size_t size = 0;
     };
 

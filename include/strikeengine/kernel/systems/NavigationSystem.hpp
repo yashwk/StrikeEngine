@@ -30,6 +30,13 @@ namespace StrikeEngine::Kernel {
         // bit-identical; kernel reset re-seeds through setRandomSeed.
         void setSeed(std::uint32_t seed);
 
+        // Clear all per-entity filter state (alignment flag, covariance,
+        // bias estimates, coning memory) so a recycled entity slot re-aligns
+        // from scratch. Called by SimulationKernel::createVehicle, including
+        // free-list reuse where the previous entity's state would otherwise
+        // persist.
+        void resetEntity(NavigationBlock& nav, std::size_t id);
+
     private:
         // Alignment-error RNG stream (separate object; draws only happen when
         // initial-error sigmas are non-zero, so legacy runs never touch it).

@@ -348,6 +348,17 @@ namespace StrikeEngine::Kernel {
             sensorBlock.initialAttitudeErrorDeg.push_back(0.0);
             sensorBlock.initialPositionErrorM.push_back(0.0);
             sensorBlock.initialVelocityErrorMps.push_back(0.0);
+            sensorBlock.insGravityGradientEnabled.push_back(false);
+            sensorBlock.insEarthRotationCouplingEnabled.push_back(false);
+            sensorBlock.gpsBatchUpdateEnabled.push_back(false);
+            sensorBlock.gpsLeverArmCompensationEnabled.push_back(false);
+            sensorBlock.gpsYawCorrectionDamping.push_back(0.1);
+            sensorBlock.gpsFixConsistencyThreshold.push_back(16.81);
+            sensorBlock.gpsFixConsistencyConfidence.push_back(0.99);
+            sensorBlock.gpsFixConsistencyDof.push_back(6);
+            sensorBlock.maxAccelBiasEstimate.push_back(0.5);
+            sensorBlock.maxGyroBiasEstimate.push_back(0.02);
+            sensorBlock.baroAttitudeCorrectionEnabled.push_back(false);
 
             seekerBlock.type.push_back(SeekerType::None);
             seekerBlock.transmitterPowerW.push_back(1000.0);
@@ -502,6 +513,11 @@ namespace StrikeEngine::Kernel {
         trackBlock.measPosX[id] = 0; trackBlock.measPosY[id] = 0; trackBlock.measPosZ[id] = 0;
         trackBlock.measTimeSec[id] = 0.0;
 
+        // Fresh and reused slots: clear the navigation filter so a recycled
+        // entity ID re-aligns from truth instead of inheriting the previous
+        // occupant's covariance, biases and alignment flag.
+        navigationSystem.resetEntity(navigationBlock, id);
+
         sensorBlock.accelNoiseStdDev[id] = resolved.sensor.accelNoiseStdDev;
         sensorBlock.accelBiasStdDev[id] = resolved.sensor.accelBiasStdDev;
         sensorBlock.gyroNoiseStdDev[id] = resolved.sensor.gyroNoiseStdDev;
@@ -534,6 +550,17 @@ namespace StrikeEngine::Kernel {
         sensorBlock.initialAttitudeErrorDeg[id] = resolved.sensor.initialAttitudeErrorDeg;
         sensorBlock.initialPositionErrorM[id] = resolved.sensor.initialPositionErrorM;
         sensorBlock.initialVelocityErrorMps[id] = resolved.sensor.initialVelocityErrorMps;
+        sensorBlock.insGravityGradientEnabled[id] = resolved.sensor.insGravityGradientEnabled;
+        sensorBlock.insEarthRotationCouplingEnabled[id] = resolved.sensor.insEarthRotationCouplingEnabled;
+        sensorBlock.gpsBatchUpdateEnabled[id] = resolved.sensor.gpsBatchUpdateEnabled;
+        sensorBlock.gpsLeverArmCompensationEnabled[id] = resolved.sensor.gpsLeverArmCompensationEnabled;
+        sensorBlock.gpsYawCorrectionDamping[id] = resolved.sensor.gpsYawCorrectionDamping;
+        sensorBlock.gpsFixConsistencyThreshold[id] = resolved.sensor.gpsFixConsistencyThreshold;
+        sensorBlock.gpsFixConsistencyConfidence[id] = resolved.sensor.gpsFixConsistencyConfidence;
+        sensorBlock.gpsFixConsistencyDof[id] = resolved.sensor.gpsFixConsistencyDof;
+        sensorBlock.maxAccelBiasEstimate[id] = resolved.sensor.maxAccelBiasEstimate;
+        sensorBlock.maxGyroBiasEstimate[id] = resolved.sensor.maxGyroBiasEstimate;
+        sensorBlock.baroAttitudeCorrectionEnabled[id] = resolved.sensor.baroAttitudeCorrectionEnabled;
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;

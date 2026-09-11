@@ -390,6 +390,18 @@ void to_json(json& j, const SensorConfig& s) {
     j["initial_attitude_error_deg"] = s.initialAttitudeErrorDeg;
     j["initial_position_error_m"] = s.initialPositionErrorM;
     j["initial_velocity_error_mps"] = s.initialVelocityErrorMps;
+    // INS error-model fidelity + GPS fusion (optional; defaults = legacy).
+    j["ins_gravity_gradient_enabled"] = s.insGravityGradientEnabled;
+    j["ins_earth_rotation_coupling_enabled"] = s.insEarthRotationCouplingEnabled;
+    j["gps_batch_update_enabled"] = s.gpsBatchUpdateEnabled;
+    j["gps_lever_arm_compensation_enabled"] = s.gpsLeverArmCompensationEnabled;
+    j["gps_yaw_correction_damping"] = s.gpsYawCorrectionDamping;
+    j["gps_fix_consistency_threshold"] = s.gpsFixConsistencyThreshold;
+    j["gps_fix_consistency_confidence"] = s.gpsFixConsistencyConfidence;
+    j["gps_fix_consistency_dof"] = s.gpsFixConsistencyDof;
+    j["max_accel_bias_estimate"] = s.maxAccelBiasEstimate;
+    j["max_gyro_bias_estimate"] = s.maxGyroBiasEstimate;
+    j["baro_attitude_correction_enabled"] = s.baroAttitudeCorrectionEnabled;
 }
 
 void from_json(const json& j, SensorConfig& s) {
@@ -425,6 +437,17 @@ void from_json(const json& j, SensorConfig& s) {
     s.initialAttitudeErrorDeg = j.value("initial_attitude_error_deg", 0.0);
     s.initialPositionErrorM = j.value("initial_position_error_m", 0.0);
     s.initialVelocityErrorMps = j.value("initial_velocity_error_mps", 0.0);
+    s.insGravityGradientEnabled = j.value("ins_gravity_gradient_enabled", false);
+    s.insEarthRotationCouplingEnabled = j.value("ins_earth_rotation_coupling_enabled", false);
+    s.gpsBatchUpdateEnabled = j.value("gps_batch_update_enabled", false);
+    s.gpsLeverArmCompensationEnabled = j.value("gps_lever_arm_compensation_enabled", false);
+    s.gpsYawCorrectionDamping = j.value("gps_yaw_correction_damping", 0.1);
+    s.gpsFixConsistencyThreshold = j.value("gps_fix_consistency_threshold", 16.81);
+    s.gpsFixConsistencyConfidence = j.value("gps_fix_consistency_confidence", 0.99);
+    s.gpsFixConsistencyDof = j.value("gps_fix_consistency_dof", 6);
+    s.maxAccelBiasEstimate = j.value("max_accel_bias_estimate", 0.5);
+    s.maxGyroBiasEstimate = j.value("max_gyro_bias_estimate", 0.02);
+    s.baroAttitudeCorrectionEnabled = j.value("baro_attitude_correction_enabled", false);
 }
 
 void to_json(json& j, const GuidanceAutopilotConfig& g) {

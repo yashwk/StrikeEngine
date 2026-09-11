@@ -46,6 +46,17 @@ namespace StrikeEngine::Kernel {
             cfg.initialAttitudeErrorDeg = data.value("initial_attitude_error_deg", cfg.initialAttitudeErrorDeg);
             cfg.initialPositionErrorM = data.value("initial_position_error_m", cfg.initialPositionErrorM);
             cfg.initialVelocityErrorMps = data.value("initial_velocity_error_mps", cfg.initialVelocityErrorMps);
+            cfg.insGravityGradientEnabled = data.value("ins_gravity_gradient_enabled", cfg.insGravityGradientEnabled);
+            cfg.insEarthRotationCouplingEnabled = data.value("ins_earth_rotation_coupling_enabled", cfg.insEarthRotationCouplingEnabled);
+            cfg.gpsBatchUpdateEnabled = data.value("gps_batch_update_enabled", cfg.gpsBatchUpdateEnabled);
+            cfg.gpsLeverArmCompensationEnabled = data.value("gps_lever_arm_compensation_enabled", cfg.gpsLeverArmCompensationEnabled);
+            cfg.gpsYawCorrectionDamping = data.value("gps_yaw_correction_damping", cfg.gpsYawCorrectionDamping);
+            cfg.gpsFixConsistencyThreshold = data.value("gps_fix_consistency_threshold", cfg.gpsFixConsistencyThreshold);
+            cfg.gpsFixConsistencyConfidence = data.value("gps_fix_consistency_confidence", cfg.gpsFixConsistencyConfidence);
+            cfg.gpsFixConsistencyDof = data.value("gps_fix_consistency_dof", cfg.gpsFixConsistencyDof);
+            cfg.maxAccelBiasEstimate = data.value("max_accel_bias_estimate", cfg.maxAccelBiasEstimate);
+            cfg.maxGyroBiasEstimate = data.value("max_gyro_bias_estimate", cfg.maxGyroBiasEstimate);
+            cfg.baroAttitudeCorrectionEnabled = data.value("baro_attitude_correction_enabled", cfg.baroAttitudeCorrectionEnabled);
             _sensor = cfg;
         } catch (const std::exception&) {
             // Any load failure (syntax, missing required key, wrong type)

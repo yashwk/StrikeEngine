@@ -47,10 +47,48 @@ namespace StrikeEngine::Kernel {
         bool   insAdaptiveQEnabled = false;          // dynamics-scaled process noise
         double insAdaptiveQGain = 1.0;
 
+        // --- INS error-model fidelity (default = legacy simplified model) ---
+        // Adds the position->velocity Jacobian block (gravity gradient, i.e.
+        // the Schuler/vertical instability) and the rotating-earth Jacobian
+        // blocks (Coriolis w.r.t. velocity, centrifugal w.r.t. position) to the
+        // EKF transition. The truth model already integrates these terms, so
+        // leaving them out makes the covariance optimistic in exactly the axes
+        // aiding is meant to bound. Flat constant-gravity runs are unaffected
+        // (the gradient is identically zero there).
+        bool   insGravityGradientEnabled = false;
+        bool   insEarthRotationCouplingEnabled = false;
+
         // --- Alignment realism (0 = perfect legacy alignment from truth) ---
         double initialAttitudeErrorDeg = 0.0;  // per-axis 1-sigma
         double initialPositionErrorM = 0.0;    // per-axis 1-sigma
         double initialVelocityErrorMps = 0.0;  // per-axis 1-sigma
+
+        // --- GPS fusion options (default = legacy sequential scalar) --------
+        // Batch 6-vector update with the full HPH'+R joint covariance and a
+        // joint NIS gate. Off keeps the legacy per-axis scalar updates.
+        bool   gpsBatchUpdateEnabled = false;
+        // Refer the GPS antenna fix to the CM in the filter (subtract R.l and
+        // R.(w x l) before fusing). Off keeps the legacy behavior where the
+        // antenna fix is consumed as if it were the CM.
+        bool   gpsLeverArmCompensationEnabled = false;
+        // GPS yaw correction damping: yaw is only weakly observable from GPS
+        // position/velocity, so the full correction over-corrects. 0.1 is the
+        // legacy literal; 1.0 applies the full correction.
+        double gpsYawCorrectionDamping = 0.1;
+        // Whole-fix chi-square gate. threshold > 0 is used directly (legacy
+        // literal 16.81 for 6 dof at 99%); <= 0 derives it from dof+confidence.
+        double gpsFixConsistencyThreshold = 16.81;
+        double gpsFixConsistencyConfidence = 0.99;
+        int    gpsFixConsistencyDof = 6;
+
+        // --- Bias-estimate clamps (legacy literals, now configurable) -------
+        double maxAccelBiasEstimate = 0.5;   // m/s^2
+        double maxGyroBiasEstimate = 0.02;   // rad/s
+
+        // --- Barometer attitude coupling (off = legacy frozen attitude) -----
+        // A barometer observes neither orientation nor rotation rate; the
+        // default freezes those EKF rows. Enable only for experimentation.
+        bool   baroAttitudeCorrectionEnabled = false;
     };
 
 } // namespace StrikeEngine::Kernel

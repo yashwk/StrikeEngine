@@ -120,6 +120,221 @@ static double sensVal(const std::vector<double>& v, std::size_t i, double def)
     return i < v.size() ? v[i] : def;
 }
 
+static int sensInt(const std::vector<int>& v, std::size_t i, int def)
+{
+    return i < v.size() ? v[i] : def;
+}
+
+// --- World-frame gravity + rotating-earth acceleration --------------------
+// Factored out of the INS mechanization so the gravity gradient and the
+// earth-rotation Jacobian are derived from exactly the model being integrated.
+std::array<double, 3> worldGravity(
+    const StrikeEngine::Kernel::EnvironmentConfig& environment,
+    double px, double py, double pz)
+{
+    using namespace StrikeEngine::Models;
+    std::array<double, 3> gravity{0.0, 0.0, -9.80665};
+    if (environment.earth.useEcefTruth) {
+        const EcefCoordinate position{px, py, pz};
+        const auto geodetic = ecefToGeodetic(position);
+        if (environment.earth.includeJ2Gravity) {
+            gravity = EarthFrames::toVector(j2GravityAccelerationEcef(position));
+        } else if (environment.earth.useWgs84Gravity) {
+            gravity = EarthFrames::ecefNormalGravityAcceleration(geodetic);
+        } else {
+            gravity = EarthFrames::toVector(sphericalGravityAccelerationEcef(position));
+        }
+    } else if (environment.earth.includeJ2Gravity) {
+        const GeodeticCoordinate reference{
+            environment.earth.referenceLatitudeRad,
+            environment.earth.referenceLongitudeRad, 0.0};
+        gravity = EarthFrames::localJ2GravityAcceleration(
+            EarthFrames::enuToGeodetic({px, py, pz}, reference));
+    } else if (environment.earth.useWgs84Gravity) {
+        gravity[2] = -normalGravity(environment.earth.referenceLatitudeRad, pz);
+    } else if (environment.earth.useSphericalGravity) {
+        const GeodeticCoordinate reference{
+            environment.earth.referenceLatitudeRad,
+            environment.earth.referenceLongitudeRad, 0.0};
+        gravity = EarthFrames::localSphericalGravityAcceleration(
+            EarthFrames::enuToGeodetic({px, py, pz}, reference));
+    }
+    return gravity;
+}
+
+std::array<double, 3> worldEarthAcceleration(
+    const StrikeEngine::Kernel::EnvironmentConfig& environment,
+    double px, double py, double pz, double vx, double vy, double vz)
+{
+    using namespace StrikeEngine::Models;
+    std::array<double, 3> acceleration{0.0, 0.0, 0.0};
+    if (environment.earth.useEcefTruth) {
+        acceleration = EarthFrames::toVector(EarthFixed::acceleration(
+            EcefCoordinate{px, py, pz}, EcefCoordinate{vx, vy, vz}, {},
+            EcefDynamicsOptions{false, environment.earth.includeCoriolis,
+                                environment.earth.includeCentrifugal, false}));
+    } else if (environment.earth.includeCoriolis) {
+        acceleration = localCoriolisAcceleration(
+            environment.earth.referenceLatitudeRad, {vx, vy, vz});
+    }
+    return acceleration;
+}
+
+// Dominant gravity gradient dg/dp expressed in the mechanization frame. The
+// spherical radial form is used for every position-dependent gravity model
+// (it is exact for point-mass gravity and captures the vertical/Schuler
+// stiffening for J2 and normal gravity). Flat constant gravity returns zero.
+void worldGravityGradient(
+    const StrikeEngine::Kernel::EnvironmentConfig& environment,
+    double px, double py, double pz, double G[3][3])
+{
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) G[r][c] = 0.0;
+
+    const bool positionDependent = environment.earth.useEcefTruth ||
+        environment.earth.useSphericalGravity ||
+        environment.earth.useWgs84Gravity ||
+        environment.earth.includeJ2Gravity;
+    if (!positionDependent) return;
+
+    const auto g = worldGravity(environment, px, py, pz);
+    const double gMag = std::sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
+    if (!(gMag > 0.0)) return;
+
+    if (environment.earth.useEcefTruth) {
+        const double r = std::sqrt(px * px + py * py + pz * pz);
+        if (r < 1.0) return;
+        const double u[3] = {px / r, py / r, pz / r};
+        const double radial = 2.0 * gMag / r;   // along rhat (up)
+        const double tangential = gMag / r;     // across rhat
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                const double delta = (i == j) ? 1.0 : 0.0;
+                G[i][j] = radial * u[i] * u[j] -
+                          tangential * (delta - u[i] * u[j]);
+            }
+        }
+    } else {
+        // Local ENU: only the vertical channel is position dependent.
+        constexpr double kEarthRadiusM = 6371000.0;
+        G[2][2] = 2.0 * gMag / kEarthRadiusM;
+    }
+}
+
+// Jacobians of the rotating-earth acceleration: d(ea)/d(v) (Coriolis) and
+// d(ea)/d(p) (centrifugal). Zero unless the corresponding term is active.
+void worldEarthAccelerationJacobian(
+    const StrikeEngine::Kernel::EnvironmentConfig& environment,
+    double dAdv[3][3], double dAdp[3][3])
+{
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) { dAdv[r][c] = 0.0; dAdp[r][c] = 0.0; }
+
+    const double omega = StrikeEngine::Models::EarthModel::earthRotationRateRadPerSec;
+    if (environment.earth.useEcefTruth) {
+        if (environment.earth.includeCoriolis) {
+            // ea_co = -2 (Omega x v) with Omega = (0,0,w):
+            //   d(ea)/d(v) = [[0, 2w, 0], [-2w, 0, 0], [0, 0, 0]]
+            dAdv[0][1] = 2.0 * omega;
+            dAdv[1][0] = -2.0 * omega;
+        }
+        if (environment.earth.includeCentrifugal) {
+            // ea_cf = |w|^2 r - (Omega.r) Omega; d/dr = |w|^2 I - Omega Omega^T
+            const double omega2 = omega * omega;
+            dAdp[0][0] = omega2;
+            dAdp[1][1] = omega2;
+            dAdp[2][2] = 0.0;
+        }
+    } else if (environment.earth.includeCoriolis) {
+        const double lat = environment.earth.referenceLatitudeRad;
+        const double omegaN = omega * std::cos(lat);
+        const double omegaU = omega * std::sin(lat);
+        // ea = [2(wU vy - wN vz), -2 wU vx, 2 wN vx]
+        dAdv[0][1] = 2.0 * omegaU;
+        dAdv[0][2] = -2.0 * omegaN;
+        dAdv[1][0] = -2.0 * omegaU;
+        dAdv[2][0] = 2.0 * omegaN;
+    }
+}
+
+// Inverse standard-normal CDF (Acklam's rational approximation) and the
+// Wilson-Hilferty chi-square quantile, used only to derive a gate threshold
+// when the caller leaves it at <= 0.
+double inverseNormalCdf(double p)
+{
+    static const double a[6] = {-3.969683028665376e+01, 2.209460984245205e+02,
+        -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01,
+        2.506628277459239e+00};
+    static const double b[5] = {-5.447609879822406e+01, 1.615858368580409e+02,
+        -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01};
+    static const double c[6] = {-7.784894002430293e-03, -3.223964580411365e-01,
+        -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00,
+        2.938163982698783e+00};
+    static const double d[4] = {7.784695709041462e-03, 3.224671290700398e-01,
+        2.445134137142996e+00, 3.754408661907416e+00};
+    constexpr double pLow = 0.02425;
+    constexpr double pHigh = 1.0 - pLow;
+    if (p <= 0.0) return -1e300;
+    if (p >= 1.0) return 1e300;
+    if (p < pLow) {
+        const double q = std::sqrt(-2.0 * std::log(p));
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0);
+    }
+    if (p <= pHigh) {
+        const double q = p - 0.5;
+        const double r = q * q;
+        return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+               (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0);
+    }
+    const double q = std::sqrt(-2.0 * std::log(1.0 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+            ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0);
+}
+
+double chiSquareQuantile(double confidence, int dof)
+{
+    if (dof <= 0) return 0.0;
+    const double z = inverseNormalCdf(confidence);
+    const double t = 1.0 - 2.0 / (9.0 * dof) + z * std::sqrt(2.0 / (9.0 * dof));
+    return dof * t * t * t;
+}
+
+// 6x6 Gauss-Jordan inverse with partial pivoting; false if singular.
+bool invert6(const double in[6][6], double out[6][6])
+{
+    double aug[6][12];
+    for (int r = 0; r < 6; ++r) {
+        for (int c = 0; c < 6; ++c) {
+            aug[r][c] = in[r][c];
+            aug[r][c + 6] = (r == c) ? 1.0 : 0.0;
+        }
+    }
+    for (int col = 0; col < 6; ++col) {
+        int pivot = col;
+        double best = std::abs(aug[col][col]);
+        for (int r = col + 1; r < 6; ++r) {
+            const double v = std::abs(aug[r][col]);
+            if (v > best) { best = v; pivot = r; }
+        }
+        if (best < 1e-18) return false;
+        if (pivot != col) {
+            for (int c = 0; c < 12; ++c) std::swap(aug[col][c], aug[pivot][c]);
+        }
+        const double diag = aug[col][col];
+        for (int c = 0; c < 12; ++c) aug[col][c] /= diag;
+        for (int r = 0; r < 6; ++r) {
+            if (r == col) continue;
+            const double factor = aug[r][col];
+            if (factor == 0.0) continue;
+            for (int c = 0; c < 12; ++c) aug[r][c] -= factor * aug[col][c];
+        }
+    }
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 6; ++c) out[r][c] = aug[r][c + 6];
+    return true;
+}
+
 } // namespace
 
 namespace StrikeEngine::Kernel {
@@ -129,6 +344,22 @@ namespace StrikeEngine::Kernel {
         // friends). The stream is untouched when all sigmas are zero, so
         // legacy runs are bit-identical with or without this call.
         alignRng.seed(seed ^ 0x51AB1Eu);
+    }
+
+    void NavigationSystem::resetEntity(NavigationBlock& nav, std::size_t id) {
+        ensureCapacity(id + 1, nav);
+        const auto defaultDiag = initialCovarianceDiag();
+        initializeCovariance(nav.covarianceFull[id], defaultDiag);
+        nav.covarianceDiag[id] = defaultDiag;
+        nav.isAligned[id] = false;
+        nav.estAccelBiasX[id] = nav.estAccelBiasY[id] = nav.estAccelBiasZ[id] = 0.0;
+        nav.estGyroBiasX[id] = nav.estGyroBiasY[id] = nav.estGyroBiasZ[id] = 0.0;
+        nav.prevDThetaX[id] = nav.prevDThetaY[id] = nav.prevDThetaZ[id] = 0.0;
+        nav.prevDVelX[id] = nav.prevDVelY[id] = nav.prevDVelZ[id] = 0.0;
+        nav.lastGpsUpdateRejected[id] = false;
+        nav.lastGpsMaxInnovationSigma[id] = 0.0;
+        nav.lastBaroRejected[id] = false;
+        nav.lastMagRejected[id] = false;
     }
 
     void NavigationSystem::ensureCapacity(std::size_t size, NavigationBlock& nav) {
@@ -248,54 +479,11 @@ namespace StrikeEngine::Kernel {
         double wfx, wfy, wfz;
         rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id], fx, fy, fz, wfx, wfy, wfz);
 
-        std::array<double, 3> gravity{0.0, 0.0, -9.80665};
-        std::array<double, 3> earthAcceleration{0.0, 0.0, 0.0};
-        if (environment.earth.useEcefTruth) {
-            const Models::EcefCoordinate position{
-                nav.estPx[id], nav.estPy[id], nav.estPz[id]};
-            const auto geodetic = Models::ecefToGeodetic(position);
-            if (environment.earth.includeJ2Gravity) {
-                gravity = Models::EarthFrames::toVector(
-                    Models::j2GravityAccelerationEcef(position));
-            } else if (environment.earth.useWgs84Gravity) {
-                gravity = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
-            } else {
-                gravity = Models::EarthFrames::toVector(
-                    Models::sphericalGravityAccelerationEcef(position));
-            }
-            earthAcceleration = Models::EarthFrames::toVector(
-                Models::EarthFixed::acceleration(
-                    position,
-                    {nav.estVx[id], nav.estVy[id], nav.estVz[id]},
-                    {},
-                    {false,
-                     environment.earth.includeCoriolis,
-                     environment.earth.includeCentrifugal}));
-        } else if (environment.earth.includeJ2Gravity) {
-            const Models::GeodeticCoordinate reference{
-                environment.earth.referenceLatitudeRad,
-                environment.earth.referenceLongitudeRad,
-                0.0};
-            gravity = Models::EarthFrames::localJ2GravityAcceleration(
-                Models::EarthFrames::enuToGeodetic(
-                    {nav.estPx[id], nav.estPy[id], nav.estPz[id]}, reference));
-        } else if (environment.earth.useWgs84Gravity) {
-            gravity[2] = -Models::normalGravity(
-                environment.earth.referenceLatitudeRad, nav.estPz[id]);
-        } else if (environment.earth.useSphericalGravity) {
-            const Models::GeodeticCoordinate reference{
-                environment.earth.referenceLatitudeRad,
-                environment.earth.referenceLongitudeRad,
-                0.0};
-            gravity = Models::EarthFrames::localSphericalGravityAcceleration(
-                Models::EarthFrames::enuToGeodetic(
-                    {nav.estPx[id], nav.estPy[id], nav.estPz[id]}, reference));
-        }
-        if (!environment.earth.useEcefTruth && environment.earth.includeCoriolis) {
-            earthAcceleration = Models::localCoriolisAcceleration(
-                environment.earth.referenceLatitudeRad,
-                {nav.estVx[id], nav.estVy[id], nav.estVz[id]});
-        }
+        const std::array<double, 3> gravity = worldGravity(
+            environment, nav.estPx[id], nav.estPy[id], nav.estPz[id]);
+        const std::array<double, 3> earthAcceleration = worldEarthAcceleration(
+            environment, nav.estPx[id], nav.estPy[id], nav.estPz[id],
+            nav.estVx[id], nav.estVy[id], nav.estVz[id]);
 
         // 3. Add frame gravity and rotating-earth terms.
         const double ax = wfx + gravity[0] + earthAcceleration[0];
@@ -394,6 +582,33 @@ namespace StrikeEngine::Kernel {
                     -attitudeSensitivity * dt;
                 transition[covarianceIndex(row + 3, column + 9)] =
                     -rotation[row][column] * dt;
+            }
+        }
+
+        // Position-dependent gravity (Schuler/vertical) and rotating-earth
+        // Jacobian blocks. Opt-in: flat constant-gravity legacy runs keep the
+        // simplified error model. See worldGravityGradient.
+        if (sensFlag(sensors.insGravityGradientEnabled, id)) {
+            double G[3][3];
+            worldGravityGradient(environment, nav.estPx[id], nav.estPy[id],
+                                 nav.estPz[id], G);
+            for (std::size_t row = 0; row < 3; ++row) {
+                for (std::size_t column = 0; column < 3; ++column) {
+                    transition[covarianceIndex(row + 3, column)] +=
+                        G[row][column] * dt;
+                }
+            }
+        }
+        if (sensFlag(sensors.insEarthRotationCouplingEnabled, id)) {
+            double dAdv[3][3], dAdp[3][3];
+            worldEarthAccelerationJacobian(environment, dAdv, dAdp);
+            for (std::size_t row = 0; row < 3; ++row) {
+                for (std::size_t column = 0; column < 3; ++column) {
+                    transition[covarianceIndex(row + 3, column + 3)] +=
+                        dAdv[row][column] * dt;
+                    transition[covarianceIndex(row + 3, column)] +=
+                        dAdp[row][column] * dt;
+                }
             }
         }
 
@@ -576,46 +791,136 @@ namespace StrikeEngine::Kernel {
             }
         };
 
-        // Whole-fix consistency gate (opt-in RAIM-lite): chi-square over the
-        // six GPS axes against the pre-update state, checked BEFORE anything
-        // is applied. A ramp fault that sneaks past individual 5-sigma gates
-        // trips the joint test (6 dof, 99% = 16.81). Rejected fixes coast on
-        // the INS (+ baro/mag below) instead of absorbing bad data.
-        bool skipGpsFix = false;
-        if (sensFlag(sensors.gpsFixConsistencyEnabled, id) && sensors.gpsUpdated[id]) {
-            double nis = 0.0;
-            bool fixUsable = true;
-            for (std::size_t axis = 0; axis < 6; ++axis) {
-                double meas = 0.0;
-                if (axis == 0) meas = sensors.gpsPosX[id];
-                else if (axis == 1) meas = sensors.gpsPosY[id];
-                else if (axis == 2) meas = sensors.gpsPosZ[id];
-                else if (axis == 3) meas = sensors.gpsVelX[id];
-                else if (axis == 4) meas = sensors.gpsVelY[id];
-                else meas = sensors.gpsVelZ[id];
-                if (!std::isfinite(meas)) { fixUsable = false; break; }
-                const double var = std::max(
-                    (axis < 3 ? rPos : rVel), kMinCovariance);
-                const double innov = meas - baseState[axis];
-                const double s = covariance[covarianceIndex(axis, axis)] + var;
-                if (s <= kMinCovariance) { fixUsable = false; break; }
-                nis += (innov * innov) / s;
-            }
-            if (!fixUsable || nis > 16.81) {
-                gpsRej = true;
-                skipGpsFix = true;
+        // GPS antenna lever-arm compensation: the sensor reports the antenna
+        // (CM + R.l position, CM + R.(w x l) velocity). Refer the fix to the
+        // CM before fusing so the lever arm is not silently absorbed into
+        // attitude/velocity. Zero lever arm (the default) is a no-op.
+        double gpsPos[3] = {sensors.gpsPosX[id], sensors.gpsPosY[id], sensors.gpsPosZ[id]};
+        double gpsVel[3] = {sensors.gpsVelX[id], sensors.gpsVelY[id], sensors.gpsVelZ[id]};
+        if (id < sensors.gpsLeverArmX.size() &&
+            sensFlag(sensors.gpsLeverArmCompensationEnabled, id)) {
+            const double lx = sensors.gpsLeverArmX[id];
+            const double ly = sensors.gpsLeverArmY[id];
+            const double lz = sensors.gpsLeverArmZ[id];
+            if (lx != 0.0 || ly != 0.0 || lz != 0.0) {
+                double wl[3];
+                rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id],
+                                  nav.estQz[id], lx, ly, lz, wl[0], wl[1], wl[2]);
+                gpsPos[0] -= wl[0]; gpsPos[1] -= wl[1]; gpsPos[2] -= wl[2];
+                const double ox = nav.estWy[id] * lz - nav.estWz[id] * ly;
+                const double oy = nav.estWz[id] * lx - nav.estWx[id] * lz;
+                const double oz = nav.estWx[id] * ly - nav.estWy[id] * lx;
+                double wo[3];
+                rotateBodyToWorld(nav.estQw[id], nav.estQx[id], nav.estQy[id],
+                                  nav.estQz[id], ox, oy, oz, wo[0], wo[1], wo[2]);
+                gpsVel[0] -= wo[0]; gpsVel[1] -= wo[1]; gpsVel[2] -= wo[2];
             }
         }
 
-        if (sensors.gpsUpdated[id] && !skipGpsFix) {
-            updateScalar(0, sensors.gpsPosX[id], rPos);
-            updateScalar(1, sensors.gpsPosY[id], rPos);
-            updateScalar(2, sensors.gpsPosZ[id], rPos);
-            updateScalar(3, sensors.gpsVelX[id], rVel);
-            updateScalar(4, sensors.gpsVelY[id], rVel);
-            updateScalar(5, sensors.gpsVelZ[id], rVel);
-        } else if (!sensors.gpsUpdated[id]) {
-            // No sample this tick: nothing to fuse (legacy path).
+        // Whole-fix consistency threshold: explicit when > 0, else derived
+        // from the configured dof/confidence (Wilson-Hilferty chi-square).
+        auto consistencyThreshold = [&]() {
+            const double t = sensVal(sensors.gpsFixConsistencyThreshold, id, 16.81);
+            if (t > 0.0) return t;
+            return chiSquareQuantile(
+                sensVal(sensors.gpsFixConsistencyConfidence, id, 0.99),
+                sensInt(sensors.gpsFixConsistencyDof, id, 6));
+        };
+
+        bool skipGpsFix = false;
+        if (sensors.gpsUpdated[id]) {
+            if (sensFlag(sensors.gpsBatchUpdateEnabled, id)) {
+                // Batch 6-vector update using the full joint HPH'+R, with the
+                // joint NIS gate. Correct cross-axis correlation, at the cost
+                // of a 6x6 solve.
+                double S[6][6];
+                double Y[6];
+                for (std::size_t a = 0; a < 6; ++a) {
+                    Y[a] = (a < 3 ? gpsPos[a] : gpsVel[a - 3]) - baseState[a];
+                }
+                for (std::size_t r = 0; r < 6; ++r) {
+                    for (std::size_t c = 0; c < 6; ++c) {
+                        S[r][c] = covariance[covarianceIndex(r, c)] +
+                                  ((r == c) ? (r < 3 ? rPos : rVel) : 0.0);
+                    }
+                }
+                double Sinv[6][6];
+                if (!invert6(S, Sinv)) {
+                    gpsRej = true;
+                    skipGpsFix = true;
+                } else {
+                    double nis = 0.0;
+                    for (std::size_t r = 0; r < 6; ++r)
+                        for (std::size_t c = 0; c < 6; ++c)
+                            nis += Y[r] * Sinv[r][c] * Y[c];
+                    nav.lastGpsMaxInnovationSigma[id] = std::sqrt(std::max(0.0, nis));
+                    if (sensFlag(sensors.gpsFixConsistencyEnabled, id) &&
+                        nis > consistencyThreshold()) {
+                        gpsRej = true;
+                        skipGpsFix = true;
+                    } else {
+                        // K = P H' S^-1 ; x += K Y ; P -= K (H P).
+                        double K[15][6];
+                        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+                            for (std::size_t j = 0; j < 6; ++j) {
+                                double value = 0.0;
+                                for (std::size_t i = 0; i < 6; ++i) {
+                                    value += covariance[covarianceIndex(row, i)] * Sinv[i][j];
+                                }
+                                K[row][j] = value;
+                            }
+                        }
+                        const Covariance prior = covariance;
+                        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+                            for (std::size_t j = 0; j < 6; ++j) {
+                                correction[row] += K[row][j] * Y[j];
+                            }
+                        }
+                        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
+                            for (std::size_t col = 0; col < kErrorStateSize; ++col) {
+                                double value = 0.0;
+                                for (std::size_t j = 0; j < 6; ++j) {
+                                    value += K[row][j] * prior[covarianceIndex(j, col)];
+                                }
+                                covariance[covarianceIndex(row, col)] =
+                                    prior[covarianceIndex(row, col)] - value;
+                            }
+                        }
+                        boundCovariance(covariance, nav.covarianceDiag[id]);
+                    }
+                }
+            } else {
+                // Legacy path: whole-fix diagonal pre-gate, then sequential
+                // scalar position/velocity updates.
+                if (sensFlag(sensors.gpsFixConsistencyEnabled, id)) {
+                    const int dof = std::clamp(
+                        sensInt(sensors.gpsFixConsistencyDof, id, 6), 1, 6);
+                    double nis = 0.0;
+                    bool fixUsable = true;
+                    for (int axis = 0; axis < dof; ++axis) {
+                        const double meas = (axis < 3) ? gpsPos[axis] : gpsVel[axis - 3];
+                        if (!std::isfinite(meas)) { fixUsable = false; break; }
+                        const double var = std::max(
+                            (axis < 3 ? rPos : rVel), kMinCovariance);
+                        const double innov = meas - baseState[axis];
+                        const double s = covariance[covarianceIndex(axis, axis)] + var;
+                        if (s <= kMinCovariance) { fixUsable = false; break; }
+                        nis += (innov * innov) / s;
+                    }
+                    if (!fixUsable || nis > consistencyThreshold()) {
+                        gpsRej = true;
+                        skipGpsFix = true;
+                    }
+                }
+                if (!skipGpsFix) {
+                    updateScalar(0, gpsPos[0], rPos);
+                    updateScalar(1, gpsPos[1], rPos);
+                    updateScalar(2, gpsPos[2], rPos);
+                    updateScalar(3, gpsVel[0], rVel);
+                    updateScalar(4, gpsVel[1], rVel);
+                    updateScalar(5, gpsVel[2], rVel);
+                }
+            }
         }
 
         // Barometer altitude (opt-in): linearized about the geodetic up at
@@ -643,8 +948,10 @@ namespace StrikeEngine::Kernel {
                 (H[0] * nav.estPx[id] + H[1] * nav.estPy[id] + H[2] * nav.estPz[id]);
             const double rb = sensVal(sensors.baroNoiseStdDev, id, 1.0);
             const double rBaro = rb * rb;
+            const bool freezeAttitude =
+                !sensFlag(sensors.baroAttitudeCorrectionEnabled, id);
             updateRow(H, sensVal(sensors.baroAlt, id, 0.0) - linShift, rBaro,
-                      &baroRej, correction, /*freezeAttitude=*/true);
+                      &baroRej, correction, freezeAttitude);
         }
 
         // Magnetometer heading aid (opt-in): body-frame residual against the
@@ -723,10 +1030,11 @@ namespace StrikeEngine::Kernel {
         // roll/pitch correction but heavily damp the weakly-observable yaw; the
         // tightly-seeded gyro integration tracks the true heading between fixes.
         // Magnetometer yaw is absolute heading, so it applies undamped.
+        const double yawDamping = sensVal(sensors.gpsYawCorrectionDamping, id, 0.1);
         applyAttitudeError(nav, id,
                             correction[6] + magCorrection[6],
                             correction[7] + magCorrection[7],
-                            0.1 * correction[8] + magCorrection[8]);
+                            yawDamping * correction[8] + magCorrection[8]);
         nav.estAccelBiasX[id] += correction[9] + magCorrection[9];
         nav.estAccelBiasY[id] += correction[10] + magCorrection[10];
         nav.estAccelBiasZ[id] += correction[11] + magCorrection[11];
@@ -737,9 +1045,10 @@ namespace StrikeEngine::Kernel {
         // The yaw (and hence the yaw gyro-bias) is only weakly observable from
         // GPS position/velocity, so the bias estimate can otherwise run away and
         // corrupt the attitude integration (observed: estGyroBiasZ -> -0.09
-        // rad/s). Bound the IMU bias estimates to physically plausible ranges.
-        constexpr double kMaxAccelBias = 0.5;    // m/s^2
-        constexpr double kMaxGyroBias = 0.02;    // rad/s (~1.15 deg/s)
+        // rad/s). Bound the IMU bias estimates to physically plausible ranges
+        // (legacy literals 0.5 m/s^2 and 0.02 rad/s, now configurable).
+        const double kMaxAccelBias = sensVal(sensors.maxAccelBiasEstimate, id, 0.5);
+        const double kMaxGyroBias = sensVal(sensors.maxGyroBiasEstimate, id, 0.02);
         nav.estAccelBiasX[id] = std::clamp(nav.estAccelBiasX[id], -kMaxAccelBias, kMaxAccelBias);
         nav.estAccelBiasY[id] = std::clamp(nav.estAccelBiasY[id], -kMaxAccelBias, kMaxAccelBias);
         nav.estAccelBiasZ[id] = std::clamp(nav.estAccelBiasZ[id], -kMaxAccelBias, kMaxAccelBias);
@@ -801,6 +1110,27 @@ namespace StrikeEngine::Kernel {
                     nav.estVx[i] += velSig * gauss(alignRng);
                     nav.estVy[i] += velSig * gauss(alignRng);
                     nav.estVz[i] += velSig * gauss(alignRng);
+                }
+                // Seed the error covariance from the same sigmas that
+                // perturbed the state, so the filter does not start more
+                // certain than it is (an over-confident prior makes valid
+                // early fixes look like outliers). All-zero sigmas keep the
+                // tight legacy default and any caller-supplied covariance
+                // (see navigation_aiding_test); a recycled entity slot was
+                // already reset by resetEntity.
+                if (attSig > 0.0 || posSig > 0.0 || velSig > 0.0) {
+                    auto diag = initialCovarianceDiag();
+                    if (attSig > 0.0) {
+                        diag[6] = diag[7] = diag[8] = attSig * attSig;
+                    }
+                    if (posSig > 0.0) {
+                        diag[0] = diag[1] = diag[2] = posSig * posSig;
+                    }
+                    if (velSig > 0.0) {
+                        diag[3] = diag[4] = diag[5] = velSig * velSig;
+                    }
+                    initializeCovariance(nav.covarianceFull[i], diag);
+                    nav.covarianceDiag[i] = diag;
                 }
                 nav.prevDThetaX[i] = 0.0; nav.prevDThetaY[i] = 0.0; nav.prevDThetaZ[i] = 0.0;
                 nav.prevDVelX[i] = 0.0; nav.prevDVelY[i] = 0.0; nav.prevDVelZ[i] = 0.0;
