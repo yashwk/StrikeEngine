@@ -146,7 +146,7 @@ namespace StrikeEngine::Kernel
                              s.vx[i] - wind[0], s.vy[i] - wind[1],
                              s.vz[i] - wind[2], u, v, w);
 
-            // 3. Aerodynamics: body-frame forces and moments (W2/W3 spine)
+            // 3. Aerodynamics: body-frame forces and moments.
             Models::AeroParams params;
             params.referenceArea   = s.referenceArea[i];
             params.referenceLength = s.referenceLength[i];

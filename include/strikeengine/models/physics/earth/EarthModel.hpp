@@ -193,8 +193,7 @@ namespace StrikeEngine::Models {
          * @brief WGS84 normal gravity magnitude at geodetic latitude/altitude.
          *
          * This is the Somigliana normal-gravity formula with a second-order
-         * free-air altitude correction, suitable for the local truth-model
-         * earth-effects MVP.
+         * free-air altitude correction for the local truth model.
          */
         inline double normalGravity(double latitudeRad, double altitudeM = 0.0)
         {
@@ -276,7 +275,7 @@ namespace StrikeEngine::Models {
          *
          * The local world convention is X=east, Y=north, Z=up. The returned
          * acceleration is -2*Omega x velocity; centrifugal acceleration and
-         * transport-rate terms are intentionally outside this MVP.
+         * transport-rate terms are intentionally excluded.
          */
         inline std::array<double, 3> localCoriolisAcceleration(
             double latitudeRad,

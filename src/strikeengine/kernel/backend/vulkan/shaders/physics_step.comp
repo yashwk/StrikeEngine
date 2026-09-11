@@ -57,7 +57,7 @@ void main() {
     if (id >= pc.entityCount) return;
     if (isActive[id] == 0) return;
 
-    // --- Simple Euler Integration MVP ---
+    // --- Simple Euler integration ---
     // (RK4 is complex to write in a single shader immediately, we will start with Euler
     //  to validate the memory mapping and execution first).
 

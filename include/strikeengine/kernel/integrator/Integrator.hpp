@@ -87,7 +87,7 @@ namespace StrikeEngine::Kernel
 	 *
 	 * The physics backend supplies a pure derivative function
 	 *   deriv(state, t) -> state_dot
-	 * that re-evaluates ALL forces/moments at the given state (W2/W3 spine:
+	 * that re-evaluates ALL forces/moments at the given state:
 	 * required for 6-DOF coupling, servo lag and mass flow to integrate
 	 * stably). Integrators advance only the integrated state fields via
 	 * applyStateUpdate.

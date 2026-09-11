@@ -1,6 +1,6 @@
 #pragma once
 
-// Tilted-dipole Earth magnetic field MVP (heading-aiding only).
+// Tilted-dipole Earth magnetic field (heading-aiding only).
 //
 // A full WMM/IGRF spherical-harmonic model is overkill for an EKF heading
 // aid: the filter observes attitude ERROR from the body-frame residual, so a

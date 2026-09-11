@@ -42,7 +42,7 @@ namespace StrikeEngine::Kernel {
         double initialTargetAccelZ = 0.0;
         bool   initialTargetAccelAvailable = false;
 
-        // Optional target identity for the persistent track (W39); -1 unknown
+        // Optional target identity for the persistent track; -1 unknown
         // (the seeker supplies identity once it locks).
         std::int64_t initialTargetId = -1;
     };

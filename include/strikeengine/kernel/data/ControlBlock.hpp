@@ -69,7 +69,7 @@ struct ControlBlock {
 	std::vector<double> aoaDampingYaw;
 	std::vector<double> authorityMargin01;      // delivered/demanded fin, <= 1
 
-	// W36 diagnostics: true when the commanded deflection hit the fin clamp.
+	// True when the commanded deflection hit the fin clamp.
 	std::vector<bool> pitchSaturated;
 	std::vector<bool> yawSaturated;
 	std::vector<bool> rollSaturated;

@@ -99,7 +99,7 @@ namespace StrikeEngine::Models {
     }
 
     /**
-     * @brief W40 constant-velocity intercept prediction (trajectory core).
+     * @brief Constant-velocity intercept prediction (trajectory core).
      *
      * Solves for the earliest positive-time intercept of an interceptor
      * flying at constant speed toward a (optionally constant-acceleration)

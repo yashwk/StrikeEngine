@@ -122,7 +122,7 @@ namespace StrikeEngine::Kernel {
         // previous-step delivered/demanded fin margin (0.1..1).
         std::vector<bool>   authorityAwareLimitEnabled;
 
-        // W41 cooperative-engagement datalink (see GuidanceAutopilotConfig):
+        // Cooperative-engagement datalink (see GuidanceAutopilotConfig):
         // the source entity whose persistent track provides the midcourse aim,
         // and the target entity that track is of. -1 = disabled.
         std::vector<int> datalinkSourceId;

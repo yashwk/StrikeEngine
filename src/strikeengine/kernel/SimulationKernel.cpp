@@ -656,7 +656,7 @@ namespace StrikeEngine::Kernel {
         controlBlock.yawSaturated[id] = false;
         controlBlock.rollSaturated[id] = false;
 
-        // W39 track config + state reset (fresh and reused slots).
+        // Track config + state reset (fresh and reused slots).
         trackBlock.confirmations[id] = resolved.guidanceAutopilot.trackConfirmations;
         trackBlock.coastTimeoutSec[id] = resolved.guidanceAutopilot.trackCoastTimeoutSec;
         trackBlock.lossTimeoutSec[id] = resolved.guidanceAutopilot.trackLossTimeoutSec;

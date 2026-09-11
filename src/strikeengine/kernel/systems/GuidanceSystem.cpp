@@ -152,7 +152,7 @@ namespace StrikeEngine::Kernel {
             g.tgoSec[id] = 0.0;
         }
 
-        // Reset the W40 trajectory prediction diagnostics. Called at the top
+        // Reset the trajectory prediction diagnostics. Called at the top
         // of every per-entity guidance step so a mode/phase change (e.g. a
         // seeker lock that overrides trajectory midcourse) never leaks stale
         // PIP/feasibility state from a previous step.
@@ -248,7 +248,7 @@ namespace StrikeEngine::Kernel {
         }
 
         // Midcourse PN / APN on the commanded target track (world frame).
-        // Aim source: a measurement-anchored persistent target track (W39)
+        // Aim source: a measurement-anchored persistent target track
         // wins over the raw external command state; see update().
         LawResult computeMidcourse(
             std::size_t id, const NavigationBlock& nav,
@@ -263,8 +263,8 @@ namespace StrikeEngine::Kernel {
                 return out;
             }
 
-            // Select the aim state: datalink source track (W41 cooperative
-            // engagement) > own persistent track (measurement-anchored, W39) >
+            // Select the aim state: datalink source track (cooperative
+            // engagement) > own persistent track (measurement-anchored) >
             // the external command state (legacy). A configured track-quality
             // floor can disqualify a track (default 0 = no gate).
             double tx, ty, tz, tvx, tvy, tvz;
@@ -393,9 +393,9 @@ namespace StrikeEngine::Kernel {
             return out;
         }
 
-        // W40 trajectory-aware midcourse guidance on the commanded aim state.
+        // Trajectory-aware midcourse guidance on the commanded aim state.
         // Predicts a constant-velocity intercept (PIP + tgo) over the aim
-        // (measurement-anchored track wins over the command, W39 precedence),
+        // (measurement-anchored track wins over the command),
         // gates feasibility against the per-entity maxAccel budget, publishes
         // the prediction/feasibility diagnostics, and commands PN toward the
         // PIP when feasible. When infeasible or unpredicable the demand falls
@@ -416,7 +416,7 @@ namespace StrikeEngine::Kernel {
                 return out;
             }
 
-            // Select the aim state with W41 datalink > W39 precedence: a
+            // Select the aim state with datalink > track precedence: a
             // measurement-anchored persistent track beats the command state.
             // A datalink source's track (the mothership/AWACS tracking the target)
             // is the best midcourse aim and wins over the receiver's own track.
@@ -796,7 +796,7 @@ namespace StrikeEngine::Kernel {
                         out.nonClosing = pn.nonClosing || apn.nonClosing;
                     }
                 }
-                // W41/C2 gimbal-edge hold: a target sitting at/near the seeker
+                // Gimbal-edge hold: a target sitting at/near the seeker
                 // gimbal edge drives a churny, high-LOS-rate APN command (the
                 // observed instability). Realistically the missile keeps flying
                 // its midcourse collision course (the datalink aim) and lets the

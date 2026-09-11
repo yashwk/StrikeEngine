@@ -6,7 +6,7 @@
 
 namespace StrikeEngine::Kernel {
 
-    // Persistent target-track lifecycle (W39 track manager).
+    // Persistent target-track lifecycle.
     //
     // Acquire:  initial state (external command seed or first measurement),
     //           waiting for `confirmations` consistent measurement updates.
@@ -20,7 +20,7 @@ namespace StrikeEngine::Kernel {
     enum class TrackState : uint8_t { None, Acquire, Maintain, Coast, Lost, Reacquire };
 
     /**
-     * @brief Per-entity persistent target-track state (W39).
+     * @brief Per-entity persistent target-track state.
      *
      * The track manager fuses external command seeds (SimulationCommand) and
      * seeker LOS measurements (converted to the world frame through the

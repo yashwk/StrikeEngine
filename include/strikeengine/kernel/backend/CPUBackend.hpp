@@ -15,7 +15,7 @@ namespace StrikeEngine::Kernel
 {
 
 	/**
-	 * @brief CPU physics backend — derivative-engine form (W2/W3 spine).
+	 * @brief CPU physics backend in derivative-engine form.
 	 *
 	 * Owns the per-entity propulsion pool (W1). Each step evaluates the full
 	 * force/moment model at arbitrary states via evaluateDerivative and hands

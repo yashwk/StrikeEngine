@@ -11,7 +11,7 @@
 namespace StrikeEngine::Kernel {
 
     /**
-     * @brief Traceable, mode-aware guidance stack (W36).
+     * @brief Traceable, mode-aware guidance stack.
      *
      * Runs after truth physics/sensors/navigation/seekers and before the
      * autopilot, one step later than the physics it commands. Phase selection
@@ -22,7 +22,7 @@ namespace StrikeEngine::Kernel {
      * handoff weight, raw demand, limit/invalid/non-closing flags, tgo) are
      * published per entity each step.
      *
-     * Legacy behavior is preserved when no W36 policy is configured:
+     * Legacy behavior is preserved when no phase policy is configured:
      *   - handoffBlendTimeSec <= 0: seeker lock overrides to APN instantly
      *   - lockLossRetentionSec <= 0: no guidance-layer retention past the
      *     seeker's own dropout logic

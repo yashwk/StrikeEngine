@@ -462,13 +462,13 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["maxDeflectionRad"] = g.maxDeflectionRad;
     j["servoTimeConstantSec"] = g.servoTimeConstantSec;
     j["maxServoRateRadPerSec"] = g.maxServoRateRadPerSec;
-    // W36 phase-manager keys. Optional with legacy defaults on read, so old
+    // Phase-manager keys. Optional with legacy defaults on read, so old
     // design manifests / scenarios without them keep the abrupt-override path.
     j["handoffBlendTimeSec"] = g.handoffBlendTimeSec;
     j["lockLossRetentionSec"] = g.lockLossRetentionSec;
     j["apnFeedforwardEnabled"] = g.apnFeedforwardEnabled;
     j["gravityCompensationEnabled"] = g.gravityCompensationEnabled;
-    // W39 track-manager keys (optional with defaults).
+    // Track-manager keys (optional with defaults).
     j["trackConfirmations"] = g.trackConfirmations;
     j["trackCoastTimeoutSec"] = g.trackCoastTimeoutSec;
     j["trackLossTimeoutSec"] = g.trackLossTimeoutSec;
@@ -483,7 +483,7 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["trackMinQuality01"] = g.trackMinQuality01;
     j["trackQualityTauSec"] = g.trackQualityTauSec;
     j["trackVelocityBlend"] = g.trackVelocityBlend;
-    // W40 trajectory-core keys (optional with defaults).
+    // Trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
     j["guidanceGyroDecouplingEnabled"] = g.guidanceGyroDecouplingEnabled;
@@ -499,7 +499,7 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["guidanceLoftAltitudeM"] = g.guidanceLoftAltitudeM;
     j["guidanceLoftGain"] = g.guidanceLoftGain;
     j["guidanceLoftRangeM"] = g.guidanceLoftRangeM;
-    // W41 cooperative-engagement datalink (optional with defaults).
+    // Cooperative-engagement datalink (optional with defaults).
     j["datalinkSourceId"] = g.datalinkSourceId;
     j["datalinkTargetId"] = g.datalinkTargetId;
     // tgo-scheduled N (optional with defaults; off = constant N).

@@ -7,7 +7,7 @@
 namespace StrikeEngine::Kernel {
 
     /**
-     * @brief Persistent target-track manager (W39).
+     * @brief Persistent target-track manager.
      *
      * Unifies external command seeds and seeker LOS measurements into one
      * per-entity track: target identity, position/velocity/optional

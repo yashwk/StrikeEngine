@@ -47,7 +47,7 @@ namespace StrikeEngine::Kernel {
                 }
             }
 
-            // W39: an external command seeds (or refreshes) the persistent
+            // An external command seeds (or refreshes) the persistent
             // target track. Identity comes from cmd.targetId when provided;
             // the state machines then purges/fuses seeker measurements. The
             // seed policy controls whether a live measurement track is

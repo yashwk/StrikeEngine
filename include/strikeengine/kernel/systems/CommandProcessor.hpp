@@ -29,11 +29,11 @@ namespace StrikeEngine::Kernel {
         double targetAccelZ = 0.0;
         bool   targetAccelAvailable = false;
 
-        // Optional target identity for the persistent track (W39).
+        // Optional target identity for the persistent track.
         // -1 = unknown identity (track is still maintained on state only).
         std::int64_t targetId = -1;
 
-        // Optional cooperative-datalink re-targeting (W41). When
+        // Optional cooperative-datalink re-targeting. When
         // updateDatalink is true, the command also rewires which source
         // entity's persistent track steers this entity's midcourse PN
         // (datalinkSourceId) and which target that track is of
@@ -51,7 +51,7 @@ namespace StrikeEngine::Kernel {
         void enqueueCommand(const SimulationCommand& cmd);
 
         // Process all queued commands, applying them to the data blocks and
-        // seeding the persistent target track (W39).
+        // seeding the persistent target track.
         void process(GuidanceBlock& guidance, TrackBlock& tracks, double simTimeSec);
 
         // Drop queued (not yet applied) commands for an entity, e.g. when its

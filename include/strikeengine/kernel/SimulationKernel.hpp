@@ -158,13 +158,13 @@ namespace StrikeEngine::Kernel {
         SensorBlock sensorBlock;
         NavigationBlock navigationBlock;
         SeekerBlock seekerBlock;
-        TrackBlock trackBlock;   // W39 persistent target tracks
+        TrackBlock trackBlock;   // persistent target tracks
 
         // Systems
         SensorSystem sensorSystem;
         NavigationSystem navigationSystem;
         SeekerSystem seekerSystem;
-        TrackManagerSystem trackManagerSystem;  // W39 (after seekers, before guidance)
+        TrackManagerSystem trackManagerSystem;  // after seekers, before guidance
         GuidanceSystem guidanceSystem;
         AutopilotSystem autopilotSystem;
         EventSystem eventSystem;

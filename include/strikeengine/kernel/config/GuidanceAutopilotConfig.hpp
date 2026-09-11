@@ -85,7 +85,7 @@ namespace StrikeEngine::Kernel {
         double trackQualityTauSec = 1.0;         // track quality decay (legacy 1.0 s)
         double trackVelocityBlend = 0.08;        // legacy finite-difference low-pass
 
-        // W41 cooperative-engagement datalink: when datalinkSourceId >= 0 the
+        // Cooperative-engagement datalink: when datalinkSourceId >= 0 the
         // entity uses the source entity's persistent track (of datalinkTargetId)
         // as its midcourse aim, instead of its own command/track, until its own
         // seeker acquires. This models the launch aircraft (or an AWACS/radar
