@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <deque>
 
 namespace StrikeEngine::Kernel {
 
@@ -58,6 +59,18 @@ namespace StrikeEngine::Kernel {
         // Per-entity last GPS update time (s). GPS scheduling is now per-entity
         // (enabled flag + gpsUpdateRateHz in SensorBlock).
         std::vector<double> lastGpsUpdateTime;
+        // Barometer / magnetometer scheduling + baro bias walk state.
+        std::vector<double> lastBaroUpdateTime;
+        std::vector<double> lastMagUpdateTime;
+        std::vector<double> trueBaroBias;
+        // Delayed GPS delivery: queued raw samples (truth + lever arm, noise
+        // applied at generation) published once age >= gpsLatencySec.
+        struct DelayedGpsSample {
+            double timeSec = 0.0;
+            double px = 0.0, py = 0.0, pz = 0.0;
+            double vx = 0.0, vy = 0.0, vz = 0.0;
+        };
+        std::vector<std::deque<DelayedGpsSample>> gpsLatencyQueue;
         
         // Random walk biases (true biases drifting over time)
         // In a perfectly pure SoA, these true biases would live in another block (e.g. TrueSensorStateBlock),

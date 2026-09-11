@@ -30,6 +30,33 @@ namespace StrikeEngine::Kernel {
         std::vector<bool> gpsEnabled;           // GPS samples produced while true
         std::vector<double> gpsUpdateRateHz;    // per-entity GPS update rate (Hz)
 
+        // Barometer measurements (opt-in altitude aiding).
+        std::vector<bool> baroUpdated;          // true if new baro data arrived this tick
+        std::vector<double> baroAlt;            // pressure altitude (m, datum-relative)
+
+        // Magnetometer measurements (opt-in heading aiding, body frame T).
+        std::vector<bool> magUpdated;
+        std::vector<double> magX, magY, magZ;
+
+        // Aiding + realism configuration per entity (from SensorConfig).
+        std::vector<bool> baroEnabled;
+        std::vector<double> baroNoiseStdDev;
+        std::vector<double> baroBiasStdDev;
+        std::vector<double> baroUpdateRateHz;
+        std::vector<bool> magEnabled;
+        std::vector<double> magNoiseStdDev;
+        std::vector<double> magUpdateRateHz;
+        std::vector<double> magDisturbanceGateRel;
+        std::vector<double> gpsLatencySec;
+        std::vector<double> gpsLeverArmX, gpsLeverArmY, gpsLeverArmZ;
+        std::vector<bool> gpsFixConsistencyEnabled;
+        std::vector<bool> insConingCompensationEnabled;
+        std::vector<bool> insAdaptiveQEnabled;
+        std::vector<double> insAdaptiveQGain;
+        std::vector<double> initialAttitudeErrorDeg;
+        std::vector<double> initialPositionErrorM;
+        std::vector<double> initialVelocityErrorMps;
+
         std::size_t size = 0;
     };
 

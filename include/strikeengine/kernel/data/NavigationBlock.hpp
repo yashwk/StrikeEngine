@@ -31,6 +31,15 @@ namespace StrikeEngine::Kernel {
         // the most recent GPS update.
         std::vector<bool> lastGpsUpdateRejected;
         std::vector<double> lastGpsMaxInnovationSigma;
+        // Baro / magnetometer aiding diagnostics (same convention).
+        std::vector<bool> lastBaroRejected;
+        std::vector<bool> lastMagRejected;
+
+        // Two-sample coning/sculling state: previous IMU increments
+        // (delta-angle, delta-velocity in body frame). Zeroed at alignment;
+        // consumed only when insConingCompensationEnabled.
+        std::vector<double> prevDThetaX, prevDThetaY, prevDThetaZ;
+        std::vector<double> prevDVelX, prevDVelY, prevDVelZ;
 
         // Status
         std::vector<bool> isAligned;

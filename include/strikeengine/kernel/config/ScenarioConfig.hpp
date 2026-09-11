@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <strikeengine/kernel/SimulationKernel.hpp>
@@ -58,6 +59,12 @@ namespace StrikeEngine::Kernel {
         // sweep/Monte Carlo rows. Zero preserves legacy behavior.
         std::size_t primaryEntityIndex = 0;
 
+        // THE global seed for this scenario. loadInto copies it into the
+        // kernel, which fans it out to every stochastic system inside
+        // (sensor stream, nav alignment stream, split warhead stream). One
+        // seed per scenario, no per-system seeding from outside.
+        std::uint32_t randomSeed = 0xDEADBEEFu;
+
         // Serialize/deserialize this scenario to/from a JSON file.
         // save() returns false if the file cannot be opened; load() throws
         // std::runtime_error if the file is missing or the JSON is malformed.
@@ -92,6 +99,11 @@ namespace StrikeEngine::Kernel {
                     kernel.queueCommand(cmd);
                 }
             }
+
+            // Single fan-out point: the scenario seed becomes the kernel
+            // seed, which setRandomSeed copies into every stochastic system
+            // inside (sensor, nav alignment, split warhead streams).
+            kernel.setRandomSeed(randomSeed);
         }
     };
 

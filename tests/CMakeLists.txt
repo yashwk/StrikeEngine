@@ -165,6 +165,8 @@ add_test(NAME seeker_rich COMMAND seeker_rich_test)
 set_tests_properties(seeker_rich PROPERTIES TIMEOUT 120)
 
 add_test(NAME navigation COMMAND navigation_test)
+add_test(NAME navigation_aiding COMMAND navigation_aiding_test)
+set_tests_properties(navigation_aiding PROPERTIES TIMEOUT 120)
 set_tests_properties(navigation PROPERTIES TIMEOUT 120)
 
 add_test(NAME lever_arm COMMAND lever_arm_test)
@@ -247,3 +249,6 @@ set_tests_properties(designer_pipeline PROPERTIES TIMEOUT 120)
 
 add_test(NAME multithread COMMAND multithread_test)
 set_tests_properties(multithread PROPERTIES TIMEOUT 120)
+
+add_executable(navigation_aiding_test validation/navigation_aiding_test.cpp)
+target_link_libraries(navigation_aiding_test PRIVATE strikeengine)

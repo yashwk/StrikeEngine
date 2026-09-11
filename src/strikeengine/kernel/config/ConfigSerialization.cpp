@@ -370,6 +370,26 @@ void to_json(json& j, const SensorConfig& s) {
     j["imu_lever_arm_x"] = s.imuLeverArmX;
     j["imu_lever_arm_y"] = s.imuLeverArmY;
     j["imu_lever_arm_z"] = s.imuLeverArmZ;
+    // Aiding + realism keys (optional with defaults; missing = legacy).
+    j["baro_enabled"] = s.baroEnabled;
+    j["baro_noise_std_dev"] = s.baroNoiseStdDev;
+    j["baro_bias_std_dev"] = s.baroBiasStdDev;
+    j["baro_update_rate_hz"] = s.baroUpdateRateHz;
+    j["mag_enabled"] = s.magEnabled;
+    j["mag_noise_std_dev"] = s.magNoiseStdDev;
+    j["mag_update_rate_hz"] = s.magUpdateRateHz;
+    j["mag_disturbance_gate_rel"] = s.magDisturbanceGateRel;
+    j["gps_latency_sec"] = s.gpsLatencySec;
+    j["gps_lever_arm_x"] = s.gpsLeverArmX;
+    j["gps_lever_arm_y"] = s.gpsLeverArmY;
+    j["gps_lever_arm_z"] = s.gpsLeverArmZ;
+    j["gps_fix_consistency_enabled"] = s.gpsFixConsistencyEnabled;
+    j["ins_coning_compensation_enabled"] = s.insConingCompensationEnabled;
+    j["ins_adaptive_q_enabled"] = s.insAdaptiveQEnabled;
+    j["ins_adaptive_q_gain"] = s.insAdaptiveQGain;
+    j["initial_attitude_error_deg"] = s.initialAttitudeErrorDeg;
+    j["initial_position_error_m"] = s.initialPositionErrorM;
+    j["initial_velocity_error_mps"] = s.initialVelocityErrorMps;
 }
 
 void from_json(const json& j, SensorConfig& s) {
@@ -386,6 +406,25 @@ void from_json(const json& j, SensorConfig& s) {
     s.imuLeverArmX = j.at("imu_lever_arm_x").get<double>();
     s.imuLeverArmY = j.at("imu_lever_arm_y").get<double>();
     s.imuLeverArmZ = j.at("imu_lever_arm_z").get<double>();
+    s.baroEnabled = j.value("baro_enabled", false);
+    s.baroNoiseStdDev = j.value("baro_noise_std_dev", 1.0);
+    s.baroBiasStdDev = j.value("baro_bias_std_dev", 0.0);
+    s.baroUpdateRateHz = j.value("baro_update_rate_hz", 1.0);
+    s.magEnabled = j.value("mag_enabled", false);
+    s.magNoiseStdDev = j.value("mag_noise_std_dev", 50e-9);
+    s.magUpdateRateHz = j.value("mag_update_rate_hz", 10.0);
+    s.magDisturbanceGateRel = j.value("mag_disturbance_gate_rel", 0.25);
+    s.gpsLatencySec = j.value("gps_latency_sec", 0.0);
+    s.gpsLeverArmX = j.value("gps_lever_arm_x", 0.0);
+    s.gpsLeverArmY = j.value("gps_lever_arm_y", 0.0);
+    s.gpsLeverArmZ = j.value("gps_lever_arm_z", 0.0);
+    s.gpsFixConsistencyEnabled = j.value("gps_fix_consistency_enabled", false);
+    s.insConingCompensationEnabled = j.value("ins_coning_compensation_enabled", false);
+    s.insAdaptiveQEnabled = j.value("ins_adaptive_q_enabled", false);
+    s.insAdaptiveQGain = j.value("ins_adaptive_q_gain", 1.0);
+    s.initialAttitudeErrorDeg = j.value("initial_attitude_error_deg", 0.0);
+    s.initialPositionErrorM = j.value("initial_position_error_m", 0.0);
+    s.initialVelocityErrorMps = j.value("initial_velocity_error_mps", 0.0);
 }
 
 void to_json(json& j, const GuidanceAutopilotConfig& g) {
@@ -416,6 +455,10 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     // W41 cooperative-engagement datalink (optional with defaults).
     j["datalinkSourceId"] = g.datalinkSourceId;
     j["datalinkTargetId"] = g.datalinkTargetId;
+    // tgo-scheduled N (optional with defaults; off = constant N).
+    j["navScheduleEnabled"] = g.navScheduleEnabled;
+    j["navConstantTerminal"] = g.navConstantTerminal;
+    j["navScheduleTgoSec"] = g.navScheduleTgoSec;
     // Dynamic pressure gain scheduling keys (optional with defaults).
     j["gainSchedulingEnabled"] = g.gainSchedulingEnabled;
     j["refDynamicPressurePa"] = g.refDynamicPressurePa;
@@ -451,6 +494,9 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
     g.datalinkSourceId = j.value("datalinkSourceId", -1);
     g.datalinkTargetId = j.value("datalinkTargetId", -1);
+    g.navScheduleEnabled = j.value("navScheduleEnabled", false);
+    g.navConstantTerminal = j.value("navConstantTerminal", 3.0);
+    g.navScheduleTgoSec = j.value("navScheduleTgoSec", 8.0);
     g.gainSchedulingEnabled = j.value("gainSchedulingEnabled", false);
     g.refDynamicPressurePa = j.value("refDynamicPressurePa", 50000.0);
     g.minDynamicPressurePa = j.value("minDynamicPressurePa", 2000.0);
@@ -792,6 +838,7 @@ void to_json(json& j, const ScenarioConfig& s) {
     j["description"] = s.description;
     j["environment"] = s.environment;
     j["primary_entity_index"] = s.primaryEntityIndex;
+    j["random_seed"] = s.randomSeed;
     j["entities"] = s.entities;
 }
 
@@ -800,6 +847,7 @@ void from_json(const json& j, ScenarioConfig& s) {
     s.description = j.at("description").get<std::string>();
     s.environment = j.at("environment").get<EnvironmentConfig>();
     s.primaryEntityIndex = j.at("primary_entity_index").get<std::size_t>();
+    s.randomSeed = j.value("random_seed", 0xDEADBEEFu);
     s.entities = j.at("entities").get<std::vector<ScenarioEntityConfig>>();
 }
 

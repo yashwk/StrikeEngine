@@ -33,6 +33,9 @@ namespace StrikeEngine::Kernel {
 
             GuidanceAutopilotConfig cfg;
             cfg.navigationConstant = getDoubleKey(data, "navigation_constant", "navigationConstant", cfg.navigationConstant);
+            cfg.navScheduleEnabled = getBoolKey(data, "nav_schedule_enabled", "navScheduleEnabled", cfg.navScheduleEnabled);
+            cfg.navConstantTerminal = getDoubleKey(data, "nav_constant_terminal", "navConstantTerminal", cfg.navConstantTerminal);
+            cfg.navScheduleTgoSec = getDoubleKey(data, "nav_schedule_tgo_sec", "navScheduleTgoSec", cfg.navScheduleTgoSec);
             cfg.waypointGain = getDoubleKey(data, "waypoint_gain", "waypointGain", cfg.waypointGain);
             cfg.kAccelP = getDoubleKey(data, "k_accel_p", "kAccelP", cfg.kAccelP);
             cfg.kRateP = getDoubleKey(data, "k_rate_p", "kRateP", cfg.kRateP);
@@ -54,8 +57,7 @@ namespace StrikeEngine::Kernel {
             cfg.trajectoryMinSpeedMps = getDoubleKey(data, "trajectory_min_speed_mps", "trajectoryMinSpeedMps", cfg.trajectoryMinSpeedMps);
             cfg.trajectoryFeasibilityAccelFactor = getDoubleKey(data, "trajectory_feasibility_accel_factor", "trajectoryFeasibilityAccelFactor", cfg.trajectoryFeasibilityAccelFactor);
 
-            cfg.gainSchedulingEnabled = getBoolKey(data, "gain_scheduling_enabled", "gainSchedulingEnabled", cfg.gainSchedulingEnabled);
-            cfg.refDynamicPressurePa = getDoubleKey(data, "ref_dynamic_pressure_pa", "refDynamicPressurePa", cfg.refDynamicPressurePa);
+            cfg.gainSchedulingEnabled = getBoolKey(data, "gain_scheduling_enabled", "gainSchedulingEnabled", cfg.gainSchedulingEnabled);            cfg.refDynamicPressurePa = getDoubleKey(data, "ref_dynamic_pressure_pa", "refDynamicPressurePa", cfg.refDynamicPressurePa);
             cfg.minDynamicPressurePa = getDoubleKey(data, "min_dynamic_pressure_pa", "minDynamicPressurePa", cfg.minDynamicPressurePa);
             cfg.maxDynamicPressurePa = getDoubleKey(data, "max_dynamic_pressure_pa", "maxDynamicPressurePa", cfg.maxDynamicPressurePa);
 

@@ -34,6 +34,19 @@ namespace StrikeEngine::Kernel {
             guidance.targetAccelZ[id] = cmd.targetAccelZ;
             guidance.targetAccelAvailable[id] = cmd.targetAccelAvailable;
 
+            // Optional cooperative-datalink rewiring (see SimulationCommand):
+            // handoff (disable), loss fallback (disable + coast on command
+            // seed), and recovery (re-enable) are all queued mode-switch
+            // commands so they stay deterministic with the step sequence.
+            if (cmd.updateDatalink) {
+                if (id < guidance.datalinkSourceId.size()) {
+                    guidance.datalinkSourceId[id] = cmd.datalinkSourceId;
+                }
+                if (id < guidance.datalinkTargetId.size()) {
+                    guidance.datalinkTargetId[id] = cmd.datalinkTargetId;
+                }
+            }
+
             // W39: an external command seeds (or refreshes) the persistent
             // target track. Identity comes from cmd.targetId when provided;
             // the state machines then purges/fuses seeker measurements.

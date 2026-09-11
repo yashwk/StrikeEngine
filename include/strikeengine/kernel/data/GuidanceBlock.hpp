@@ -76,6 +76,13 @@ namespace StrikeEngine::Kernel {
 
         // Per-entity guidance-law tuning (design-time configurable).
         std::vector<double> navigationConstant;  // APN navigation constant N
+        // tgo-scheduled N (see GuidanceAutopilotConfig): the effective gain
+        // actually consumed by the laws this step (diagnostic + scheduling).
+        std::vector<double> scheduledNavN;
+        // Schedule parameters per entity (from GuidanceAutopilotConfig).
+        std::vector<bool> navScheduleEnabled;
+        std::vector<double> navConstantTerminal;
+        std::vector<double> navScheduleTgoSec;
         std::vector<double> waypointGain;        // m/s^2 per unit range fraction
 
         // Aircraft cruise (GuidanceMode::Cruise) configuration: hold a reference

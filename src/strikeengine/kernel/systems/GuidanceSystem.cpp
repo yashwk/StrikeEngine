@@ -11,9 +11,21 @@ namespace StrikeEngine::Kernel {
 
     namespace {
 
+        // Effective navigation gain for an entity: the tgo-scheduled value
+        // when scheduling is enabled (previous step's tgo drives the switch
+        // — deterministic, no peeking at the current step), else the base N.
+        // update() maintains scheduledNavN every step; laws only read here.
+        inline double effNavN(std::size_t id, const GuidanceBlock& g)
+        {
+            // Kernel-driven runs always size scheduledNavN (createVehicle
+            // maintains it); hand-built blocks fall back to their own N.
+            if (id < g.scheduledNavN.size()) return g.scheduledNavN[id];
+            if (id < g.navigationConstant.size()) return g.navigationConstant[id];
+            return 3.5;
+        }
+
         // Result of one guidance-law evaluation; all outputs are finite.
-        struct LawResult {
-            double ax = 0.0, ay = 0.0, az = 0.0;
+        struct LawResult {            double ax = 0.0, ay = 0.0, az = 0.0;
             bool valid = true;      // law could be evaluated (geometry OK)
             bool lawInvalid = false; // non-finite input / bad configuration
             bool nonClosing = false; // range > 0 but closing speed <= 0
@@ -164,7 +176,7 @@ namespace StrikeEngine::Kernel {
             const TrackBlock* tracks, GuidanceBlock& guidance)
         {
             LawResult out;
-            const double N = guidance.navigationConstant[id];
+            const double N = effNavN(id, guidance);
             if (!std::isfinite(N) || N <= 0.0) {
                 out.lawInvalid = true;
                 out.valid = false;
@@ -277,7 +289,7 @@ namespace StrikeEngine::Kernel {
             const TrackBlock* tracks, GuidanceBlock& g)
         {
             LawResult out;
-            const double N = g.navigationConstant[id];
+            const double N = effNavN(id, g);
             if (!std::isfinite(N) || N <= 0.0) {
                 out.lawInvalid = true;
                 out.valid = false;
@@ -428,7 +440,7 @@ namespace StrikeEngine::Kernel {
             const SeekerBlock& seeker, const TrackBlock* tracks, GuidanceBlock& guidance)
         {
             LawResult out;
-            const double N = guidance.navigationConstant[id];
+            const double N = effNavN(id, guidance);
             const double range = seeker.targetRange[id];
             const double rangeRate = seeker.targetRangeRate[id];
             if (!std::isfinite(N) || N <= 0.0 ||
@@ -494,6 +506,26 @@ namespace StrikeEngine::Kernel {
     {
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
+
+            // tgo-scheduled N (opt-in): previous step's tgo selects the
+            // terminal gain inside the window, else the base gain. Disabled
+            // (or non-positive tgo) reproduces the constant-N legacy path.
+            {
+                double schedN = guidance.navigationConstant[i];
+                if (i < guidance.navScheduleEnabled.size() &&
+                    guidance.navScheduleEnabled[i] &&
+                    i < guidance.navConstantTerminal.size() &&
+                    i < guidance.navScheduleTgoSec.size()) {
+                    const double tgo = (i < guidance.tgoSec.size()) ? guidance.tgoSec[i] : 0.0;
+                    const double win = guidance.navScheduleTgoSec[i];
+                    const double nTerm = guidance.navConstantTerminal[i];
+                    if (tgo > 0.0 && win > 0.0 && tgo <= win && nTerm > 0.0 &&
+                        std::isfinite(tgo) && std::isfinite(nTerm)) {
+                        schedN = nTerm;
+                    }
+                }
+                if (i < guidance.scheduledNavN.size()) guidance.scheduledNavN[i] = schedN;
+            }
 
             clearTrajectoryDiagnostics(i, guidance);
 

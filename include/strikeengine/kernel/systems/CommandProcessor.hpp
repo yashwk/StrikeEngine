@@ -32,6 +32,17 @@ namespace StrikeEngine::Kernel {
         // Optional target identity for the persistent track (W39).
         // -1 = unknown identity (track is still maintained on state only).
         std::int64_t targetId = -1;
+
+        // Optional cooperative-datalink re-targeting (W41). When
+        // updateDatalink is true, the command also rewires which source
+        // entity's persistent track steers this entity's midcourse PN
+        // (datalinkSourceId) and which target that track is of
+        // (datalinkTargetId). -1 = disabled (autonomous: own seeker/command
+        // only). Default false preserves legacy behavior: commands never
+        // touch the datalink wiring set at createVehicle.
+        bool updateDatalink = false;
+        int datalinkSourceId = -1;
+        int datalinkTargetId = -1;
     };
 
     class CommandProcessor {

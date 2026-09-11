@@ -4,6 +4,12 @@ namespace StrikeEngine::Kernel {
 
     struct GuidanceAutopilotConfig {
         double navigationConstant = 3.5;   // APN N
+        // tgo-scheduled N (opt-in; off = constant navigationConstant): inside
+        // navScheduleTgoSec the laws use navConstantTerminal instead of N.
+        // Previous step's tgo drives the switch (deterministic, no peeking).
+        bool   navScheduleEnabled = false;
+        double navConstantTerminal = 3.0;
+        double navScheduleTgoSec = 8.0;
         double waypointGain = 20.0;        // m/s^2 per unit range fraction
         double kAccelP = 0.030;  // rad deflection per (m/s^2)
         double kRateP  = 1.000;  // rad per (rad/s)

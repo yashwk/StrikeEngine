@@ -56,6 +56,7 @@ namespace StrikeEngine::Kernel {
     void SimulationKernel::setRandomSeed(std::uint32_t seed) {
         randomSeed = seed;
         sensorSystem.setSeed(seed);
+        navigationSystem.setSeed(seed);
         // Split stream: golden-ratio mix keeps warhead draws disjoint from
         // the sensor stream for every seed.
         warheadRng.seed(seed ^ 0x9E3779B9u);
@@ -91,6 +92,7 @@ namespace StrikeEngine::Kernel {
         // streams (reset used to leave both RNGs wherever they stopped,
         // silently breaking the seed contract on kernel reuse).
         sensorSystem.setSeed(randomSeed);
+        navigationSystem.setSeed(randomSeed);
         warheadRng.seed(randomSeed ^ 0x9E3779B9u);
         freeList.clear();
         stagePlans.clear();
@@ -256,6 +258,10 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.commandedAccelX.push_back(0); guidanceBlock.commandedAccelY.push_back(0); guidanceBlock.commandedAccelZ.push_back(0);
             guidanceBlock.maxAccel.push_back(0.0);
             guidanceBlock.navigationConstant.push_back(3.5);
+            guidanceBlock.scheduledNavN.push_back(3.5);
+            guidanceBlock.navScheduleEnabled.push_back(false);
+            guidanceBlock.navConstantTerminal.push_back(3.0);
+            guidanceBlock.navScheduleTgoSec.push_back(8.0);
             guidanceBlock.waypointGain.push_back(20.0);
             guidanceBlock.cruiseAltitudeM.push_back(0.0);
             guidanceBlock.cruiseAltitudeGain.push_back(0.05);
@@ -319,6 +325,29 @@ namespace StrikeEngine::Kernel {
             sensorBlock.imuEnabled.push_back(true);
             sensorBlock.gpsEnabled.push_back(true);
             sensorBlock.gpsUpdateRateHz.push_back(1.0);
+            sensorBlock.baroUpdated.push_back(false);
+            sensorBlock.baroAlt.push_back(0.0);
+            sensorBlock.magUpdated.push_back(false);
+            sensorBlock.magX.push_back(0.0); sensorBlock.magY.push_back(0.0); sensorBlock.magZ.push_back(0.0);
+            sensorBlock.baroEnabled.push_back(false);
+            sensorBlock.baroNoiseStdDev.push_back(1.0);
+            sensorBlock.baroBiasStdDev.push_back(0.0);
+            sensorBlock.baroUpdateRateHz.push_back(1.0);
+            sensorBlock.magEnabled.push_back(false);
+            sensorBlock.magNoiseStdDev.push_back(50e-9);
+            sensorBlock.magUpdateRateHz.push_back(10.0);
+            sensorBlock.magDisturbanceGateRel.push_back(0.25);
+            sensorBlock.gpsLatencySec.push_back(0.0);
+            sensorBlock.gpsLeverArmX.push_back(0.0);
+            sensorBlock.gpsLeverArmY.push_back(0.0);
+            sensorBlock.gpsLeverArmZ.push_back(0.0);
+            sensorBlock.gpsFixConsistencyEnabled.push_back(false);
+            sensorBlock.insConingCompensationEnabled.push_back(false);
+            sensorBlock.insAdaptiveQEnabled.push_back(false);
+            sensorBlock.insAdaptiveQGain.push_back(1.0);
+            sensorBlock.initialAttitudeErrorDeg.push_back(0.0);
+            sensorBlock.initialPositionErrorM.push_back(0.0);
+            sensorBlock.initialVelocityErrorMps.push_back(0.0);
 
             seekerBlock.type.push_back(SeekerType::None);
             seekerBlock.transmitterPowerW.push_back(1000.0);
@@ -405,6 +434,10 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.commandedAccelX[id] = 0; guidanceBlock.commandedAccelY[id] = 0; guidanceBlock.commandedAccelZ[id] = 0;
         guidanceBlock.maxAccel[id] = 0.0;
         guidanceBlock.navigationConstant[id] = resolved.guidanceAutopilot.navigationConstant;
+        guidanceBlock.scheduledNavN[id] = resolved.guidanceAutopilot.navigationConstant;
+        guidanceBlock.navScheduleEnabled[id] = resolved.guidanceAutopilot.navScheduleEnabled;
+        guidanceBlock.navConstantTerminal[id] = resolved.guidanceAutopilot.navConstantTerminal;
+        guidanceBlock.navScheduleTgoSec[id] = resolved.guidanceAutopilot.navScheduleTgoSec;
         guidanceBlock.waypointGain[id] = resolved.guidanceAutopilot.waypointGain;
         // Aircraft cruise config.
         guidanceBlock.cruiseAltitudeM[id] = resolved.guidanceAutopilot.cruiseAltitudeM;
@@ -482,6 +515,25 @@ namespace StrikeEngine::Kernel {
         sensorBlock.imuEnabled[id] = resolved.sensor.imuEnabled;
         sensorBlock.gpsEnabled[id] = resolved.sensor.gpsEnabled;
         sensorBlock.gpsUpdateRateHz[id] = resolved.sensor.gpsUpdateRateHz;
+        sensorBlock.baroEnabled[id] = resolved.sensor.baroEnabled;
+        sensorBlock.baroNoiseStdDev[id] = resolved.sensor.baroNoiseStdDev;
+        sensorBlock.baroBiasStdDev[id] = resolved.sensor.baroBiasStdDev;
+        sensorBlock.baroUpdateRateHz[id] = resolved.sensor.baroUpdateRateHz;
+        sensorBlock.magEnabled[id] = resolved.sensor.magEnabled;
+        sensorBlock.magNoiseStdDev[id] = resolved.sensor.magNoiseStdDev;
+        sensorBlock.magUpdateRateHz[id] = resolved.sensor.magUpdateRateHz;
+        sensorBlock.magDisturbanceGateRel[id] = resolved.sensor.magDisturbanceGateRel;
+        sensorBlock.gpsLatencySec[id] = resolved.sensor.gpsLatencySec;
+        sensorBlock.gpsLeverArmX[id] = resolved.sensor.gpsLeverArmX;
+        sensorBlock.gpsLeverArmY[id] = resolved.sensor.gpsLeverArmY;
+        sensorBlock.gpsLeverArmZ[id] = resolved.sensor.gpsLeverArmZ;
+        sensorBlock.gpsFixConsistencyEnabled[id] = resolved.sensor.gpsFixConsistencyEnabled;
+        sensorBlock.insConingCompensationEnabled[id] = resolved.sensor.insConingCompensationEnabled;
+        sensorBlock.insAdaptiveQEnabled[id] = resolved.sensor.insAdaptiveQEnabled;
+        sensorBlock.insAdaptiveQGain[id] = resolved.sensor.insAdaptiveQGain;
+        sensorBlock.initialAttitudeErrorDeg[id] = resolved.sensor.initialAttitudeErrorDeg;
+        sensorBlock.initialPositionErrorM[id] = resolved.sensor.initialPositionErrorM;
+        sensorBlock.initialVelocityErrorMps[id] = resolved.sensor.initialVelocityErrorMps;
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
