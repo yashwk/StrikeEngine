@@ -57,6 +57,7 @@ namespace StrikeEngine::Kernel {
         randomSeed = seed;
         sensorSystem.setSeed(seed);
         navigationSystem.setSeed(seed);
+        seekerSystem.setSeed(seed);
         // Split stream: golden-ratio mix keeps warhead draws disjoint from
         // the sensor stream for every seed.
         warheadRng.seed(seed ^ 0x9E3779B9u);
@@ -93,6 +94,7 @@ namespace StrikeEngine::Kernel {
         // silently breaking the seed contract on kernel reuse).
         sensorSystem.setSeed(randomSeed);
         navigationSystem.setSeed(randomSeed);
+        seekerSystem.setSeed(randomSeed);
         warheadRng.seed(randomSeed ^ 0x9E3779B9u);
         freeList.clear();
         stagePlans.clear();
@@ -311,6 +313,7 @@ namespace StrikeEngine::Kernel {
             statusBlock.rcsProfileId.push_back("");
             statusBlock.irProfileId.push_back("");
             statusBlock.emitterEirpW.push_back(0.0);
+            statusBlock.jammerEirpW.push_back(0.0);
 
             sensorBlock.accelNoiseStdDev.push_back(0.1);
             sensorBlock.accelBiasStdDev.push_back(0.01);
@@ -381,6 +384,23 @@ namespace StrikeEngine::Kernel {
             seekerBlock.lockHysteresisDb.push_back(3.0);
             seekerBlock.lockDropoutTimeSec.push_back(0.10);
             seekerBlock.measurementLatencySec.push_back(0.0);
+            seekerBlock.measurementNoiseEnabled.push_back(false);
+            seekerBlock.angleNoiseStdDevRad.push_back(0.001);
+            seekerBlock.angleNoiseRefSnrDb.push_back(20.0);
+            seekerBlock.rangeNoiseStdDevM.push_back(1.0);
+            seekerBlock.rangeRateNoiseStdDevMps.push_back(0.5);
+            seekerBlock.glintSigmaM.push_back(0.0);
+            seekerBlock.glintCorrelationTauSec.push_back(1.0);
+            seekerBlock.swerlingEnabled.push_back(false);
+            seekerBlock.gimbalRateLimitRadPerSec.push_back(0.0);
+            seekerBlock.minRangeGateM.push_back(0.0);
+            seekerBlock.maxRangeGateM.push_back(0.0);
+            seekerBlock.terrainMaskingEnabled.push_back(false);
+            seekerBlock.minClosingRateMps.push_back(0.0);
+            seekerBlock.rateFilterTauSec.push_back(0.05);
+            seekerBlock.decoyRejectionDb.push_back(0.0);
+            seekerBlock.passiveRfDutyCycle.push_back(1.0);
+            seekerBlock.illuminatorEntityId.push_back(-1);
             seekerBlock.isLocked.push_back(false);
             seekerBlock.lockedTargetId.push_back(0);
             seekerBlock.targetRange.push_back(0);
@@ -393,6 +413,16 @@ namespace StrikeEngine::Kernel {
             seekerBlock.previousElevation.push_back(0);
             seekerBlock.lockLostTimeSec.push_back(0);
             seekerBlock.hasPreviousLos.push_back(false);
+            seekerBlock.lockActive.push_back(false);
+            seekerBlock.hasPublishedMeasurement.push_back(false);
+            seekerBlock.measurementAgeSec.push_back(0.0);
+            seekerBlock.gimbalAzimuthRad.push_back(0.0);
+            seekerBlock.gimbalElevationRad.push_back(0.0);
+            seekerBlock.lastSignalStrength.push_back(0.0);
+            seekerBlock.lockRejectReason.push_back(
+                static_cast<int>(SeekerRejectReason::None));
+            seekerBlock.glintAzM.push_back(0.0);
+            seekerBlock.glintElM.push_back(0.0);
 
             // W39 persistent track state (config defaults; reset in the common path)
             trackBlock.confirmations.push_back(3);
@@ -719,6 +749,7 @@ namespace StrikeEngine::Kernel {
         statusBlock.rcsProfileId[id] = config.rcsProfileId;
         statusBlock.irProfileId[id] = config.irProfileId;
         statusBlock.emitterEirpW[id] = config.emitterEirpW;
+        statusBlock.jammerEirpW[id] = config.jammerEirpW;
 
         // Warhead state (fusing + lethality handled by processWarheads()).
         if (resolved.warhead.falloffRadiusM > 0.0 &&
@@ -759,6 +790,23 @@ namespace StrikeEngine::Kernel {
         seekerBlock.lockHysteresisDb[id] = resolved.seeker.lockHysteresisDb;
         seekerBlock.lockDropoutTimeSec[id] = resolved.seeker.lockDropoutTimeSec;
         seekerBlock.measurementLatencySec[id] = resolved.seeker.measurementLatencySec;
+        seekerBlock.measurementNoiseEnabled[id] = resolved.seeker.measurementNoiseEnabled;
+        seekerBlock.angleNoiseStdDevRad[id] = resolved.seeker.angleNoiseStdDevRad;
+        seekerBlock.angleNoiseRefSnrDb[id] = resolved.seeker.angleNoiseRefSnrDb;
+        seekerBlock.rangeNoiseStdDevM[id] = resolved.seeker.rangeNoiseStdDevM;
+        seekerBlock.rangeRateNoiseStdDevMps[id] = resolved.seeker.rangeRateNoiseStdDevMps;
+        seekerBlock.glintSigmaM[id] = resolved.seeker.glintSigmaM;
+        seekerBlock.glintCorrelationTauSec[id] = resolved.seeker.glintCorrelationTauSec;
+        seekerBlock.swerlingEnabled[id] = resolved.seeker.swerlingEnabled;
+        seekerBlock.gimbalRateLimitRadPerSec[id] = resolved.seeker.gimbalRateLimitRadPerSec;
+        seekerBlock.minRangeGateM[id] = resolved.seeker.minRangeGateM;
+        seekerBlock.maxRangeGateM[id] = resolved.seeker.maxRangeGateM;
+        seekerBlock.terrainMaskingEnabled[id] = resolved.seeker.terrainMaskingEnabled;
+        seekerBlock.minClosingRateMps[id] = resolved.seeker.minClosingRateMps;
+        seekerBlock.rateFilterTauSec[id] = resolved.seeker.rateFilterTauSec;
+        seekerBlock.decoyRejectionDb[id] = resolved.seeker.decoyRejectionDb;
+        seekerBlock.passiveRfDutyCycle[id] = resolved.seeker.passiveRfDutyCycle;
+        seekerBlock.illuminatorEntityId[id] = resolved.seeker.illuminatorEntityId;
         seekerBlock.isLocked[id] = false;
         seekerBlock.lockedTargetId[id] = 0;
         seekerBlock.targetRange[id] = 0.0;
@@ -771,6 +819,15 @@ namespace StrikeEngine::Kernel {
         seekerBlock.previousElevation[id] = 0.0;
         seekerBlock.lockLostTimeSec[id] = 0.0;
         seekerBlock.hasPreviousLos[id] = false;
+        seekerBlock.lockActive[id] = false;
+        seekerBlock.hasPublishedMeasurement[id] = false;
+        seekerBlock.measurementAgeSec[id] = 0.0;
+        seekerBlock.gimbalAzimuthRad[id] = 0.0;
+        seekerBlock.gimbalElevationRad[id] = 0.0;
+        seekerBlock.lastSignalStrength[id] = 0.0;
+        seekerBlock.lockRejectReason[id] = static_cast<int>(SeekerRejectReason::None);
+        seekerBlock.glintAzM[id] = 0.0;
+        seekerBlock.glintElM[id] = 0.0;
 
         return id;
     }
@@ -1057,7 +1114,7 @@ namespace StrikeEngine::Kernel {
         navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt, environment);
         
         // 3.5 Process Seekers
-        seekerSystem.update(physicsBlock, statusBlock, seekerBlock, dt);
+        seekerSystem.update(physicsBlock, statusBlock, seekerBlock, dt, environment);
 
         // 3.75 Persistent target-track manager (seeker measurements + command
         // seeds -> estimate; prediction at the sim rate between measurements)

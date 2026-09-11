@@ -42,6 +42,31 @@ namespace StrikeEngine::Kernel {
         double lockHysteresisDb = 3.0;
         double lockDropoutTimeSec = 0.10;
         double measurementLatencySec = 0.0;
+
+        // --- Measurement-noise fidelity (off = legacy exact truth) ----------
+        bool   measurementNoiseEnabled = false;
+        double angleNoiseStdDevRad = 0.001;      // at angleNoiseRefSnrDb
+        double angleNoiseRefSnrDb = 20.0;        // sigma scales 10^-((snr-ref)/20)
+        double rangeNoiseStdDevM = 1.0;
+        double rangeRateNoiseStdDevMps = 0.5;
+        double glintSigmaM = 0.0;                // 0 = no glint
+        double glintCorrelationTauSec = 1.0;
+        bool   swerlingEnabled = false;          // RCS fluctuation (RF/SARH)
+
+        // --- Gimbal servo (0 = legacy instantaneous look) -------------------
+        double gimbalRateLimitRadPerSec = 0.0;
+
+        // --- Range gates and terrain masking (0/false = legacy) -------------
+        double minRangeGateM = 0.0;
+        double maxRangeGateM = 0.0;
+        bool   terrainMaskingEnabled = false;
+        double minClosingRateMps = 0.0;          // 0 = disabled
+
+        // --- Estimator / countermeasure / emitter options -------------------
+        double rateFilterTauSec = 0.05;          // LOS-rate filter time constant
+        double decoyRejectionDb = 0.0;           // Chaff/Flare apparent-signal cut
+        double passiveRfDutyCycle = 1.0;         // 1.0 = continuous emitter
+        int    illuminatorEntityId = -1;         // SARH live illuminator (-1 static)
     };
 
 } // namespace StrikeEngine::Kernel

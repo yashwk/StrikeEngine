@@ -609,6 +609,23 @@ void to_json(json& j, const SeekerConfig& s) {
     j["lock_hysteresis_db"] = s.lockHysteresisDb;
     j["lock_dropout_time_sec"] = s.lockDropoutTimeSec;
     j["measurement_latency_sec"] = s.measurementLatencySec;
+    j["measurement_noise_enabled"] = s.measurementNoiseEnabled;
+    j["angle_noise_std_dev_rad"] = s.angleNoiseStdDevRad;
+    j["angle_noise_ref_snr_db"] = s.angleNoiseRefSnrDb;
+    j["range_noise_std_dev_m"] = s.rangeNoiseStdDevM;
+    j["range_rate_noise_std_dev_mps"] = s.rangeRateNoiseStdDevMps;
+    j["glint_sigma_m"] = s.glintSigmaM;
+    j["glint_correlation_tau_sec"] = s.glintCorrelationTauSec;
+    j["swerling_enabled"] = s.swerlingEnabled;
+    j["gimbal_rate_limit_rad_per_sec"] = s.gimbalRateLimitRadPerSec;
+    j["min_range_gate_m"] = s.minRangeGateM;
+    j["max_range_gate_m"] = s.maxRangeGateM;
+    j["terrain_masking_enabled"] = s.terrainMaskingEnabled;
+    j["min_closing_rate_mps"] = s.minClosingRateMps;
+    j["rate_filter_tau_sec"] = s.rateFilterTauSec;
+    j["decoy_rejection_db"] = s.decoyRejectionDb;
+    j["passive_rf_duty_cycle"] = s.passiveRfDutyCycle;
+    j["illuminator_entity_id"] = s.illuminatorEntityId;
 }
 
 void from_json(const json& j, SeekerConfig& s) {
@@ -633,6 +650,23 @@ void from_json(const json& j, SeekerConfig& s) {
     s.lockHysteresisDb = j.at("lock_hysteresis_db").get<double>();
     s.lockDropoutTimeSec = j.at("lock_dropout_time_sec").get<double>();
     s.measurementLatencySec = j.at("measurement_latency_sec").get<double>();
+    s.measurementNoiseEnabled = j.value("measurement_noise_enabled", false);
+    s.angleNoiseStdDevRad = j.value("angle_noise_std_dev_rad", 0.001);
+    s.angleNoiseRefSnrDb = j.value("angle_noise_ref_snr_db", 20.0);
+    s.rangeNoiseStdDevM = j.value("range_noise_std_dev_m", 1.0);
+    s.rangeRateNoiseStdDevMps = j.value("range_rate_noise_std_dev_mps", 0.5);
+    s.glintSigmaM = j.value("glint_sigma_m", 0.0);
+    s.glintCorrelationTauSec = j.value("glint_correlation_tau_sec", 1.0);
+    s.swerlingEnabled = j.value("swerling_enabled", false);
+    s.gimbalRateLimitRadPerSec = j.value("gimbal_rate_limit_rad_per_sec", 0.0);
+    s.minRangeGateM = j.value("min_range_gate_m", 0.0);
+    s.maxRangeGateM = j.value("max_range_gate_m", 0.0);
+    s.terrainMaskingEnabled = j.value("terrain_masking_enabled", false);
+    s.minClosingRateMps = j.value("min_closing_rate_mps", 0.0);
+    s.rateFilterTauSec = j.value("rate_filter_tau_sec", 0.05);
+    s.decoyRejectionDb = j.value("decoy_rejection_db", 0.0);
+    s.passiveRfDutyCycle = j.value("passive_rf_duty_cycle", 1.0);
+    s.illuminatorEntityId = j.value("illuminator_entity_id", -1);
 }
 
 // --- WarheadConfig ----------------------------------------------------------
@@ -691,6 +725,7 @@ void to_json(json& j, const VehicleConfig& v) {
     j["guidance_profile_id"] = v.guidanceProfileId;
     j["warhead_profile_id"] = v.warheadProfileId;
     j["emitter_eirp_w"] = v.emitterEirpW;
+    j["jammer_eirp_w"] = v.jammerEirpW;
 }
 
 void from_json(const json& j, VehicleConfig& v) {
@@ -718,6 +753,7 @@ void from_json(const json& j, VehicleConfig& v) {
     v.guidanceProfileId = j.value("guidance_profile_id", std::string(""));
     v.warheadProfileId = j.value("warhead_profile_id", std::string(""));
     v.emitterEirpW = j.at("emitter_eirp_w").get<double>();
+    v.jammerEirpW = j.value("jammer_eirp_w", 0.0);
 }
 
 // --- EarthEnvironmentConfig / EnvironmentConfig ------------------------------

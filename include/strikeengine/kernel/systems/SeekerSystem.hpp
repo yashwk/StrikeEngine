@@ -3,6 +3,7 @@
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
 #include <strikeengine/kernel/data/SeekerBlock.hpp>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
+#include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <strikeengine/models/signatures/RCSDatabase.hpp>
 #include <strikeengine/models/signatures/IRSignatureDatabase.hpp>
 
@@ -11,7 +12,9 @@
 #include <string>
 #include <memory>
 #include <deque>
+#include <random>
 #include <cstddef>
+#include <cstdint>
 
 namespace StrikeEngine::Kernel {
 
@@ -19,11 +22,17 @@ namespace StrikeEngine::Kernel {
     public:
         void reset();
 
+        // Seed the deterministic measurement-noise / Swerling / duty stream.
+        // Draws only happen when the corresponding opt-in model is enabled,
+        // so legacy runs never touch this stream.
+        void setSeed(std::uint32_t seed);
+
         void update(
             const PhysicsBlock& physics,
             const EntityStatusBlock& status,
             SeekerBlock& seeker,
-            double dt
+            double dt,
+            const EnvironmentConfig& environment = EnvironmentConfig{}
         );
 
     private:
@@ -46,6 +55,9 @@ namespace StrikeEngine::Kernel {
         std::unordered_set<std::string> rcsLoadFailed;
         std::vector<std::deque<DelayedMeasurement>> measurementHistory;
         std::size_t historyEntityCount = 0;
+
+        // Deterministic stream for measurement noise / Swerling / duty.
+        std::mt19937 rng{0x5EE7E9u};
     };
 
 } // namespace StrikeEngine::Kernel

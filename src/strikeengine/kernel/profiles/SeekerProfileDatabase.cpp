@@ -47,6 +47,23 @@ namespace StrikeEngine::Kernel {
             cfg.lockHysteresisDb = data.value("lock_hysteresis_db", cfg.lockHysteresisDb);
             cfg.lockDropoutTimeSec = data.value("lock_dropout_time_sec", cfg.lockDropoutTimeSec);
             cfg.measurementLatencySec = data.value("measurement_latency_sec", cfg.measurementLatencySec);
+            cfg.measurementNoiseEnabled = data.value("measurement_noise_enabled", cfg.measurementNoiseEnabled);
+            cfg.angleNoiseStdDevRad = data.value("angle_noise_std_dev_rad", cfg.angleNoiseStdDevRad);
+            cfg.angleNoiseRefSnrDb = data.value("angle_noise_ref_snr_db", cfg.angleNoiseRefSnrDb);
+            cfg.rangeNoiseStdDevM = data.value("range_noise_std_dev_m", cfg.rangeNoiseStdDevM);
+            cfg.rangeRateNoiseStdDevMps = data.value("range_rate_noise_std_dev_mps", cfg.rangeRateNoiseStdDevMps);
+            cfg.glintSigmaM = data.value("glint_sigma_m", cfg.glintSigmaM);
+            cfg.glintCorrelationTauSec = data.value("glint_correlation_tau_sec", cfg.glintCorrelationTauSec);
+            cfg.swerlingEnabled = data.value("swerling_enabled", cfg.swerlingEnabled);
+            cfg.gimbalRateLimitRadPerSec = data.value("gimbal_rate_limit_rad_per_sec", cfg.gimbalRateLimitRadPerSec);
+            cfg.minRangeGateM = data.value("min_range_gate_m", cfg.minRangeGateM);
+            cfg.maxRangeGateM = data.value("max_range_gate_m", cfg.maxRangeGateM);
+            cfg.terrainMaskingEnabled = data.value("terrain_masking_enabled", cfg.terrainMaskingEnabled);
+            cfg.minClosingRateMps = data.value("min_closing_rate_mps", cfg.minClosingRateMps);
+            cfg.rateFilterTauSec = data.value("rate_filter_tau_sec", cfg.rateFilterTauSec);
+            cfg.decoyRejectionDb = data.value("decoy_rejection_db", cfg.decoyRejectionDb);
+            cfg.passiveRfDutyCycle = data.value("passive_rf_duty_cycle", cfg.passiveRfDutyCycle);
+            cfg.illuminatorEntityId = data.value("illuminator_entity_id", cfg.illuminatorEntityId);
             _seeker = cfg;
         } catch (const std::exception&) {
             // Any load failure (syntax, missing required key, wrong type,

@@ -50,6 +50,9 @@ namespace StrikeEngine::Kernel {
         std::string guidanceProfileId = "";
         std::string warheadProfileId = "";
         double emitterEirpW = 0.0;
+        // Target-side RF jammer EIRP (W); degrades RF/SARH seeker SNR when
+        // > 0 (assumed co-located with the target). 0 = no jammer.
+        double jammerEirpW = 0.0;
     };
 
 } // namespace StrikeEngine::Kernel

@@ -47,6 +47,8 @@ namespace StrikeEngine::Kernel {
         // Target-side effective radiated power (W); used by PassiveRF seekers.
         // 0 = no emitter.
         std::vector<double> emitterEirpW;
+        // Target-side RF jammer EIRP (W); degrades RF/SARH seeker SNR when > 0.
+        std::vector<double> jammerEirpW;
 
         std::size_t size = 0;
     };
