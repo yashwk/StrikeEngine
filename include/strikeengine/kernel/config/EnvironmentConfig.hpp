@@ -68,6 +68,21 @@ namespace StrikeEngine::Kernel {
         // viewport's kinetic-hit display radius (15 m). <= 0 disables
         // kinetic-impact detection.
         double kineticImpactRadiusM = 15.0;
+
+        // Report-only kinetic contact: when true, TargetImpact is dispatched
+        // once per opposing pair per contact episode instead of every step
+        // the pair stays inside the band. Default false = legacy event flood.
+        bool kineticImpactLatchEnabled = false;
+
+        // Ground-impact detection: when true, the terrain is also sampled at
+        // the segment midpoint so a ridge between two above-ground endpoint
+        // samples is detected (legacy false = endpoint-only crossing test).
+        bool sweptGroundImpactEnabled = false;
+
+        // When true, a ground impact also zeroes the body angular rates
+        // (legacy false leaves the rotation state untouched). Position,
+        // velocity and acceleration are always zeroed.
+        bool groundImpactZeroRates = false;
     };
 
 } // namespace StrikeEngine::Kernel

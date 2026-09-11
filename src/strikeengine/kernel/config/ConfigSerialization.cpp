@@ -769,6 +769,16 @@ void to_json(json& j, const WarheadConfig& w) {
     j["timed_delay_sec"] = w.timedDelaySec;
     j["lethal_radius_m"] = w.lethalRadiusM;
     j["falloff_radius_m"] = w.falloffRadiusM;
+    j["fuse_enabled"] = w.fuseEnabled;
+    j["cpa_fuzing_enabled"] = w.cpaFuzingEnabled;
+    j["fuse_lookahead_sec"] = w.fuseLookaheadSec;
+    j["arming_delay_sec"] = w.armingDelaySec;
+    j["min_closing_speed_mps"] = w.minClosingSpeedMps;
+    j["self_destruct_time_sec"] = w.selfDestructTimeSec;
+    j["damage"] = w.damage;
+    j["fuse_detection_probability"] = w.fuseDetectionProbability;
+    j["head_on_lethality_factor"] = w.headOnLethalityFactor;
+    j["tail_on_lethality_factor"] = w.tailOnLethalityFactor;
 }
 
 void from_json(const json& j, WarheadConfig& w) {
@@ -779,6 +789,17 @@ void from_json(const json& j, WarheadConfig& w) {
     w.lethalRadiusM = j.at("lethal_radius_m").get<double>();
     // Optional: pre-existing files without the key load the flat law (0.0).
     w.falloffRadiusM = j.value("falloff_radius_m", 0.0);
+    // Optional terminal fuse/damage keys (defaults preserve legacy).
+    w.fuseEnabled = j.value("fuse_enabled", true);
+    w.cpaFuzingEnabled = j.value("cpa_fuzing_enabled", false);
+    w.fuseLookaheadSec = j.value("fuse_lookahead_sec", 0.02);
+    w.armingDelaySec = j.value("arming_delay_sec", 0.0);
+    w.minClosingSpeedMps = j.value("min_closing_speed_mps", 0.0);
+    w.selfDestructTimeSec = j.value("self_destruct_time_sec", 0.0);
+    w.damage = j.value("damage", 100.0);
+    w.fuseDetectionProbability = j.value("fuse_detection_probability", 1.0);
+    w.headOnLethalityFactor = j.value("head_on_lethality_factor", 1.0);
+    w.tailOnLethalityFactor = j.value("tail_on_lethality_factor", 1.0);
     if (w.falloffRadiusM > 0.0 && w.falloffRadiusM < w.lethalRadiusM) {
         throw std::runtime_error("ConfigSerialization: invalid falloff_radius_m (" +
                                  std::to_string(w.falloffRadiusM) + " m) below "
@@ -794,6 +815,7 @@ void to_json(json& j, const VehicleConfig& v) {
     j["type"] = entityTypeToString(v.type);
     j["initial_mass"] = v.initialMass;
     j["mass_dry"] = v.massDry;
+    j["structural_hardness"] = v.structuralHardness;
     j["inertia_xx"] = v.Ixx;
     j["inertia_yy"] = v.Iyy;
     j["inertia_zz"] = v.Izz;
@@ -822,6 +844,7 @@ void from_json(const json& j, VehicleConfig& v) {
     v.type = entityTypeFromString(j.at("type").get<std::string>());
     v.initialMass = j.at("initial_mass").get<double>();
     v.massDry = j.at("mass_dry").get<double>();
+    v.structuralHardness = j.value("structural_hardness", 100.0);
     v.Ixx = j.at("inertia_xx").get<double>();
     v.Iyy = j.at("inertia_yy").get<double>();
     v.Izz = j.at("inertia_zz").get<double>();

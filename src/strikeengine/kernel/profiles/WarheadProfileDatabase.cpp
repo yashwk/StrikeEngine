@@ -41,6 +41,28 @@ namespace StrikeEngine::Kernel {
             if (data.contains("falloff_radius_m")) cfg.falloffRadiusM = data.at("falloff_radius_m").get<double>();
             else if (data.contains("falloffRadiusM")) cfg.falloffRadiusM = data.at("falloffRadiusM").get<double>();
 
+            // Optional terminal fuse/damage keys (defaults preserve legacy).
+            auto getDouble = [&](const char* snake, const char* camel, double def) -> double {
+                if (data.contains(snake)) return data.at(snake).get<double>();
+                if (data.contains(camel)) return data.at(camel).get<double>();
+                return def;
+            };
+            auto getBool = [&](const char* snake, const char* camel, bool def) -> bool {
+                if (data.contains(snake)) return data.at(snake).get<bool>();
+                if (data.contains(camel)) return data.at(camel).get<bool>();
+                return def;
+            };
+            cfg.fuseEnabled = getBool("fuse_enabled", "fuseEnabled", cfg.fuseEnabled);
+            cfg.cpaFuzingEnabled = getBool("cpa_fuzing_enabled", "cpaFuzingEnabled", cfg.cpaFuzingEnabled);
+            cfg.fuseLookaheadSec = getDouble("fuse_lookahead_sec", "fuseLookaheadSec", cfg.fuseLookaheadSec);
+            cfg.armingDelaySec = getDouble("arming_delay_sec", "armingDelaySec", cfg.armingDelaySec);
+            cfg.minClosingSpeedMps = getDouble("min_closing_speed_mps", "minClosingSpeedMps", cfg.minClosingSpeedMps);
+            cfg.selfDestructTimeSec = getDouble("self_destruct_time_sec", "selfDestructTimeSec", cfg.selfDestructTimeSec);
+            cfg.damage = getDouble("damage", "damage", cfg.damage);
+            cfg.fuseDetectionProbability = getDouble("fuse_detection_probability", "fuseDetectionProbability", cfg.fuseDetectionProbability);
+            cfg.headOnLethalityFactor = getDouble("head_on_lethality_factor", "headOnLethalityFactor", cfg.headOnLethalityFactor);
+            cfg.tailOnLethalityFactor = getDouble("tail_on_lethality_factor", "tailOnLethalityFactor", cfg.tailOnLethalityFactor);
+
             if (cfg.falloffRadiusM > 0.0 && cfg.falloffRadiusM < cfg.lethalRadiusM) {
                 return false;
             }

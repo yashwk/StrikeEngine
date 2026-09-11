@@ -15,6 +15,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 namespace StrikeEngine::Kernel {
 
@@ -61,6 +63,9 @@ namespace StrikeEngine::Kernel {
         // Split stream: golden-ratio mix keeps warhead draws disjoint from
         // the sensor stream for every seed.
         warheadRng.seed(seed ^ 0x9E3779B9u);
+        // Separate fuze-detection stream so a probabilistic proximity fuze
+        // never shifts the lethality draws.
+        fuzeRng.seed(seed ^ 0xF00D5EEDu);
     }
 
     void SimulationKernel::setEnvironment(const EnvironmentConfig& environmentConfig) {
@@ -96,6 +101,8 @@ namespace StrikeEngine::Kernel {
         navigationSystem.setSeed(randomSeed);
         seekerSystem.setSeed(randomSeed);
         warheadRng.seed(randomSeed ^ 0x9E3779B9u);
+        fuzeRng.seed(randomSeed ^ 0xF00D5EEDu);
+        eventSystem.resetTransientState();
         freeList.clear();
         stagePlans.clear();
         warheads.clear();
@@ -880,7 +887,7 @@ namespace StrikeEngine::Kernel {
 
         statusBlock.type[id] = config.type;
         statusBlock.allegiance[id] = init.allegiance;
-        statusBlock.health[id] = 100.0;
+        statusBlock.health[id] = resolved.structuralHardness;
         statusBlock.isAlive[id] = true;
         statusBlock.motorFailed[id] = false;
         statusBlock.engineFailed[id] = false;
@@ -909,6 +916,26 @@ namespace StrikeEngine::Kernel {
         warheads[id].timedDelaySec = resolved.warhead.timedDelaySec;
         warheads[id].launchTime = time.currentTime();
         warheads[id].detonated = false;
+        warheads[id].fuseEnabled = resolved.warhead.fuseEnabled;
+        warheads[id].cpaFuzingEnabled = resolved.warhead.cpaFuzingEnabled;
+        warheads[id].fuseLookaheadSec = resolved.warhead.fuseLookaheadSec;
+        warheads[id].armingDelaySec = resolved.warhead.armingDelaySec;
+        warheads[id].minClosingSpeedMps = resolved.warhead.minClosingSpeedMps;
+        warheads[id].selfDestructTimeSec = resolved.warhead.selfDestructTimeSec;
+        warheads[id].damage = resolved.warhead.damage;
+        warheads[id].fuseDetectionProbability = resolved.warhead.fuseDetectionProbability;
+        warheads[id].headOnLethalityFactor = resolved.warhead.headOnLethalityFactor;
+        warheads[id].tailOnLethalityFactor = resolved.warhead.tailOnLethalityFactor;
+        // Explicit-fuse footgun: an enabled proximity fuse with a
+        // non-positive trigger radius can never fire. Fail fast instead of
+        // building a silently inert warhead (set fuse_enabled=false to
+        // intentionally disable).
+        if (warheads[id].fuseEnabled && warheads[id].fusing == FusingType::Proximity &&
+            warheads[id].proximityTriggerM <= 0.0) {
+            throw std::runtime_error(
+                "SimulationKernel: proximity warhead has fuse_enabled=true but "
+                "proximity_trigger_m <= 0 (set fuse_enabled=false to disable)");
+        }
 
         // Per-entity seeker configuration (public SeekerConfig surface).
         seekerBlock.type[id] = resolved.seeker.type;
@@ -1144,75 +1171,264 @@ namespace StrikeEngine::Kernel {
         }
     }
 
+    const WarheadState& SimulationKernel::getWarhead(PhysicsId id) const {
+        if (id >= warheads.size()) {
+            throw std::out_of_range("SimulationKernel::getWarhead: entity id out of range");
+        }
+        return warheads[id];
+    }
+
     void SimulationKernel::processWarheads() {
         for (std::size_t i = 0; i < warheads.size(); ++i) {
             WarheadState& wh = warheads[i];
             if (wh.detonated || wh.lethalRadiusM <= 0.0) continue;
+            if (!wh.fuseEnabled) continue;
+
+            const double tof = time.currentTime() - wh.launchTime;
+            const bool armed = tof >= wh.armingDelaySec;
 
             bool trigger = false;
-            switch (wh.fusing) {
-                case FusingType::Impact:
-                    trigger = !statusBlock.isAlive[i];
-                    break;
-                case FusingType::Proximity: {
-                    if (wh.proximityTriggerM > 0.0) {
-                        const double r2 = wh.proximityTriggerM * wh.proximityTriggerM;
-                        for (std::size_t j = 0; j < physicsBlock.size; ++j) {
-                            if (j == i || !statusBlock.isAlive[j]) continue;
-                            if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
-                            const double dx = physicsBlock.px[j] - physicsBlock.px[i];
-                            const double dy = physicsBlock.py[j] - physicsBlock.py[i];
-                            const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
-                            const double dist2 = dx*dx + dy*dy + dz*dz;
-                            if (dist2 <= r2) {
-                                const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
-                                const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
-                                const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
-                                const double rdotv = dx * dvx + dy * dvy + dz * dvz;
-                                const double dist = std::sqrt(dist2);
-                                const double vrel = std::sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
-                                if (rdotv >= 0.0 || dist <= 2.0 || (dist - vrel * 0.02) <= 0.0) {
-                                    trigger = true;
-                                    break;
+            std::size_t targetId = 0;
+            bool haveTarget = false;
+            double predictedCpaM = 0.0;
+
+            if (armed) {
+                switch (wh.fusing) {
+                    case FusingType::Impact:
+                        trigger = !statusBlock.isAlive[i];
+                        break;
+                    case FusingType::Proximity: {
+                        if (wh.proximityTriggerM > 0.0) {
+                            const double r2 = wh.proximityTriggerM * wh.proximityTriggerM;
+                            if (wh.cpaFuzingEnabled) {
+                                // Analytic closest-approach projection: pick
+                                // the hostile whose time-to-CPA is soonest
+                                // inside the lookahead window; evaluate the
+                                // kill on the projected miss vector so a
+                                // high-closing-speed pass is not penalized by
+                                // the pre-CPA range.
+                                double bestTcpa = std::numeric_limits<double>::infinity();
+                                double bestCpa = 0.0;
+                                std::size_t bestId = 0;
+                                for (std::size_t j = 0; j < physicsBlock.size; ++j) {
+                                    if (j == i || !statusBlock.isAlive[j]) continue;
+                                    if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
+                                    const double dx = physicsBlock.px[j] - physicsBlock.px[i];
+                                    const double dy = physicsBlock.py[j] - physicsBlock.py[i];
+                                    const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
+                                    const double dist2 = dx*dx + dy*dy + dz*dz;
+                                    if (dist2 > r2) continue;
+                                    const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
+                                    const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
+                                    const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
+                                    const double rdotv = dx*dvx + dy*dvy + dz*dvz;
+                                    const double dist = std::sqrt(dist2);
+                                    const double closing = dist > 1e-9 ? -rdotv / dist : 0.0;
+                                    if (wh.minClosingSpeedMps > 0.0 && closing < wh.minClosingSpeedMps) continue;
+                                    const double v2 = dvx*dvx + dvy*dvy + dvz*dvz;
+                                    double tcpa = 0.0;
+                                    if (v2 > 1e-12) {
+                                        tcpa = -rdotv / v2;
+                                        if (tcpa < 0.0) tcpa = 0.0;
+                                    }
+                                    if (tcpa > wh.fuseLookaheadSec) continue;
+                                    const double mx = dx + dvx * tcpa;
+                                    const double my = dy + dvy * tcpa;
+                                    const double mz = dz + dvz * tcpa;
+                                    const double cpaDist = std::sqrt(mx*mx + my*my + mz*mz);
+                                    if (tcpa < bestTcpa) {
+                                        bestTcpa = tcpa;
+                                        bestCpa = cpaDist;
+                                        bestId = j;
+                                    }
+                                }
+                                if (bestTcpa != std::numeric_limits<double>::infinity()) {
+                                    bool detected = true;
+                                    if (wh.fuseDetectionProbability < 1.0) {
+                                        detected = std::uniform_real_distribution<double>(0.0, 1.0)(fuzeRng)
+                                            < wh.fuseDetectionProbability;
+                                    }
+                                    if (detected) {
+                                        trigger = true;
+                                        targetId = bestId;
+                                        haveTarget = true;
+                                        predictedCpaM = bestCpa;
+                                    }
+                                }
+                            } else {
+                                // Legacy proximity fuse (0.02 s range-rate
+                                // lookahead + instantaneous-miss PK).
+                                for (std::size_t j = 0; j < physicsBlock.size; ++j) {
+                                    if (j == i || !statusBlock.isAlive[j]) continue;
+                                    if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
+                                    const double dx = physicsBlock.px[j] - physicsBlock.px[i];
+                                    const double dy = physicsBlock.py[j] - physicsBlock.py[i];
+                                    const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
+                                    const double dist2 = dx*dx + dy*dy + dz*dz;
+                                    if (dist2 <= r2) {
+                                        const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
+                                        const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
+                                        const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
+                                        const double rdotv = dx * dvx + dy * dvy + dz * dvz;
+                                        const double dist = std::sqrt(dist2);
+                                        const double vrel = std::sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+                                        if (wh.minClosingSpeedMps > 0.0) {
+                                            const double closing = dist > 1e-9 ? -rdotv / dist : 0.0;
+                                            if (closing < wh.minClosingSpeedMps) continue;
+                                        }
+                                        if (rdotv >= 0.0 || dist <= 2.0 || (dist - vrel * 0.02) <= 0.0) {
+                                            bool detected = true;
+                                            if (wh.fuseDetectionProbability < 1.0) {
+                                                detected = std::uniform_real_distribution<double>(0.0, 1.0)(fuzeRng)
+                                                    < wh.fuseDetectionProbability;
+                                            }
+                                            if (!detected) continue;
+                                            trigger = true;
+                                            targetId = j;
+                                            haveTarget = true;
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
+                        break;
                     }
-                    break;
+                    case FusingType::Timed:
+                        trigger = tof >= wh.timedDelaySec;
+                        break;
                 }
-                case FusingType::Timed:
-                    trigger = (time.currentTime() - wh.launchTime) >= wh.timedDelaySec;
-                    break;
             }
-            if (!trigger) continue;
 
-            wh.detonated = true;
-            SimulationEvent evt;
-            evt.type = EventType::Detonation;
-            evt.entityId = i;
-            evt.timestamp = time.currentTime();
-            eventSystem.dispatch(evt);
+            // Self-destruct on timer expiry (only when the primary fuse did
+            // not trigger this step). Destroys the carrier; no lethality.
+            if (!trigger) {
+                if (wh.selfDestructTimeSec > 0.0 && tof >= wh.selfDestructTimeSec) {
+                    wh.detonated = true;
+                    SimulationEvent evt;
+                    evt.type = EventType::Detonation;
+                    evt.entityId = i;
+                    evt.timestamp = time.currentTime();
+                    evt.selfDestruct = true;
+                    eventSystem.dispatch(evt);
+                    failEntity(i, FailureMode::StructuralFailure);
+                }
+                continue;
+            }
 
             // Lethality with an optional fragmentation/overpressure falloff
             // band: guaranteed kill inside lethalRadiusM, probabilistic kill
             // across (lethalRadiusM, falloffRadiusM], no effect beyond. The
             // RNG draw is taken only when the outcome is genuinely uncertain
             // (0 < p < 1) so flat-law warheads (falloffRadiusM <= 0) never
-            // consume the kernel RNG stream and keep today's behavior.
+            // consume the kernel RNG stream and keep today's behavior. The
+            // per-hostile index order and no-draw-for-certain-outcomes rule
+            // are preserved exactly.
+            struct HitResult {
+                std::size_t id;
+                double miss;
+                double prob;
+                bool kill;
+            };
+            std::vector<HitResult> hits;
+            const double vmx = physicsBlock.vx[i];
+            const double vmy = physicsBlock.vy[i];
+            const double vmz = physicsBlock.vz[i];
+            const double vm2 = vmx*vmx + vmy*vmy + vmz*vmz;
             for (std::size_t j = 0; j < physicsBlock.size; ++j) {
                 if (j == i || !statusBlock.isAlive[j]) continue;
                 if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
                 const double dx = physicsBlock.px[j] - physicsBlock.px[i];
                 const double dy = physicsBlock.py[j] - physicsBlock.py[i];
                 const double dz = physicsBlock.pz[j] - physicsBlock.pz[i];
-                const double missDistance = std::sqrt(dx*dx + dy*dy + dz*dz);
-                const double prob = Models::warheadKillProbability(
-                    missDistance, wh.lethalRadiusM, wh.falloffRadiusM);
-                const bool kill = (prob >= 1.0) ||
-                    (prob > 0.0 && prob >= std::uniform_real_distribution<double>(0.0, 1.0)(warheadRng));
-                if (kill) {
-                    applyDamage(j, 100.0);
+                double missDistance;
+                if (wh.cpaFuzingEnabled) {
+                    const double dvx = physicsBlock.vx[j] - physicsBlock.vx[i];
+                    const double dvy = physicsBlock.vy[j] - physicsBlock.vy[i];
+                    const double dvz = physicsBlock.vz[j] - physicsBlock.vz[i];
+                    const double rdotv = dx*dvx + dy*dvy + dz*dvz;
+                    const double v2 = dvx*dvx + dvy*dvy + dvz*dvz;
+                    double tcpa = 0.0;
+                    if (v2 > 1e-12) {
+                        tcpa = -rdotv / v2;
+                        if (tcpa < 0.0) tcpa = 0.0;
+                    }
+                    const double mx = dx + dvx * tcpa;
+                    const double my = dy + dvy * tcpa;
+                    const double mz = dz + dvz * tcpa;
+                    missDistance = std::sqrt(mx*mx + my*my + mz*mz);
+                } else {
+                    missDistance = std::sqrt(dx*dx + dy*dy + dz*dz);
                 }
+                // Aspect-dependent lethality: fragments/overpressure are
+                // interpolated between head-on and tail-on from the angle
+                // between carrier and target velocity. Defaults keep 1.0.
+                double factor = 1.0;
+                if (wh.headOnLethalityFactor != 1.0 || wh.tailOnLethalityFactor != 1.0) {
+                    const double vtx = physicsBlock.vx[j];
+                    const double vty = physicsBlock.vy[j];
+                    const double vtz = physicsBlock.vz[j];
+                    const double vt2 = vtx*vtx + vty*vty + vtz*vtz;
+                    if (vm2 > 1e-12 && vt2 > 1e-12) {
+                        const double cosAspect = (vmx*vtx + vmy*vty + vmz*vtz) /
+                            std::sqrt(vm2 * vt2);
+                        factor = 0.5 * (wh.headOnLethalityFactor + wh.tailOnLethalityFactor) +
+                            0.5 * (wh.headOnLethalityFactor - wh.tailOnLethalityFactor) * (-cosAspect);
+                    }
+                }
+                const double prob = Models::warheadKillProbability(
+                    missDistance,
+                    wh.lethalRadiusM * factor,
+                    wh.falloffRadiusM * factor);
+                bool kill = (prob >= 1.0) ||
+                    (prob > 0.0 && prob >= std::uniform_real_distribution<double>(0.0, 1.0)(warheadRng));
+                hits.push_back(HitResult{j, missDistance, prob, kill});
+            }
+
+            // Primary target telemetry: the fuse-engaged threat, else the
+            // closest hostile in the evaluated set.
+            const HitResult* primary = nullptr;
+            if (haveTarget) {
+                for (const auto& h : hits) {
+                    if (h.id == targetId) { primary = &h; break; }
+                }
+            }
+            if (!primary) {
+                for (const auto& h : hits) {
+                    if (!primary || h.miss < primary->miss) primary = &h;
+                }
+            }
+
+            wh.detonated = true;
+            SimulationEvent evt;
+            evt.type = EventType::Detonation;
+            evt.entityId = i;
+            evt.timestamp = time.currentTime();
+            if (primary) {
+                evt.targetEntityId = primary->id;
+                evt.missDistanceM = primary->miss;
+                evt.killProbability = primary->prob;
+            }
+            if (wh.cpaFuzingEnabled) {
+                evt.predictedCpaM = haveTarget ? predictedCpaM
+                    : (primary ? primary->miss : 0.0);
+            }
+            for (const auto& h : hits) {
+                if (h.kill) { evt.kill = true; break; }
+            }
+            eventSystem.dispatch(evt);
+
+            if (primary) {
+                wh.lastTargetId = primary->id;
+                wh.lastMissDistanceM = primary->miss;
+                wh.lastKillProbability = primary->prob;
+            }
+            wh.lastPredictedCpaM = evt.predictedCpaM;
+            wh.lastKill = evt.kill;
+
+            const double damage = wh.damage > 0.0 ? wh.damage : 100.0;
+            for (const auto& h : hits) {
+                if (h.kill) applyDamage(h.id, damage);
             }
         }
     }

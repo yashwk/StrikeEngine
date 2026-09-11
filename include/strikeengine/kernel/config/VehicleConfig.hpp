@@ -31,6 +31,10 @@ namespace StrikeEngine::Kernel {
         // Structural summary (designer output from geometry)
         double initialMass = -1.0;   // kg; <0 => launch mass = init.mass
         double massDry     = -1.0;   // kg; <0 => dry mass == launch mass (no fuel)
+        // Structural damage capacity (health points). 100 = legacy
+        // all-or-nothing: one full-damage warhead hit kills. Higher values
+        // let falloff-band hits accumulate.
+        double structuralHardness = 100.0;
         double Ixx = 1.0, Iyy = 10.0, Izz = 10.0;
         double Ixy = 0.0, Ixz = 0.0, Iyz = 0.0;
 

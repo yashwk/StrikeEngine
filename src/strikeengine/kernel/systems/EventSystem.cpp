@@ -85,7 +85,9 @@ namespace StrikeEngine::Kernel {
                 i < previousPx.size() && i < previousPy.size() &&
                 i < previousPz.size();
             bool crossedBelow = false;
+            bool sweptHit = false;
             double impactTime = currentTime;
+            double impactGround = currentGround;
             if (hasCrossingData) {
                 const auto previousLocal = location(
                     previousPx[i], previousPy[i], previousPz[i]);
@@ -98,6 +100,20 @@ namespace StrikeEngine::Kernel {
                         (previousHeight - currentHeight);
                     impactTime = currentTime - dt +
                         dt * std::clamp(fraction, 0.0, 1.0);
+                } else if (environment.sweptGroundImpactEnabled) {
+                    // Ridge sweep: both endpoints can be above the surface
+                    // while the segment midpoint is inside a hill.
+                    const double midX = 0.5 * (previousPx[i] + physics.px[i]);
+                    const double midY = 0.5 * (previousPy[i] + physics.py[i]);
+                    const double midZ = 0.5 * (previousPz[i] + physics.pz[i]);
+                    const auto midLocal = location(midX, midY, midZ);
+                    const double midGround = terrain(midLocal);
+                    if (midLocal.local[2] - midGround <= 0.0) {
+                        crossedBelow = true;
+                        sweptHit = true;
+                        impactTime = currentTime - 0.5 * dt;
+                        impactGround = midGround;
+                    }
                 }
             }
             const bool isSubsurface = (currentHeight < -0.10);
@@ -106,13 +122,13 @@ namespace StrikeEngine::Kernel {
                 if (ecefTruth) {
                     auto impactGeodetic = Models::ecefToGeodetic({
                         physics.px[i], physics.py[i], physics.pz[i]});
-                    impactGeodetic.altitudeM = currentGround;
+                    impactGeodetic.altitudeM = impactGround;
                     const auto impactEcef = Models::geodeticToEcef(impactGeodetic);
                     physics.px[i] = impactEcef.x;
                     physics.py[i] = impactEcef.y;
                     physics.pz[i] = impactEcef.z;
                 } else {
-                    physics.pz[i] = currentGround;
+                    physics.pz[i] = impactGround;
                 }
                 physics.vx[i] = 0.0;
                 physics.vy[i] = 0.0;
@@ -120,6 +136,11 @@ namespace StrikeEngine::Kernel {
                 physics.ax[i] = 0.0;
                 physics.ay[i] = 0.0;
                 physics.az[i] = 0.0;
+                if (environment.groundImpactZeroRates) {
+                    physics.wx[i] = 0.0;
+                    physics.wy[i] = 0.0;
+                    physics.wz[i] = 0.0;
+                }
                 physics.active[i] = false;
                 status.isAlive[i] = false;
                 
@@ -127,7 +148,8 @@ namespace StrikeEngine::Kernel {
                 evt.type = EventType::GroundImpact;
                 evt.entityId = i;
                 evt.timestamp = impactTime;
-                evt.terrainElevationM = currentGround;
+                evt.customCode = sweptHit ? 2 : 1;  // 1 = crossing/subsurface, 2 = ridge sweep
+                evt.terrainElevationM = impactGround;
                 if (environment.globalTerrain) {
                     const auto surface = environment.globalTerrain->surface(
                         currentLocal.geodetic.latitudeRad,
@@ -147,6 +169,7 @@ namespace StrikeEngine::Kernel {
         const double contactR = environment.kineticImpactRadiusM;
         if (contactR > 0.0) {
             const double contactR2 = contactR * contactR;
+            std::set<std::pair<std::size_t, std::size_t>> inContact;
             for (std::size_t i = 0; i < physics.size; ++i) {
                 if (!physics.active[i] || !status.isAlive[i]) continue;
                 for (std::size_t j = i + 1; j < physics.size; ++j) {
@@ -156,7 +179,14 @@ namespace StrikeEngine::Kernel {
                     const double dx = physics.px[j] - physics.px[i];
                     const double dy = physics.py[j] - physics.py[i];
                     const double dz = physics.pz[j] - physics.pz[i];
-                    if (dx * dx + dy * dy + dz * dz > contactR2) continue;
+                    const double dist2 = dx * dx + dy * dy + dz * dz;
+                    if (dist2 > contactR2) continue;
+                    const std::pair<std::size_t, std::size_t> key{i, j};
+                    inContact.insert(key);
+                    if (environment.kineticImpactLatchEnabled &&
+                        kineticContactLatch.count(key) != 0) {
+                        continue;  // already reported this contact episode
+                    }
                     // The interceptor is the non-hostile side of the pair.
                     const std::size_t interceptor =
                         (status.allegiance[j] == Allegiance::Hostile) ? i : j;
@@ -164,8 +194,12 @@ namespace StrikeEngine::Kernel {
                     evt.type = EventType::TargetImpact;
                     evt.entityId = interceptor;
                     evt.timestamp = currentTime;
+                    evt.missDistanceM = std::sqrt(dist2);
                     dispatch(evt);
                 }
+            }
+            if (environment.kineticImpactLatchEnabled) {
+                kineticContactLatch = std::move(inContact);
             }
         }
     }
@@ -184,6 +218,11 @@ namespace StrikeEngine::Kernel {
                 listener(evt);
             }
         }
+        eventQueue.clear();
+    }
+
+    void EventSystem::resetTransientState() {
+        kineticContactLatch.clear();
         eventQueue.clear();
     }
 

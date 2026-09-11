@@ -66,6 +66,23 @@ namespace StrikeEngine::Kernel {
         double timedDelaySec = 0.0;
         double launchTime = 0.0;
         bool detonated = false;
+        // Terminal fuse/damage options (see WarheadConfig).
+        bool fuseEnabled = true;
+        bool cpaFuzingEnabled = false;
+        double fuseLookaheadSec = 0.02;
+        double armingDelaySec = 0.0;
+        double minClosingSpeedMps = 0.0;
+        double selfDestructTimeSec = 0.0;
+        double damage = 100.0;
+        double fuseDetectionProbability = 1.0;
+        double headOnLethalityFactor = 1.0;
+        double tailOnLethalityFactor = 1.0;
+        // Last detonation diagnostics (for the designer/telemetry).
+        std::size_t lastTargetId = 0;
+        double lastMissDistanceM = 0.0;
+        double lastPredictedCpaM = 0.0;
+        double lastKillProbability = 0.0;
+        bool   lastKill = false;
     };
 
     enum class BackendType {
@@ -128,6 +145,9 @@ namespace StrikeEngine::Kernel {
         const TrackBlock& getTracks() const { return trackBlock; }
         const EntityStatusBlock& getStatus() const { return statusBlock; }
         EventSystem& getEventSystem() { return eventSystem; }
+        // Warhead fusing/lethality state and last-detonation diagnostics.
+        const WarheadState& getWarhead(PhysicsId id) const;
+        std::size_t getWarheadCount() const { return warheads.size(); }
         double getSimulationTime() const { return time.currentTime(); }
         std::size_t getEntityCount() const { return physicsBlock.size - freeList.size(); }
 
@@ -168,6 +188,9 @@ namespace StrikeEngine::Kernel {
         // deterministically from the seed set via setRandomSeed.
         std::uint32_t randomSeed = 0u;
         std::mt19937 warheadRng;
+        // Fuze-detection stream (proximity detection probability < 1). Kept
+        // separate so a probabilistic fuze never shifts the lethality draws.
+        std::mt19937 fuzeRng;
 
         void processStaging();
         void processWarheads();
