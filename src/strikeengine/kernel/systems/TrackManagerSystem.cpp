@@ -131,8 +131,14 @@ namespace StrikeEngine::Kernel {
             const bool useFilter = flagAt(tracks.filterEnabled, i);
 
             // --- Convert a seeker LOS fix to a world position once ---------
+            // A fix is fused only while the seeker is producing fresh commits
+            // (lockLostTimeSec == 0). Inside the dropout grace window isLocked
+            // stays true but no new measurement is committed, so fusing there
+            // would feed the last good fix back in as if it were fresh.
+            const bool seekerFresh = i < seeker.lockLostTimeSec.size()
+                ? seeker.lockLostTimeSec[i] <= 0.0 : true;
             const bool rawMeasurement =
-                seeker.type[i] != SeekerType::None && seeker.isLocked[i];
+                seeker.type[i] != SeekerType::None && seeker.isLocked[i] && seekerFresh;
             bool measValid = false;
             glm::dvec3 measPos(0.0);
             std::int64_t newId = -1;
@@ -282,16 +288,28 @@ namespace StrikeEngine::Kernel {
                     kfPredictAxis(tracks.posZ[i], tracks.velZ[i], tracks.accelZ[i], Px + 18, dt, q, maxA);
 
                     const double gate = valAt(tracks.residualGateSigma, i, 0.0);
+                    // All-or-nothing fusion: stage the per-axis updates on
+                    // copies so a gate reject on one axis does not leave the
+                    // other axes fused while the step is booked as a dropout.
+                    double sX[3] = {tracks.posX[i], tracks.velX[i], tracks.accelX[i]};
+                    double sY[3] = {tracks.posY[i], tracks.velY[i], tracks.accelY[i]};
+                    double sZ[3] = {tracks.posZ[i], tracks.velZ[i], tracks.accelZ[i]};
+                    double cX[9], cY[9], cZ[9];
+                    for (int k = 0; k < 9; ++k) { cX[k] = Px[k]; cY[k] = Px[9 + k]; cZ[k] = Px[18 + k]; }
                     double innov = 0.0;
-                    const bool okX = kfUpdateAxis(tracks.posX[i], tracks.velX[i], tracks.accelX[i], Px, measPos.x, measVar, gate, innov);
+                    const bool okX = kfUpdateAxis(sX[0], sX[1], sX[2], cX, measPos.x, measVar, gate, innov);
                     tracks.lastInnovationM[i] = innov;
-                    const bool okY = kfUpdateAxis(tracks.posY[i], tracks.velY[i], tracks.accelY[i], Px + 9, measPos.y, measVar, gate, innov);
-                    const bool okZ = kfUpdateAxis(tracks.posZ[i], tracks.velZ[i], tracks.accelZ[i], Px + 18, measPos.z, measVar, gate, innov);
+                    const bool okY = kfUpdateAxis(sY[0], sY[1], sY[2], cY, measPos.y, measVar, gate, innov);
+                    const bool okZ = kfUpdateAxis(sZ[0], sZ[1], sZ[2], cZ, measPos.z, measVar, gate, innov);
                     if (!okX || !okY || !okZ) {
                         tracks.residualRejectCount[i] += 1;
                         dropoutStep(true);   // already predicted this step
                         continue;
                     }
+                    tracks.posX[i] = sX[0]; tracks.velX[i] = sX[1]; tracks.accelX[i] = sX[2];
+                    tracks.posY[i] = sY[0]; tracks.velY[i] = sY[1]; tracks.accelY[i] = sY[2];
+                    tracks.posZ[i] = sZ[0]; tracks.velZ[i] = sZ[1]; tracks.accelZ[i] = sZ[2];
+                    for (int k = 0; k < 9; ++k) { Px[k] = cX[k]; Px[9 + k] = cY[k]; Px[18 + k] = cZ[k]; }
                 }
                 const double pVar = std::max(
                     {tracks.kfCov[i][0], tracks.kfCov[i][9], tracks.kfCov[i][18]});

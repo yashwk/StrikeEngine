@@ -1196,6 +1196,11 @@ namespace StrikeEngine::Kernel {
             WarheadState& wh = warheads[i];
             if (wh.detonated || wh.lethalRadiusM <= 0.0) continue;
             if (!wh.fuseEnabled) continue;
+            // A dead carrier keeps only its death burst: Impact fusing fires
+            // on the kill itself, but Proximity/Timed/self-destruct must not
+            // trigger from a dead body (zombie detonations), regardless of
+            // which path killed the carrier.
+            if (!statusBlock.isAlive[i] && wh.fusing != FusingType::Impact) continue;
 
             const double tof = time.currentTime() - wh.launchTime;
             const bool armed = tof >= wh.armingDelaySec;
@@ -1215,13 +1220,16 @@ namespace StrikeEngine::Kernel {
                             const double r2 = wh.proximityTriggerM * wh.proximityTriggerM;
                             if (wh.cpaFuzingEnabled) {
                                 // CPA fuzing: fire on the hostile whose
-                                // time-to-CPA is soonest inside the lookahead
-                                // window, and score the kill on the projected
-                                // miss so a fast pass is not penalized by the
-                                // pre-CPA range.
-                                double bestTcpa = std::numeric_limits<double>::infinity();
-                                double bestCpa = 0.0;
+                                // projected miss is smallest inside the
+                                // lookahead window, and score the kill on
+                                // that miss so a fast pass is not penalized
+                                // by the pre-CPA range. Selection is by miss,
+                                // not by time: a past-CPA hostile (tcpa
+                                // clamped to 0) must not beat a genuinely
+                                // closing threat.
+                                double bestCpa = std::numeric_limits<double>::infinity();
                                 std::size_t bestId = 0;
+                                bool found = false;
                                 for (std::size_t j = 0; j < physicsBlock.size; ++j) {
                                     if (j == i || !statusBlock.isAlive[j]) continue;
                                     if (statusBlock.allegiance[i] == statusBlock.allegiance[j]) continue;
@@ -1239,13 +1247,13 @@ namespace StrikeEngine::Kernel {
                                     if (wh.minClosingSpeedMps > 0.0 && closing < wh.minClosingSpeedMps) continue;
                                     const auto [tcpa, cpaDist] = projectCpa(dx, dy, dz, dvx, dvy, dvz);
                                     if (tcpa > wh.fuseLookaheadSec) continue;
-                                    if (tcpa < bestTcpa) {
-                                        bestTcpa = tcpa;
+                                    if (cpaDist < bestCpa) {
                                         bestCpa = cpaDist;
                                         bestId = j;
+                                        found = true;
                                     }
                                 }
-                                if (bestTcpa != std::numeric_limits<double>::infinity()) {
+                                if (found) {
                                     bool detected = true;
                                     if (wh.fuseDetectionProbability < 1.0) {
                                         detected = std::uniform_real_distribution<double>(0.0, 1.0)(fuzeRng)

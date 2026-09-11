@@ -256,7 +256,26 @@ int main()
               "specific-force demand, Mach and the demand breakdown are finite");
     }
 
-    // ---- 10. Config round-trip of the new autopilot keys ----
+    // ---- 10. Actuator memory parks on GuidanceMode::None ----
+    {
+        NavigationBlock nav = makeNav();
+        SensorBlock sensor = makeSensor();
+        GuidanceBlock g = makeGuidance(10.0);
+        ControlBlock c = makeControl();
+        c.commandLagSec = {0.1};
+        run(nav, sensor, g, c, dt);
+        run(nav, sensor, g, c, dt);
+        check(c.pitchCommandPrev[0] != 0.0,
+              "lag filter holds nonzero actuator memory while guiding");
+        g.mode = {GuidanceMode::None};
+        run(nav, sensor, g, c, dt);
+        check(c.pitchCommandPrev[0] == 0.0 && c.yawCommandPrev[0] == 0.0 &&
+              c.rollCommandPrev[0] == 0.0 && c.authorityMargin01[0] == 1.0 &&
+              !c.pitchSaturated[0] && !c.yawSaturated[0],
+              "None parks actuator memory, margin and saturation flags");
+    }
+
+    // ---- 11. Config round-trip of the new autopilot keys ----
     {
         VehicleConfig cfg;
         cfg.guidanceAutopilot.kRatePitchP = 1.5;

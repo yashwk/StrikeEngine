@@ -262,7 +262,55 @@ int main()
         check(tracks.active(0), "track above the quality floor is active");
     }
 
-    // ---- 7. Config round-trip of the new track keys ----
+    // ---- 7. All-or-nothing gated fusion: a reject on one axis must not
+    // leave the other axes fused while the step is booked as a dropout ----
+    {
+        TrackBlock tracks = makeTracks();
+        tracks.filterEnabled = {true};
+        tracks.residualGateSigma = {3.0};
+        SeekerBlock seeker = makeSeeker();
+        double t = 0.0;
+        for (int k = 0; k < 30; ++k) {
+            t += dt;
+            seekerFixAt(seeker, 1000.0, 0.0, 0.0);
+            tm.update(nav, seeker, tracks, t, dt);
+        }
+        const double pxx = tracks.kfCov[0][0];
+        const std::uint32_t rejects = tracks.residualRejectCount[0];
+        t += dt;
+        seekerFixAt(seeker, 1000.0, 5000.0, 0.0); // Y-only outlier
+        tm.update(nav, seeker, tracks, t, dt);
+        check(tracks.residualRejectCount[0] > rejects,
+              "single-axis outlier trips the residual gate");
+        check(tracks.kfCov[0][0] >= pxx,
+              "rejected fix fuses nothing: X covariance not shrunk by the passing axis");
+        check(std::abs(tracks.posY[0]) < 50.0,
+              "rejected fix leaves the track position alone");
+    }
+
+    // ---- 8. Dropout grace coasts: a locked-but-stale fix is not fused ----
+    {
+        TrackBlock tracks = makeTracks();
+        tracks.filterEnabled = {true};
+        SeekerBlock seeker = makeSeeker();
+        seeker.lockLostTimeSec = {0.0};
+        double t = 0.0;
+        for (int k = 0; k < 30; ++k) {
+            t += dt;
+            seekerFixAt(seeker, 1000.0, 0.0, 0.0);
+            tm.update(nav, seeker, tracks, t, dt);
+        }
+        seeker.lockLostTimeSec = {0.05}; // seeker inside its dropout grace
+        t += dt;
+        seekerFixAt(seeker, 1500.0, 0.0, 0.0); // stale fix would yank +500 m
+        tm.update(nav, seeker, tracks, t, dt);
+        check(tracks.ageSec[0] > 0.0,
+              "grace-window step is booked as a dropout, not a fresh fix");
+        check(std::abs(tracks.posX[0] - 1000.0) < 50.0,
+              "stale grace fix is not fused into the track");
+    }
+
+    // ---- 9. Config round-trip of the new track keys ----
     {
         VehicleConfig cfg;
         cfg.guidanceAutopilot.trackFilterEnabled = true;

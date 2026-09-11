@@ -404,6 +404,46 @@ int main()
         check(!threwDisabled, "explicitly disabled fuse allows trigger <= 0");
     }
 
+    // ---- 14. Dead carriers keep only the Impact death burst ----
+    {
+        // Proximity warhead on a carrier that is structurally killed: no
+        // zombie detonation afterwards, even with a hostile inside the
+        // trigger radius past the (unset) self-destruct timer.
+        SimulationKernel kernel;
+        kernel.setRandomSeed(0x2B1Eu);
+        int detonations = 0, structural = 0;
+        kernel.getEventSystem().subscribe([&](const SimulationEvent& e) {
+            if (e.type == EventType::Detonation) ++detonations;
+            if (e.type == EventType::StructuralFailure) ++structural;
+        });
+        VehicleConfig cfg = proximityWarhead(10.0, 0.0);
+        cfg.warhead.selfDestructTimeSec = 0.05;
+        const auto m = kernel.createVehicle(makeInit(-5.0, 0.0, 100.0, 0.0, 0.0, 0.0), cfg);
+        kernel.createVehicle(makeInit(0.0, 0.0, 100.0, 0.0, 0.0, 0.0, Allegiance::Hostile), ballistic());
+        kernel.failEntity(m, FailureMode::StructuralFailure);
+        stepN(kernel, 100);
+        check(detonations == 0 && structural == 1,
+              "structurally killed carrier fires no proximity/self-destruct detonation");
+    }
+
+    // ---- 15. CPA fuse picks the closing threat, not the past-CPA one ----
+    {
+        SimulationKernel kernel;
+        kernel.setRandomSeed(0xC9A5u);
+        VehicleConfig cfg = proximityWarhead(10.0, 30.0);
+        cfg.warhead.cpaFuzingEnabled = true;
+        const auto m = kernel.createVehicle(makeInit(0.0, 0.0, 100.0, 1000.0, 0.0, 0.0), cfg);
+        const auto a = kernel.createVehicle(
+            makeInit(30.0, 8.0, 100.0, -1000.0, 0.0, 0.0, Allegiance::Hostile), ballistic());
+        kernel.createVehicle(makeInit(-30.0, 5.0, 100.0, 1000.0, 0.0, 0.0, Allegiance::Hostile), ballistic());
+        stepN(kernel, 2);
+        const auto& wh = kernel.getWarhead(m);
+        check(wh.detonated && wh.lastTargetId == a,
+              "CPA fuse engages the closing threat (8 m miss), not the past-CPA one");
+        check(!kernel.getStatus().isAlive[a],
+              "closing threat inside the lethal radius is killed");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

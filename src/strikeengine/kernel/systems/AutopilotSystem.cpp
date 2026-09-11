@@ -89,6 +89,17 @@ namespace StrikeEngine::Kernel {
                 control.pitchCommand[i] = 0.0;
                 control.yawCommand[i] = 0.0;
                 control.rollCommand[i] = 0.0;
+                // Park the actuator memory and authority state with the zeroed
+                // command so re-entering guidance does not resume the lag /
+                // rate-limit filters (or the authority margin) from a stale
+                // pre-None value.
+                if (i < control.pitchCommandPrev.size()) control.pitchCommandPrev[i] = 0.0;
+                if (i < control.yawCommandPrev.size()) control.yawCommandPrev[i] = 0.0;
+                if (i < control.rollCommandPrev.size()) control.rollCommandPrev[i] = 0.0;
+                if (i < control.authorityMargin01.size()) control.authorityMargin01[i] = 1.0;
+                if (i < control.pitchSaturated.size()) control.pitchSaturated[i] = false;
+                if (i < control.yawSaturated.size()) control.yawSaturated[i] = false;
+                if (i < control.rollSaturated.size()) control.rollSaturated[i] = false;
                 continue;
             }
 
