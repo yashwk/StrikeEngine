@@ -1418,6 +1418,23 @@ namespace StrikeEngine::Kernel {
             }
             eventSystem.dispatch(evt);
 
+            // A detonating warhead consumes its own carrier. Without this the
+            // spent round keeps flying and every role/kill readout keeps
+            // seeing a live interceptor after the detonation (portfolio ran
+            // "det=1 mslAlive=1"). Impact-fused detonations find the carrier
+            // already dead, so the guard keeps those a no-op.
+            if (statusBlock.isAlive[i]) {
+                statusBlock.isAlive[i] = false;
+                statusBlock.health[i] = 0.0;
+                physicsBlock.active[i] = false;
+                physicsBlock.vx[i] = 0.0;
+                physicsBlock.vy[i] = 0.0;
+                physicsBlock.vz[i] = 0.0;
+                physicsBlock.ax[i] = 0.0;
+                physicsBlock.ay[i] = 0.0;
+                physicsBlock.az[i] = 0.0;
+            }
+
             if (primary) {
                 wh.lastTargetId = primary->id;
                 wh.lastMissDistanceM = primary->miss;

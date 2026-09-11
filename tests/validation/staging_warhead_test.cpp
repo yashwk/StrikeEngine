@@ -201,7 +201,8 @@ int main() {
         kernel.step(0.01);
         check(detonations >= 1, "proximity fuse detonates near the target");
         check(!kernel.getStatus().isAlive[tid], "target destroyed within lethal radius");
-        check(kernel.getStatus().isAlive[id], "warhead vehicle itself survives (MVP)");
+        check(!kernel.getStatus().isAlive[id] && !kernel.getPhysics().active[id],
+              "carrier destroyed by its own detonation");
     }
 
     // ---- Part C: timed fuse ----
@@ -216,12 +217,13 @@ int main() {
         cfg.warhead.fusing = FusingType::Timed;
         cfg.warhead.timedDelaySec = 0.2;
         cfg.warhead.lethalRadiusM = 60.0;
-        kernel.createVehicle(makeInit(0, 0, 100.0), cfg);
+        const auto id = kernel.createVehicle(makeInit(0, 0, 100.0), cfg);
         const auto tid = kernel.createVehicle(makeInit(20.0, 0, 100.0, 100.0, Allegiance::Hostile));  // ~20 m away
 
         for (int step = 0; step < 30; ++step) kernel.step(0.01);  // 0.3 s
         check(detonations >= 1, "timed fuse detonates after its delay");
         check(!kernel.getStatus().isAlive[tid], "target destroyed within lethal radius");
+        check(!kernel.getStatus().isAlive[id], "timed detonation also consumes the carrier");
     }
 
     // ---- Part D: impact fuse (on ground impact) ----

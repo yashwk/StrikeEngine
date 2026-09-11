@@ -77,7 +77,7 @@ void stepN(SimulationKernel& kernel, int steps, double dt = 0.001)
 // a lateral offset of `offsetY` metres, so the true CPA is offsetY. The legacy
 // fuse triggers inside a 0.02 s lookahead (~40 m of range) and evaluates PK on
 // that pre-CPA range; CPA fuzing evaluates the projected miss.
-struct PassResult { bool targetDead; bool detonated; };
+struct PassResult { bool targetDead; bool detonated; bool carrierDead; };
 PassResult runCpaPass(bool cpaEnabled, double offsetY)
 {
     SimulationKernel kernel;
@@ -87,7 +87,8 @@ PassResult runCpaPass(bool cpaEnabled, double offsetY)
     const auto m = kernel.createVehicle(makeInit(-50.0, 0.0, 100.0, 1000.0, 0.0, 0.0), missileCfg);
     const auto t = kernel.createVehicle(makeInit(50.0, offsetY, 100.0, -1000.0, 0.0, 0.0, Allegiance::Hostile), ballistic());
     stepN(kernel, 60);
-    return { !kernel.getStatus().isAlive[t], kernel.getWarhead(m).detonated };
+    return { !kernel.getStatus().isAlive[t], kernel.getWarhead(m).detonated,
+             !kernel.getStatus().isAlive[m] };
 }
 
 bool atRestKill(const VehicleConfig& warheadCfg, double hardness, int steps)
@@ -117,6 +118,8 @@ int main()
               "legacy fuse detonates but scores the pre-CPA range (no kill at 8 m true CPA)");
         check(cpa.detonated && cpa.targetDead,
               "CPA fuse scores the projected 8 m miss (guaranteed kill inside lethal)");
+        check(cpa.carrierDead && legacy.carrierDead,
+              "detonation consumes the carrier (proximity fuse)");
     }
     {
         // Lateral offset 20 m in a (10, 30] band: legacy miss ~41 m -> p=0;
