@@ -4,6 +4,18 @@
 namespace StrikeEngine::Kernel
 {
 
+void RK4Integrator::ensureCapacity(const PhysicsBlock& state)
+{
+    // Copy assignment recycles the buffers' capacity once the entity count is
+    // stable, so steady-state stepping performs no heap allocation.
+    k1 = state;
+    k2 = state;
+    k3 = state;
+    k4 = state;
+    stage = state;
+    acc = state;
+}
+
 double RK4Integrator::integrate(
     PhysicsBlock& state,
     const DerivativeFn& deriv,
@@ -12,14 +24,10 @@ double RK4Integrator::integrate(
 {
     const double h = dt;
     const double h2 = 0.5 * h;
-    const double h6 = h / 6.0;
 
-    // Stage states and derivative buffers (full copies; n is small in MVP tests)
-    PhysicsBlock k1 = state;
-    PhysicsBlock k2 = state;
-    PhysicsBlock k3 = state;
-    PhysicsBlock k4 = state;
-    PhysicsBlock stage = state;
+    // Stage states and derivative buffers: reused member scratch (copy
+    // assignment recycles capacity; no allocation in steady state).
+    ensureCapacity(state);
 
     deriv(state, t, k1);
 
@@ -40,7 +48,6 @@ double RK4Integrator::integrate(
 
     // x1 = x0 + h/6 (k1 + 2 k2 + 2 k3 + k4)
     const std::size_t n = state.size;
-    PhysicsBlock acc = state;   // accumulated weighted derivative
     for (std::size_t i = 0; i < n; ++i)
     {
         if (!state.active[i]) continue;

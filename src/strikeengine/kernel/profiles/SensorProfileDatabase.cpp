@@ -24,6 +24,9 @@ namespace StrikeEngine::Kernel {
             cfg.gpsPosNoiseStdDev = data.value("gps_pos_noise_std_dev", cfg.gpsPosNoiseStdDev);
             cfg.gpsVelNoiseStdDev = data.value("gps_vel_noise_std_dev", cfg.gpsVelNoiseStdDev);
             cfg.gpsUpdateRateHz  = data.value("gps_update_rate_hz", cfg.gpsUpdateRateHz);
+            cfg.gpsInnovationGateSigma = data.value("gps_innovation_gate_sigma", cfg.gpsInnovationGateSigma);
+            cfg.baroInnovationGateSigma = data.value("baro_innovation_gate_sigma", cfg.baroInnovationGateSigma);
+            cfg.magInnovationGateSigma = data.value("mag_innovation_gate_sigma", cfg.magInnovationGateSigma);
             cfg.imuLeverArmX     = data.value("imu_lever_arm_x", cfg.imuLeverArmX);
             cfg.imuLeverArmY     = data.value("imu_lever_arm_y", cfg.imuLeverArmY);
             cfg.imuLeverArmZ     = data.value("imu_lever_arm_z", cfg.imuLeverArmZ);

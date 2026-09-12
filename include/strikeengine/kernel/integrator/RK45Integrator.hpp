@@ -26,5 +26,11 @@ namespace StrikeEngine::Kernel
 		double tolerance;
 		std::size_t acceptedStepCount = 0;
 		std::size_t rejectedStepCount = 0;
+
+		// Stage/accumulator scratch reused across calls and rejection
+		// attempts: no per-step heap allocation. Each kernel owns one
+		// integrator instance, so the buffers are never shared across runs.
+		void ensureCapacity(const PhysicsBlock& state);
+		PhysicsBlock k1, k2, k3, k4, k5, k6, stage, acc4, acc5;
 	};
 } // namespace StrikeEngine::Kernel

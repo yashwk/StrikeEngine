@@ -174,6 +174,27 @@ namespace StrikeEngine::Kernel {
             throw std::invalid_argument("Invalid propulsion configuration: " + propulsionError);
         }
 
+        // Mass properties: the backend divides by mass every derivative
+        // evaluation, so a non-positive or non-finite launch mass would poison
+        // the entity with inf/NaN on the first step. Fail fast instead. The
+        // dry floor must also stay at or below the launch mass (massDry > mass
+        // would imply negative fuel and trip staging burnout immediately).
+        const double launchMass =
+            (config.initialMass >= 0.0) ? config.initialMass : init.mass;
+        if (!std::isfinite(launchMass) || launchMass <= 0.0) {
+            throw std::invalid_argument(
+                "SimulationKernel::createVehicle: launch mass must be positive and finite (got " +
+                std::to_string(launchMass) + " kg; set VehicleInitState::mass or VehicleConfig::initialMass)");
+        }
+        if (config.massDry >= 0.0 &&
+            (!std::isfinite(config.massDry) || config.massDry > launchMass)) {
+            throw std::invalid_argument(
+                "SimulationKernel::createVehicle: massDry (" +
+                std::to_string(config.massDry) +
+                " kg) must be finite and <= launch mass (" +
+                std::to_string(launchMass) + " kg)");
+        }
+
         PhysicsId id;
 
         if (!freeList.empty()) {
@@ -699,6 +720,9 @@ namespace StrikeEngine::Kernel {
         // entity ID re-aligns from truth instead of inheriting the previous
         // occupant's covariance, biases and alignment flag.
         navigationSystem.resetEntity(navigationBlock, id);
+        // Same contract for the sensor layer: random-walk biases, cadence
+        // phase and queued GPS samples must not leak across slot reuse.
+        sensorSystem.resetEntity(id);
 
         sensorBlock.accelNoiseStdDev[id] = resolved.sensor.accelNoiseStdDev;
         sensorBlock.accelBiasStdDev[id] = resolved.sensor.accelBiasStdDev;
@@ -1030,6 +1054,13 @@ namespace StrikeEngine::Kernel {
         }
         // Stale queued commands must not re-arm whatever reuses the slot.
         commandProcessor.dropCommandsFor(id);
+        // Return the removed entity's registered propulsion models to the
+        // backend pool so repeated spawn/despawn cycles do not grow it.
+        if (id < stagePlans.size()) {
+            for (const int poolId : stagePlans[id].poolIds) {
+                backend->releasePropulsion(poolId);
+            }
+        }
         freeList.push_back(id);
     }
 

@@ -204,12 +204,18 @@ namespace StrikeEngine::Kernel {
     }
 
     void EventSystem::processQueue() {
-        for (const auto& evt : eventQueue) {
+        // Drain into a local first: a listener that calls back into the
+        // kernel (failEntity/applyDamage -> dispatch) appends to eventQueue,
+        // and a push during the range-for would reallocate it mid-iteration.
+        std::vector<SimulationEvent> pending;
+        pending.swap(eventQueue);
+        for (const auto& evt : pending) {
             for (const auto& listener : listeners) {
                 listener(evt);
             }
         }
-        eventQueue.clear();
+        // Events dispatched by listeners during fan-out stay queued for the
+        // next processQueue call.
     }
 
     void EventSystem::resetTransientState() {

@@ -107,6 +107,18 @@ namespace StrikeEngine::Kernel {
             cfg.minDynamicPressurePa = getDoubleKey(data, "min_dynamic_pressure_pa", "minDynamicPressurePa", cfg.minDynamicPressurePa);
             cfg.maxDynamicPressurePa = getDoubleKey(data, "max_dynamic_pressure_pa", "maxDynamicPressurePa", cfg.maxDynamicPressurePa);
 
+            // Cruise + datalink + TPN-G fields: serializeVehicleConfig writes
+            // all of these, so the profile path must read them back too or a
+            // Cruise/datalink designer profile silently loads with altitude
+            // hold and cooperative aiming disabled.
+            cfg.cruiseAltitudeM = getDoubleKey(data, "cruise_altitude_m", "cruiseAltitudeM", cfg.cruiseAltitudeM);
+            cfg.cruiseAltitudeGain = getDoubleKey(data, "cruise_altitude_gain", "cruiseAltitudeGain", cfg.cruiseAltitudeGain);
+            cfg.cruiseAltitudeDamping = getDoubleKey(data, "cruise_altitude_damping", "cruiseAltitudeDamping", cfg.cruiseAltitudeDamping);
+            cfg.cruiseWaypointGain = getDoubleKey(data, "cruise_waypoint_gain", "cruiseWaypointGain", cfg.cruiseWaypointGain);
+            cfg.gravityCompensationEnabled = getBoolKey(data, "gravity_compensation_enabled", "gravityCompensationEnabled", cfg.gravityCompensationEnabled);
+            cfg.datalinkSourceId = getIntKey(data, "datalink_source_id", "datalinkSourceId", cfg.datalinkSourceId);
+            cfg.datalinkTargetId = getIntKey(data, "datalink_target_id", "datalinkTargetId", cfg.datalinkTargetId);
+
             _guidanceAutopilot = cfg;
         } catch (const std::exception&) {
             return false;

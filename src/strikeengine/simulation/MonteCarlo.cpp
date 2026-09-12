@@ -9,7 +9,15 @@
 namespace StrikeEngine::Simulation {
 
     MonteCarlo::MonteCarlo(double timeStep_s, double maxTime_s)
-        : dt(timeStep_s), maxTime(maxTime_s) {}
+        : dt(timeStep_s), maxTime(maxTime_s)
+    {
+        if (dt <= 0.0) {
+            throw std::invalid_argument("MonteCarlo timeStep_s must be positive");
+        }
+        if (maxTime < 0.0) {
+            throw std::invalid_argument("MonteCarlo maxTime_s cannot be negative");
+        }
+    }
 
     void MonteCarlo::execute(
         const Kernel::ScenarioConfig& baseConfig,
@@ -40,10 +48,13 @@ namespace StrikeEngine::Simulation {
             Kernel::ScenarioConfig config = baseConfig;
             perturb(config, generator);
 
-            // Initialize Kernel
+            // Initialize Kernel. setRandomSeed MUST come after loadInto:
+            // loadInto fans the scenario's static seed out to every kernel
+            // stream, which would otherwise clobber the per-iteration kernel
+            // seed and make every iteration share one noise stream.
             Kernel::SimulationKernel kernel;
-            kernel.setRandomSeed(kernelSeed);
             config.loadInto(kernel);
+            kernel.setRandomSeed(kernelSeed);
 
             const auto& physics = kernel.getPhysics();
             if (config.entities.empty()) {

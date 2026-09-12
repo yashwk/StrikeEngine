@@ -33,6 +33,7 @@ namespace StrikeEngine::Kernel
 		);
 
 		int registerPropulsion(std::shared_ptr<const Models::PropulsionModel> model) override;
+		void releasePropulsion(int poolId) override;
 
 		void reset() override;
 
@@ -79,6 +80,9 @@ namespace StrikeEngine::Kernel
 
 		// Per-entity propulsion pool (W1); entities reference by index.
 		std::vector<std::shared_ptr<const Models::PropulsionModel>> propulsionPool;
+		// Released pool slots (freed by removeVehicle) recycled by
+		// registerPropulsion so spawn/despawn cycles do not grow the pool.
+		std::vector<int> propulsionFreeList;
 
 		WorkerPool threadPool;
 		PhysicsBlock derivBuffer;   // scratch for cache refresh + stage reuse

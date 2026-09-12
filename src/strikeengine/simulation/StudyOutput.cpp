@@ -225,6 +225,12 @@ void writeCsv(
         }
         output << '\n';
     }
+    // Fail loudly on I/O errors (disk full, ENOSPC) instead of printing
+    // "Data saved" next to a truncated file.
+    output.flush();
+    if (!output) {
+        throw std::runtime_error("failed writing study CSV output: " + outputFile);
+    }
 }
 
 void writeBinary(
@@ -249,6 +255,12 @@ void writeBinary(
     }
     for (const auto& record : records) {
         for (const auto field : fields) writeBinaryValue(output, field, record);
+    }
+    // Fail loudly on I/O errors (disk full, ENOSPC) instead of printing
+    // "Data saved" next to a truncated file.
+    output.flush();
+    if (!output) {
+        throw std::runtime_error("failed writing study binary output: " + outputFile);
     }
 }
 
@@ -356,6 +368,9 @@ void readBinaryValue(std::istream& input, Field field, StudyOutputRecord& record
 
 StudyStatus statusFromBatch(const BatchRunResult& result)
 {
+    // Empty scenarios (no entities) simulated nothing and cannot have
+    // impacted: mirror BatchRunner's COMPLETED status for them.
+    if (result.entityCount == 0) return StudyStatus::Completed;
     return result.primaryEntityActive ? StudyStatus::Completed : StudyStatus::Impacted;
 }
 

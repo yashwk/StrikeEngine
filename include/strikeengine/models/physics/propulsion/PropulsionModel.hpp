@@ -75,12 +75,13 @@ namespace StrikeEngine::Models {
                 massFlowRate = currentThrust / (current_isp * g0);
             }
 
-            const double pitch = std::clamp(gimbalPitchRad,
-                                            -options_.maxGimbalPitchRad,
-                                            options_.maxGimbalPitchRad);
-            const double yaw = std::clamp(gimbalYawRad,
-                                          -options_.maxGimbalYawRad,
-                                          options_.maxGimbalYawRad);
+            // Sanitize the gimbal envelope: std::clamp requires lo <= hi, so a
+            // negative configured limit (invalid but unvalidated input) must
+            // not reach it as UB.
+            const double pitchLimit = std::max(0.0, options_.maxGimbalPitchRad);
+            const double yawLimit = std::max(0.0, options_.maxGimbalYawRad);
+            const double pitch = std::clamp(gimbalPitchRad, -pitchLimit, pitchLimit);
+            const double yaw = std::clamp(gimbalYawRad, -yawLimit, yawLimit);
             const double cp = std::cos(pitch);
             const double cy = std::cos(yaw);
             // Positive pitch is nose-up thrust (-Z); positive yaw is +Y.

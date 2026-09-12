@@ -168,7 +168,11 @@ namespace StrikeEngine::Models {
         // --- Pitching moment (static stability) --------------------------------
         // Wing contribution about the CG (x_cg - x_ac ~ 0 by default) + the
         // aft-tail stabilising term, negative for a statically stable aircraft.
-        const double wingCmAlpha = (a.wingPositionM / std::max(mac, 1e-9)) * cLalpha;
+        // wingPositionM is +aft (AeroConfig convention): an aerodynamic centre
+        // AFT of the CG is stabilising (up-lift behind the CG gives a
+        // nose-down moment for +alpha), so the wing term carries a minus,
+        // matching the tail term's sign convention.
+        const double wingCmAlpha = -(a.wingPositionM / std::max(mac, 1e-9)) * cLalpha;
         const double tailCmAlpha = -cLalpha * a.tailVolumeH * (1.0 - a.downwashPerAlpha);
         const double cmAlpha = wingCmAlpha + tailCmAlpha;
         // Elevator authority: realistic finite-elevator effectiveness (~0.8 per
@@ -197,15 +201,17 @@ namespace StrikeEngine::Models {
         const double cl = clDihedral * beta + 0.08 * finRoll;
 
         // --- Body-frame forces (N) ----------------------------------------------
-        // Drag opposes the velocity vector.
+        // Drag opposes the velocity vector. The rate-damping terms divide by
+        // V while q is 0 there, so clamp the divisor (0*inf = NaN otherwise).
+        const double vSafe = std::max(V, 1e-6);
         const double dragMag = q * S * cD;
-        double fx = -dragMag * (u / V);
-        double fy = -dragMag * (v / V) + q * S * cyBeta * beta;
-        double fz = -dragMag * (w / V) - q * S * cL;      // -Z lift (up)
+        double fx = -dragMag * (u / vSafe);
+        double fy = -dragMag * (v / vSafe) + q * S * cyBeta * beta;
+        double fz = -dragMag * (w / vSafe) - q * S * cL;      // -Z lift (up)
 
         // --- Body-frame moments (N*m) --------------------------------------------
         // Pitch (about Y), yaw (Z), roll (X). Rate damping (non-dimensional).
-        const double lOverV = mac / V;
+        const double lOverV = mac / vSafe;
         const double qSL = q * S * mac;
         const double qSb = q * S * b;
         double tx = qSb * cl - q * S * b * 6.0 * lOverV * wx;      // roll damping

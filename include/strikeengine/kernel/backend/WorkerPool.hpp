@@ -6,6 +6,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <exception>
 #include <cstddef>
 #include <algorithm>
 
@@ -83,6 +84,7 @@ namespace StrikeEngine::Kernel {
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 remainingTasks = bgTasks;
+                firstException = nullptr;
                 for (std::size_t c = 1; c < chunks; ++c) {
                     const std::size_t count = baseChunkSize + (c < remainder ? 1 : 0);
                     const std::size_t start = currentIdx;
@@ -96,8 +98,15 @@ namespace StrikeEngine::Kernel {
                 cv.notify_all();
             }
 
-            // Calling thread executes chunk 0 directly
-            func(0, firstChunkSize);
+            // Calling thread executes chunk 0 directly. A throwing chunk must
+            // not abandon the in-flight background tasks: capture, drain, then
+            // rethrow (a user callback such as the wind closure can throw).
+            std::exception_ptr localException;
+            try {
+                func(0, firstChunkSize);
+            } catch (...) {
+                localException = std::current_exception();
+            }
 
             // Wait for background tasks to complete
             {
@@ -105,6 +114,12 @@ namespace StrikeEngine::Kernel {
                 doneCv.wait(lock, [this]() {
                     return remainingTasks == 0;
                 });
+            }
+            if (localException) {
+                std::rethrow_exception(localException);
+            }
+            if (firstException) {
+                std::rethrow_exception(firstException);
             }
         }
 
@@ -114,6 +129,7 @@ namespace StrikeEngine::Kernel {
                 running = false;
                 while (!tasks.empty()) tasks.pop();
                 remainingTasks = 0;
+                firstException = nullptr;
                 cv.notify_all();
             }
             for (auto& w : workers) {
@@ -141,7 +157,18 @@ namespace StrikeEngine::Kernel {
                     tasks.pop();
                 }
 
-                task();
+                // A task that throws must not terminate the process (an
+                // exception escaping a thread calls std::terminate) nor skip
+                // the remainingTasks bookkeeping (the caller would deadlock).
+                // Record it and let parallelFor rethrow on the calling thread.
+                try {
+                    task();
+                } catch (...) {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    if (!firstException) {
+                        firstException = std::current_exception();
+                    }
+                }
 
                 {
                     std::unique_lock<std::mutex> lock(queueMutex);
@@ -161,6 +188,9 @@ namespace StrikeEngine::Kernel {
         std::size_t remainingTasks = 0;
         std::size_t activeWorkers = 1;
         bool running = false;
+        // First exception thrown by a background task during a parallelFor,
+        // rethrown on the calling thread once the batch drains.
+        std::exception_ptr firstException;
     };
 
 } // namespace StrikeEngine::Kernel

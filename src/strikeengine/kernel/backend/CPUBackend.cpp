@@ -7,6 +7,7 @@
 #include <strikeengine/models/physics/earth/EarthFixedPropagator.hpp>
 #include <strikeengine/models/physics/aerodynamics/AirframeModel.hpp>
 #include <array>
+#include <algorithm>
 #include <cmath>
 
 namespace StrikeEngine::Kernel
@@ -28,8 +29,31 @@ namespace StrikeEngine::Kernel
 
     int CPUBackend::registerPropulsion(std::shared_ptr<const Models::PropulsionModel> model)
     {
+        // Recycle a released slot when one is available so repeated
+        // createVehicle/removeVehicle cycles do not grow the pool.
+        if (!propulsionFreeList.empty()) {
+            const int slot = propulsionFreeList.back();
+            propulsionFreeList.pop_back();
+            propulsionPool[static_cast<std::size_t>(slot)] = std::move(model);
+            return slot;
+        }
         propulsionPool.push_back(std::move(model));
         return static_cast<int>(propulsionPool.size()) - 1;
+    }
+
+    void CPUBackend::releasePropulsion(int poolId)
+    {
+        // Only live registrations are recyclable; a stale or double release
+        // (slot already on the free list, or out of range) is ignored.
+        if (poolId < 0 || poolId >= static_cast<int>(propulsionPool.size())) {
+            return;
+        }
+        const auto it = std::find(propulsionFreeList.begin(), propulsionFreeList.end(), poolId);
+        if (it != propulsionFreeList.end()) {
+            return;
+        }
+        propulsionPool[static_cast<std::size_t>(poolId)] = nullptr;
+        propulsionFreeList.push_back(poolId);
     }
 
     void CPUBackend::reset()
@@ -38,6 +62,7 @@ namespace StrikeEngine::Kernel
         // this the pool (and propulsionId space) grows across reset->create
         // cycles. Integrator/scheduler hold no per-run state.
         propulsionPool.clear();
+        propulsionFreeList.clear();
     }
 
     void CPUBackend::setEnvironment(const EnvironmentConfig& environmentConfig)

@@ -36,6 +36,16 @@ namespace StrikeEngine::Kernel
 		}
 
 		/**
+		 * @brief Releases a previously registered propulsion pool slot so the
+		 * backend may recycle it for a future entity. Called when an entity
+		 * is removed; backends that cannot recycle may ignore the call.
+		 */
+		virtual void releasePropulsion(int poolId)
+		{
+			(void)poolId;
+		}
+
+		/**
 		 * @brief Drops per-run cached state (e.g. registered propulsion
 		 * models) so a reset kernel starts clean. No-op by default.
 		 */

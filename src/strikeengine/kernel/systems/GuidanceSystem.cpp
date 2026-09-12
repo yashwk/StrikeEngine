@@ -25,11 +25,13 @@ namespace StrikeEngine::Kernel {
         }
 
         // Result of one guidance-law evaluation; all outputs are finite.
-        struct LawResult {            double ax = 0.0, ay = 0.0, az = 0.0;
+        struct LawResult {
+            double ax = 0.0, ay = 0.0, az = 0.0;
             bool valid = true;      // law could be evaluated (geometry OK)
             bool lawInvalid = false; // non-finite input / bad configuration
             bool nonClosing = false; // range > 0 but closing speed <= 0
             double tgoSec = 0.0;    // estimated time to go (diagnostic)
+            bool ffUsed = false;    // APN feed-forward actually contributed
         };
 
         bool isFinite3(double x, double y, double z)
@@ -350,6 +352,7 @@ namespace StrikeEngine::Kernel {
             const Models::GuidanceSolution sol = feedforward
                 ? Models::augmentedProportionalNavigation(r, v, {atx, aty, atz}, N)
                 : Models::proportionalNavigation(r, v, N);
+            out.ffUsed = feedforward;
 
             if (!sol.valid) {
                 out.valid = false;
@@ -616,7 +619,6 @@ namespace StrikeEngine::Kernel {
             const double vc = std::max(std::abs(rangeRate), 1.0);
             const double dAz = seeker.targetAzimuthRate[id];
             const double dEl = seeker.targetElevationRate[id];
-            out.nonClosing = rangeRate > 0.0;
             out.tgoSec = range / std::max(std::abs(rangeRate), 1.0);
             if (id < guidance.closingSpeed.size()) guidance.closingSpeed[id] = vc;
             if (id < guidance.losRateMag.size()) {
@@ -902,10 +904,14 @@ namespace StrikeEngine::Kernel {
 
             if (mode == GuidanceMode::ProportionalNavigation) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
-                law = (guidance.apnFeedforwardEnabled[i] &&
-                       guidance.targetAccelAvailable[i])
+                const LawResult mc = computeMidcourse(i, nav, &tracks, guidance, environment);
+                // Label from what the law actually consumed: the feed-forward
+                // may come from the persistent track, not just the command.
+                law = (mc.ffUsed ||
+                       (guidance.apnFeedforwardEnabled[i] &&
+                        guidance.targetAccelAvailable[i]))
                     ? GuidanceLaw::AugmentedProNav : GuidanceLaw::PureProNav;
-                applyDemand(i, computeMidcourse(i, nav, &tracks, guidance, environment), guidance, dt, authorityScale);
+                applyDemand(i, mc, guidance, dt, authorityScale);
             } else if (mode == GuidanceMode::Waypoint) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Waypoint;

@@ -31,13 +31,22 @@ namespace StrikeEngine::Models {
             constexpr double g = 9.80665;
             constexpr double R = 287.05;
             constexpr double GAMMA_AIR = 1.4;
+            // ISA 1976 defines the layer boundaries and base pressures in
+            // GEOPOTENTIAL altitude. Callers pass geometric (MSL) altitude, so
+            // convert first per the standard (r0 = 6356766 m earth radius).
+            // Negligible in the troposphere, ~1.5 km of altitude error at
+            // 80 km if skipped.
+            constexpr double kEarthRadiusM = 6356766.0;
+            const double geopotential =
+                kEarthRadiusM * altitude / (kEarthRadiusM + altitude);
 
-            if (altitude >= 86000.0) altitude = 85999.0;
-            if (altitude < 0.0) altitude = 0.0;
+            double h = geopotential;
+            if (h >= 86000.0) h = 85999.0;
+            if (h < 0.0) h = 0.0;
 
             const ISALayer* currentLayer = &layers.front();
             for (const auto& layer : layers) {
-                if (altitude >= layer.altitudeBase) {
+                if (h >= layer.altitudeBase) {
                     currentLayer = &layer;
                 } else {
                     break;
@@ -45,7 +54,7 @@ namespace StrikeEngine::Models {
             }
 
             double temperature, pressure;
-            const double altitudeDifference = altitude - currentLayer->altitudeBase;
+            const double altitudeDifference = h - currentLayer->altitudeBase;
 
             if (std::abs(currentLayer->lapseRate) < 1e-9) {
                 temperature = currentLayer->temperatureBase;

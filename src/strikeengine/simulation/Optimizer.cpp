@@ -1,12 +1,28 @@
 #include <strikeengine/simulation/Optimizer.hpp>
 #include <random>
+#include <chrono>
 #include <iostream>
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 
 namespace StrikeEngine::Simulation {
 
     Optimizer::Optimizer(double timeStep_s, double maxTime_s)
-        : dt(timeStep_s), maxTime(maxTime_s) {}
+        : dt(timeStep_s), maxTime(maxTime_s)
+    {
+        if (dt <= 0.0) {
+            throw std::invalid_argument("Optimizer timeStep_s must be positive");
+        }
+        if (maxTime < 0.0) {
+            throw std::invalid_argument("Optimizer maxTime_s cannot be negative");
+        }
+    }
+
+    void Optimizer::setSeed(std::uint32_t seed) {
+        this->seed = seed;
+        seedSet = true;
+    }
 
     void Optimizer::addParameter(double minBound, double maxBound) {
         bounds.push_back({minBound, maxBound});
@@ -17,18 +33,26 @@ namespace StrikeEngine::Simulation {
     }
 
     OptimizationResult Optimizer::optimize(
-        std::size_t swarmSize, 
+        std::size_t swarmSize,
         int maxIterations,
         std::function<void(std::size_t, const std::vector<double>&, Kernel::VehicleInitState&)> applyParamsFunc,
         std::function<double(std::size_t, const Kernel::SimulationKernel&)> fitnessFunc)
     {
         std::size_t numParams = bounds.size();
-        if (numParams == 0 || swarmSize == 0) {
+        if (numParams == 0 || swarmSize == 0 || maxIterations <= 0) {
             return {{}, 0.0, 0};
         }
+        if (!applyParamsFunc || !fitnessFunc) {
+            throw std::invalid_argument(
+                "Optimizer::optimize requires non-empty applyParamsFunc and fitnessFunc");
+        }
 
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        // PSO drive stream: pinned when setSeed was used, wall clock
+        // otherwise (legacy behavior).
+        unsigned useed = seedSet
+            ? seed
+            : static_cast<unsigned>(std::chrono::system_clock::now().time_since_epoch().count());
+        std::mt19937 gen(useed);
 
         // PSO State
         std::vector<std::vector<double>> positions(swarmSize, std::vector<double>(numParams));
@@ -74,8 +98,12 @@ namespace StrikeEngine::Simulation {
                 vehicleIds[i] = kernel.createVehicle(init);
             }
 
-            // 2. Simulate until timeout or all dead
-            int steps = static_cast<int>(maxTime / dt);
+            // 2. Simulate until timeout or all dead. Clamp the step count so
+            // an enormous maxTime cannot overflow the int cast (UB).
+            const double rawSteps = maxTime / dt;
+            const int steps = rawSteps >= static_cast<double>(std::numeric_limits<int>::max())
+                ? std::numeric_limits<int>::max()
+                : static_cast<int>(rawSteps);
             const auto& physics = kernel.getPhysics();
             for (int step = 0; step < steps; ++step) {
                 kernel.step(dt);

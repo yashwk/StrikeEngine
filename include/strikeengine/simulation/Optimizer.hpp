@@ -4,6 +4,7 @@
 #include <vector>
 #include <functional>
 #include <cstddef>
+#include <cstdint>
 
 namespace StrikeEngine::Simulation {
 
@@ -22,6 +23,14 @@ namespace StrikeEngine::Simulation {
     public:
         Optimizer(double timeStep_s, double maxTime_s);
 
+        /**
+         * @brief Pin the PSO drive stream (particle initialization and the
+         * r1/r2 velocity draws). Without it the stream is seeded from the
+         * wall clock and optimization runs are not reproducible. Mirrors
+         * MonteCarlo::setSeed / ParamSweep::setSeed.
+         */
+        void setSeed(std::uint32_t seed);
+
         // Add a parameter bounds to the optimizer space
         void addParameter(double minBound, double maxBound);
 
@@ -37,7 +46,7 @@ namespace StrikeEngine::Simulation {
          * @return Best parameters and fitness achieved.
          */
         OptimizationResult optimize(
-            std::size_t swarmSize, 
+            std::size_t swarmSize,
             int maxIterations,
             std::function<void(std::size_t vehicleId, const std::vector<double>& params, Kernel::VehicleInitState& init)> applyParamsFunc,
             std::function<double(std::size_t vehicleId, const Kernel::SimulationKernel& kernel)> fitnessFunc
@@ -47,6 +56,8 @@ namespace StrikeEngine::Simulation {
         double dt;
         double maxTime;
         std::vector<ParameterBound> bounds;
+        std::uint32_t seed = 0u;
+        bool seedSet = false;
     };
 
 } // namespace StrikeEngine::Simulation

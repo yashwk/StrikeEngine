@@ -70,6 +70,23 @@ namespace StrikeEngine::Models {
             return 1.0; // Default RCS if no data is loaded
         }
 
+        // Clamp the query to the tabulated envelope before binning. The
+        // interpolation is performed in dBsm and converted only at the end, so
+        // out-of-range weights (linear EXTRAPOLATION past the edge) would be
+        // exponentially amplified in the returned m^2. Azimuth wraps over the
+        // full-circle case before clamping.
+        const double azFront = _azimuth_breakpoints_rad.front();
+        const double azBack = _azimuth_breakpoints_rad.back();
+        if (azBack - azFront >= 2.0 * glm::pi<double>() - 1e-9) {
+            azimuth_rad = std::remainder(
+                azimuth_rad - azFront, 2.0 * glm::pi<double>()) + azFront;
+            if (azimuth_rad < azFront) azimuth_rad += 2.0 * glm::pi<double>();
+        }
+        azimuth_rad = std::clamp(azimuth_rad, azFront, azBack);
+        elevation_rad = std::clamp(elevation_rad,
+                                   _elevation_breakpoints_rad.front(),
+                                   _elevation_breakpoints_rad.back());
+
         // --- Bilinear Interpolation Logic ---
 
         // Find indices for azimuth

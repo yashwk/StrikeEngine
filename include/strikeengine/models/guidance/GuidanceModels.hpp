@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cmath>
 
 namespace StrikeEngine::Models {
@@ -115,7 +116,7 @@ namespace StrikeEngine::Models {
      * (+ 0.5*At*tgo^2 when targetAccelAvailable). requiredAccel is the PN
      * demand toward the PIP evaluated at the intercept-time closing velocity.
      */
-    enum class InterceptStatus : uint8_t {
+    enum class InterceptStatus : std::uint8_t {
         Ok,          // valid predicted intercept (out.valid == true)
         VelocityLow, // interceptor est speed below minSpeedMps
         NoIntercept, // no positive-time constant-velocity intercept (or no

@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -274,10 +275,10 @@ void to_json(json& j, const AeroConfig& a) {
     }
     if (!a.finSets.empty()) {
         json arr = json::array();
+        // Serialize every set, including disabled ones (count < 3): the
+        // round-trip must be faithful even though disabled sets are inert.
         for (const auto& fs : a.finSets) {
-            if (fs.enabled()) {
-                arr.push_back(finConfigToJson(fs));
-            }
+            arr.push_back(finConfigToJson(fs));
         }
         j["fin_sets"] = std::move(arr);
         for (const auto& fs : a.finSets) {
@@ -906,11 +907,24 @@ void from_json(const json& j, EarthEnvironmentConfig& e) {
 void to_json(json& j, const EnvironmentConfig& e) {
     j = json();
     j["earth"] = e.earth;
+    // Behavioral scalars: without these a save/load round-trip silently
+    // reverts event generation to the struct defaults (kinetic impacts
+    // re-enabled, swept/zero-rate ground impact lost). Terrain/wind
+    // callbacks and globalTerrain remain non-serializable by contract.
+    j["kinetic_impact_radius_m"] = e.kineticImpactRadiusM;
+    j["kinetic_impact_latch_enabled"] = e.kineticImpactLatchEnabled;
+    j["swept_ground_impact_enabled"] = e.sweptGroundImpactEnabled;
+    j["ground_impact_zero_rates"] = e.groundImpactZeroRates;
 }
 
 void from_json(const json& j, EnvironmentConfig& e) {
     e = EnvironmentConfig();  // callbacks reset to flat/zero defaults
     e.earth = j.at("earth").get<EarthEnvironmentConfig>();
+    // Optional keys so pre-existing documents keep loading with defaults.
+    e.kineticImpactRadiusM = j.value("kinetic_impact_radius_m", e.kineticImpactRadiusM);
+    e.kineticImpactLatchEnabled = j.value("kinetic_impact_latch_enabled", e.kineticImpactLatchEnabled);
+    e.sweptGroundImpactEnabled = j.value("swept_ground_impact_enabled", e.sweptGroundImpactEnabled);
+    e.groundImpactZeroRates = j.value("ground_impact_zero_rates", e.groundImpactZeroRates);
 }
 
 // --- VehicleInitState -------------------------------------------------------
@@ -1099,7 +1113,39 @@ bool ScenarioConfig::save(const std::string& path) const {
 }
 
 ScenarioConfig ScenarioConfig::load(const std::string& path) {
-    return deserializeScenario(readTextFile(path, "scenario"));
+    const std::string text = readTextFile(path, "scenario");
+    // Resolve relative design_ref paths against the scenario file's own
+    // directory. loadDesignPhysics otherwise resolves against the process
+    // working directory, so loading a scenario by path silently breaks any
+    // scenario that is not laid out relative to the CWD. A relative ref is
+    // only rewritten when the scenario-relative file actually exists —
+    // scenarios authored against the legacy CWD semantics keep loading.
+    try {
+        json parsed = json::parse(text);
+        if (parsed.contains("entities") && parsed["entities"].is_array()) {
+            std::string base = path;
+            const auto slash = base.find_last_of("/\\");
+            base = (slash == std::string::npos) ? std::string() : base.substr(0, slash + 1);
+            for (auto& entity : parsed["entities"]) {
+                if (!entity.is_object() || !entity.contains("design_ref") ||
+                    !entity["design_ref"].is_string()) {
+                    continue;
+                }
+                const std::string ref = entity["design_ref"].get<std::string>();
+                if (ref.empty() || ref.front() == '/') continue;
+                const std::string scenarioRelative = base + ref;
+                std::error_code ec;
+                if (!base.empty() && std::filesystem::exists(scenarioRelative, ec)) {
+                    entity["design_ref"] = scenarioRelative;
+                }
+            }
+        }
+        return deserializeScenario(parsed.dump());
+    } catch (const nlohmann::json::parse_error&) {
+        // Malformed document: defer to the canonical deserializeScenario
+        // error path (std::runtime_error with the scenario context).
+        return deserializeScenario(text);
+    }
 }
 
 } // namespace StrikeEngine::Kernel

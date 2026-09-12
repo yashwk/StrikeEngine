@@ -40,6 +40,23 @@ namespace StrikeEngine::Kernel {
         gpsLatencyQueue.clear();
     }
 
+    void SensorSystem::resetEntity(std::size_t id) {
+        auto clear = [id](std::vector<double>& v) {
+            if (v.size() > id) v[id] = 0.0;
+        };
+        clear(trueAccelBiasX);
+        clear(trueAccelBiasY);
+        clear(trueAccelBiasZ);
+        clear(trueGyroBiasX);
+        clear(trueGyroBiasY);
+        clear(trueGyroBiasZ);
+        clear(trueBaroBias);
+        clear(lastGpsUpdateTime);
+        clear(lastBaroUpdateTime);
+        clear(lastMagUpdateTime);
+        if (gpsLatencyQueue.size() > id) gpsLatencyQueue[id].clear();
+    }
+
     void SensorSystem::ensureCapacity(std::size_t size) {
         if (trueAccelBiasX.size() < size) {
             trueAccelBiasX.resize(size, 0.0);
@@ -139,8 +156,10 @@ namespace StrikeEngine::Kernel {
 
             // Per-entity GPS refresh scheduling: a sample is produced only when
             // the GPS device is enabled and the per-entity interval has elapsed.
+            // A non-positive rate schedules nothing (a 1/0 period is inf, which
+            // reads as "never" but only by accident of IEEE arithmetic).
             bool updateGps = false;
-            if (sensors.gpsEnabled[i]) {
+            if (sensors.gpsEnabled[i] && sensors.gpsUpdateRateHz[i] > 0.0) {
                 const double period = 1.0 / sensors.gpsUpdateRateHz[i];
                 if (currentTime - lastGpsUpdateTime[i] >= period) {
                     updateGps = true;

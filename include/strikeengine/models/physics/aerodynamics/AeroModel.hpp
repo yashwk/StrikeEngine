@@ -119,6 +119,10 @@ namespace StrikeEngine::Models {
             const double S = p.referenceArea;
             const double l = p.referenceLength;
             const double mach = (speedOfSound > 1e-6) ? V / speedOfSound : 0.0;
+            // Rate-damping terms scale with q·(l/V). At exactly zero airspeed
+            // q is 0 and l/V is inf, and 0*inf = NaN would poison the moment;
+            // clamp the divisor so the (vanishing) damping stays finite.
+            const double vSafe = std::max(V, 1e-6);
 
             // Angle of attack and sideslip (body frame)
             const double alpha = std::atan2(w, u);      // +w (Z down) => nose up
@@ -179,7 +183,16 @@ namespace StrikeEngine::Models {
                     if (!f) continue;
                     const double clFin = f->clAlpha(mach);
                     const double effPitch = f->steerable ? finPitch : 0.0;
-                    finLift += clFin * (alpha + effPitch);
+                    // The deflection's local-AoA contribution is SIGNED by the
+                    // fin CP lever arm so the control FORCE matches the coded
+                    // +|xcp|*effPitch nose-up control MOMENT for both canards
+                    // and tail fins: a +pitch tail command is trailing-edge UP
+                    // (downward fin force at the tail, nose-up moment), not an
+                    // up-force. Without the sign the tail-fin control force
+                    // opposes the moment it accompanies.
+                    const double deflPitch =
+                        (f->cpLeverArmM >= 0.0) ? effPitch : -effPitch;
+                    finLift += clFin * (alpha + deflPitch);
                 }
                 if (tables) {
                     cl = interpolateCoefficient(mach, alpha,
@@ -213,7 +226,15 @@ namespace StrikeEngine::Models {
                     if (!f) continue;
                     const double clFin = f->clAlpha(mach);
                     const double effYaw = f->steerable ? finYaw : 0.0;
-                    cySum += clFin * (beta + effYaw);
+                    // Yaw mirrors the pitch fix with the OPPOSITE sign: the
+                    // coded +|xcp|*effYaw nose-right control moment corresponds
+                    // to a tail fin pushing the tail LEFT (-Y force, i.e. a
+                    // NEGATIVE cy contribution for xcp < 0) and a canard
+                    // pushing the nose RIGHT (+Y force, negative cy for
+                    // xcp > 0). tau_z = x*Fy with Fy = -qS*cy.
+                    const double deflYaw =
+                        (f->cpLeverArmM >= 0.0) ? -effYaw : effYaw;
+                    cySum += clFin * (beta + deflYaw);
                 }
                 fy -= q * S * std::clamp(cySum, -p.clMax, p.clMax);
             } else {
@@ -262,8 +283,12 @@ namespace StrikeEngine::Models {
                     const double effYaw = f->steerable ? finYaw : 0.0;
                     const double effRoll = f->steerable ? finRoll : 0.0;
 
+                    // Roll damping needs the 1/V the RocketPy reference
+                    // carries (q*S*l^2*cld*omega/(2V)); rollDampingCoeff is
+                    // per-metre, so without /V the term is N*m/s, not N*m,
+                    // and roll is over-damped by a factor ~V.
                     totalRollTorque += (qS * l * f->rollForcingPerRad(mach) * (f->cantRad + effRoll)
-                                        - qS * l * l * 0.5 * f->rollDampingCoeff(mach) * wx);
+                                        - qS * l * l * 0.5 * f->rollDampingCoeff(mach) * wx / vSafe);
                     totalPitchTorque += (qS * clFin * (xcp * alpha + std::abs(xcp) * effPitch));
                     // Yaw static term carries an explicit minus that pitch
                     // does not: tau_z = +x*Fy with Fy = -qS*cy, while
@@ -287,8 +312,8 @@ namespace StrikeEngine::Models {
 
                 // Static stability is now supplied by the fins (via xcp); the
                 // bare body term is dropped so it is not double-counted.
-                ty -= q * S * l * Cq  * (l / V) * wy;
-                tz -= q * S * l * Cq  * (l / V) * wz;
+                ty -= q * S * l * Cq  * (l / vSafe) * wy;
+                tz -= q * S * l * Cq  * (l / vSafe) * wz;
             } else {
                 tx = std::clamp(qS * l * (Cl_delta * finRoll),
                                 -maxControlMoment, maxControlMoment);
@@ -304,7 +329,7 @@ namespace StrikeEngine::Models {
                 tz += qS * l * cnStatic;
 
                 // Rotational damping (dimensionless rate q_bar*l/V)
-                const double lOverV = l / V;
+                const double lOverV = l / vSafe;
                 constexpr double Clp = 6.0;    // roll damping
                 ty -= q * S * l * Cq  * lOverV * wy;
                 tz -= q * S * l * Cq  * lOverV * wz;

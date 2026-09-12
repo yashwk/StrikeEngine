@@ -86,7 +86,11 @@ namespace StrikeEngine::Simulation {
                 result.finalAltitudeM = primaryState.altitudeM;
                 result.primaryEntityActive = physics.active[result.primaryEntityId];
             }
-            result.status = result.primaryEntityActive ? "COMPLETED" : "IMPACTED";
+            // An empty scenario simulated nothing: nothing impacted either,
+            // so report COMPLETED rather than a phantom IMPACTED.
+            result.status = (result.entityCount > 0 && !result.primaryEntityActive)
+                ? "IMPACTED"
+                : "COMPLETED";
             result.maxAltitude = result.maxAltitudeM;
             result.maxSpeed = result.maxSpeedMps;
             results.push_back(result);

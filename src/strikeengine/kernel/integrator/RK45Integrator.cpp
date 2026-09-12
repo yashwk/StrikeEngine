@@ -49,6 +49,21 @@ RK45Integrator::RK45Integrator(double tol)
 {
 }
 
+void RK45Integrator::ensureCapacity(const PhysicsBlock& state)
+{
+    // Copy assignment recycles the buffers' capacity once the entity count is
+    // stable, so steady-state stepping performs no heap allocation.
+    k1 = state;
+    k2 = state;
+    k3 = state;
+    k4 = state;
+    k5 = state;
+    k6 = state;
+    stage = state;
+    acc5 = state;
+    acc4 = state;
+}
+
 double RK45Integrator::integrate(
     PhysicsBlock& state,
     const DerivativeFn& deriv,
@@ -62,15 +77,8 @@ double RK45Integrator::integrate(
     acceptedStepCount = 0;
     rejectedStepCount = 0;
 
-    PhysicsBlock k1 = state;
-    PhysicsBlock k2 = state;
-    PhysicsBlock k3 = state;
-    PhysicsBlock k4 = state;
-    PhysicsBlock k5 = state;
-    PhysicsBlock k6 = state;
-    PhysicsBlock stage = state;
-    PhysicsBlock acc5 = state;
-    PhysicsBlock acc4 = state;
+    // Reused member scratch instead of per-call full-state copies.
+    ensureCapacity(state);
 
     double errMax = 0.0;
 

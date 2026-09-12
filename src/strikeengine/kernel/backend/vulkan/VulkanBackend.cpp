@@ -14,6 +14,17 @@ namespace StrikeEngine::Kernel {
     const size_t PHYSICS_BUFFER_SIZE = 23 * MAX_ENTITIES * sizeof(double) + MAX_ENTITIES * sizeof(uint32_t);
     const size_t CONTROL_BUFFER_SIZE = 4 * MAX_ENTITIES * sizeof(double);
 
+    // Push-constant layout shared by createPipeline() and step(). The struct
+    // is 24 bytes with tail padding; the declared range and the write size
+    // must agree exactly or validation fails.
+    struct VulkanPushData {
+        double dt;
+        double currentTime;
+        std::uint32_t entityCount;
+    };
+    static_assert(sizeof(VulkanPushData) == 24,
+        "physics_step push-constant layout changed; update the declared range");
+
     VulkanBackend::VulkanBackend() {
         std::cout << "Initializing Vulkan Backend...\n";
         createCommandPool();
@@ -140,7 +151,7 @@ namespace StrikeEngine::Kernel {
         vk::ShaderModuleCreateInfo createInfo({}, buffer.size(), reinterpret_cast<const uint32_t*>(buffer.data()));
         vk::ShaderModule shaderModule = device.createShaderModule(createInfo);
 
-        vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eCompute, 0, sizeof(double) * 2 + sizeof(uint32_t));
+        vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eCompute, 0, sizeof(VulkanPushData));
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo({}, 1, &descriptorSetLayout, 1, &pcRange);
         pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
@@ -171,6 +182,11 @@ namespace StrikeEngine::Kernel {
         auto device = context.getDevice();
         size_t count = physics.size;
         if (count == 0) return;
+        if (count > MAX_ENTITIES) {
+            throw std::runtime_error(
+                "VulkanBackend: entity count exceeds the fixed GPU buffer capacity (" +
+                std::to_string(MAX_ENTITIES) + ")");
+        }
 
         // 1. Map and copy CPU SoA to GPU SSBO
         void* mappedPhysics = device.mapMemory(physicsMemory, 0, VK_WHOLE_SIZE);
@@ -229,11 +245,7 @@ namespace StrikeEngine::Kernel {
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
         
         // Push Constants struct
-        struct {
-            double dt;
-            double currentTime;
-            uint32_t entityCount;
-        } pushData = { dt, currentTime, (uint32_t)count };
+        VulkanPushData pushData{dt, currentTime, static_cast<std::uint32_t>(count)};
 
         commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(pushData), &pushData);
         

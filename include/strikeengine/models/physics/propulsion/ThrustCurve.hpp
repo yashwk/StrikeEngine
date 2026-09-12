@@ -58,6 +58,10 @@ namespace StrikeEngine::Models {
 
         double evaluate(double currentTime) const {
             if (curve.empty()) return 0.0;
+            // A non-finite time fails both endpoint comparisons and drives
+            // lower_bound to begin(); the --it below would then read before
+            // begin() (UB). Treat non-finite time as no thrust.
+            if (!std::isfinite(currentTime)) return 0.0;
             if (currentTime <= curve.front().time_s) return curve.front().thrust_n;
             if (currentTime >= curve.back().time_s) return curve.back().thrust_n;
 

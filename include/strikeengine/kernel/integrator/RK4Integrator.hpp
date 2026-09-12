@@ -17,5 +17,12 @@ namespace StrikeEngine::Kernel
 			double t,
 			double dt) override;
 		bool isAdaptive() const override { return false; }
+
+	private:
+		// Stage/accumulator scratch reused across calls: no per-step heap
+		// allocation. Each kernel owns one integrator instance, so the
+		// buffers are never shared across concurrent runs.
+		void ensureCapacity(const PhysicsBlock& state);
+		PhysicsBlock k1, k2, k3, k4, stage, acc;
 	};
 } // namespace StrikeEngine::Kernel

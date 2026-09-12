@@ -9,7 +9,15 @@
 namespace StrikeEngine::Simulation {
 
     ParamSweep::ParamSweep(double timeStep_s, double maxTime_s)
-        : dt(timeStep_s), maxTime(maxTime_s) {}
+        : dt(timeStep_s), maxTime(maxTime_s)
+    {
+        if (dt <= 0.0) {
+            throw std::invalid_argument("ParamSweep timeStep_s must be positive");
+        }
+        if (maxTime < 0.0) {
+            throw std::invalid_argument("ParamSweep maxTime_s cannot be negative");
+        }
+    }
 
     void ParamSweep::execute(
         const Kernel::ScenarioConfig& baseConfig,
@@ -36,12 +44,15 @@ namespace StrikeEngine::Simulation {
             Kernel::ScenarioConfig config = baseConfig;
             applyParam(config, currentParam);
 
-            // Initialize Kernel
+            // Initialize Kernel. setRandomSeed MUST come after loadInto:
+            // loadInto fans the scenario's static seed out to every kernel
+            // stream, which would otherwise clobber the per-point seed and
+            // leave the documented (seed + i) contract dead.
             Kernel::SimulationKernel kernel;
+            config.loadInto(kernel);
             if (seedSet) {
                 kernel.setRandomSeed(seed + static_cast<std::uint32_t>(i));
             }
-            config.loadInto(kernel);
 
             const auto& physics = kernel.getPhysics();
 
@@ -70,6 +81,10 @@ namespace StrikeEngine::Simulation {
             }
 
             const auto finalState = reportState(physics, targetId, config.environment);
+            // Fold the terminal state into the aggregates: a vehicle that
+            // peaks on the step it impacts otherwise under-reports its maxima.
+            maxAlt = std::max(maxAlt, finalState.altitudeM);
+            maxVel = std::max(maxVel, finalState.speedMps);
             StudyOutputRecord record;
             record.scenarioIndex = static_cast<std::size_t>(i);
             record.sweepValue = currentParam;

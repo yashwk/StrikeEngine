@@ -54,6 +54,14 @@ namespace StrikeEngine::Kernel {
          */
         void reset();
 
+        /**
+         * @brief Clear the per-entity sensor state of ONE slot (streaming
+         * biases, cadence phase, queued GPS samples). Called on slot reuse so
+         * a recycled entity ID does not inherit the previous occupant's
+         * accumulated random-walk biases.
+         */
+        void resetEntity(std::size_t id);
+
     private:
         std::mt19937 rng;
         // Per-entity last GPS update time (s). GPS scheduling is now per-entity
