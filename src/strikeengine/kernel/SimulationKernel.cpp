@@ -288,6 +288,7 @@ namespace StrikeEngine::Kernel {
             controlBlock.kIntegralYaw.push_back(0.0);
             controlBlock.integralClampRad.push_back(0.05);
             controlBlock.kAccelErrP.push_back(-1.0);
+            controlBlock.threeLoopEnabled.push_back(false);
             controlBlock.controlEffectivenessEnabled.push_back(false);
             controlBlock.controlEffBase.push_back(1.0);
             controlBlock.controlEffMachSlope.push_back(0.0);
@@ -319,6 +320,8 @@ namespace StrikeEngine::Kernel {
             controlBlock.aoaDampingYaw.push_back(0.0);
             controlBlock.accelErrPitch.push_back(0.0);
             controlBlock.accelErrYaw.push_back(0.0);
+            controlBlock.rateCommandPitch.push_back(0.0);
+            controlBlock.rateCommandYaw.push_back(0.0);
             controlBlock.achievedSpecificForceY.push_back(0.0);
             controlBlock.achievedSpecificForceZ.push_back(0.0);
             controlBlock.authorityMargin01.push_back(1.0);
@@ -581,6 +584,7 @@ namespace StrikeEngine::Kernel {
         controlBlock.kIntegralYaw[id] = resolved.guidanceAutopilot.kIntegralYaw;
         controlBlock.integralClampRad[id] = resolved.guidanceAutopilot.integralClampRad;
         controlBlock.kAccelErrP[id] = resolved.guidanceAutopilot.kAccelErrP;
+        controlBlock.threeLoopEnabled[id] = resolved.guidanceAutopilot.autopilotThreeLoopEnabled;
         controlBlock.controlEffectivenessEnabled[id] = resolved.guidanceAutopilot.controlEffectivenessEnabled;
         controlBlock.controlEffBase[id] = resolved.guidanceAutopilot.controlEffBase;
         controlBlock.controlEffMachSlope[id] = resolved.guidanceAutopilot.controlEffMachSlope;
@@ -612,6 +616,8 @@ namespace StrikeEngine::Kernel {
         controlBlock.aoaDampingYaw[id] = 0.0;
         controlBlock.accelErrPitch[id] = 0.0;
         controlBlock.accelErrYaw[id] = 0.0;
+        controlBlock.rateCommandPitch[id] = 0.0;
+        controlBlock.rateCommandYaw[id] = 0.0;
         controlBlock.achievedSpecificForceY[id] = 0.0;
         controlBlock.achievedSpecificForceZ[id] = 0.0;
         controlBlock.authorityMargin01[id] = 1.0;

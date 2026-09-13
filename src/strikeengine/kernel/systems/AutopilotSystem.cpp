@@ -83,8 +83,11 @@ namespace StrikeEngine::Kernel {
         }
         if (control.kAccelErrP.size() < nav.size) {
             control.kAccelErrP.resize(nav.size, -1.0);
+            control.threeLoopEnabled.resize(nav.size, false);
             control.accelErrPitch.resize(nav.size, 0.0);
             control.accelErrYaw.resize(nav.size, 0.0);
+            control.rateCommandPitch.resize(nav.size, 0.0);
+            control.rateCommandYaw.resize(nav.size, 0.0);
             control.achievedSpecificForceY.resize(nav.size, 0.0);
             control.achievedSpecificForceZ.resize(nav.size, 0.0);
         }
@@ -257,48 +260,16 @@ namespace StrikeEngine::Kernel {
             yawGate = 0.0;
         }
 
-        // 5. Integral trim on the specific-force error (measured accelerometer
-        //    minus demand), with a clamp and saturation anti-windup.
-        double pitchIntegral = id < control.pitchIntegral.size() ? control.pitchIntegral[id] : 0.0;
-        double yawIntegral = id < control.yawIntegral.size() ? control.yawIntegral[id] : 0.0;
-        if (flagAt(control.integralEnabled, id) && dt > 0.0 &&
-            id < sensor.accelY.size()) {
-            const double clampI = std::max(0.0, valAt(control.integralClampRad, id, 0.05));
-            const double errPitch = azSpecificCmd - sensor.accelZ[id];
-            const double errYaw = aySpecificCmd - sensor.accelY[id];
-            if (!control.pitchSaturated[id]) {
-                // Same sign convention as pitchFeedForward: positive body-Z
-                // specific force (down) needs a NEGATIVE pitch fin, so the
-                // integrator accumulates with the opposite sign of errPitch.
-                pitchIntegral -= control.kIntegralPitch[id] * errPitch * dt;
-            }
-            if (!control.yawSaturated[id]) {
-                yawIntegral += control.kIntegralYaw[id] * errYaw * dt;
-            }
-            pitchIntegral = std::clamp(pitchIntegral, -clampI, clampI);
-            yawIntegral = std::clamp(yawIntegral, -clampI, clampI);
-        } else {
-            pitchIntegral = 0.0;
-            yawIntegral = 0.0;
-        }
-        control.pitchIntegral[id] = pitchIntegral;
-        control.yawIntegral[id] = yawIntegral;
-
-        // 5b. Proportional acceleration-error trim (outer acceleration loop).
-        //     Closes the loop on the measured body specific force so
-        //     feed-forward gain error, q-schedule error and aero cross-coupling
-        //     cannot hold a steady acceleration error. The gain defaults to the
-        //     vehicle's declared plant inversion (effectiveKAccel); positive
-        //     values override it and 0 disables the loop. The filtered
-        //     measured force also feeds the authority margin.
-        double pitchErrP = 0.0;
-        double yawErrP = 0.0;
+        // 5a. Filtered achieved specific force: outer-loop feedback and the
+        //     authority margin. The raw accelerometer carries the fin's
+        //     non-minimum-phase transient, which must not be fed back directly.
         double achievedY = 0.0;
         double achievedZ = 0.0;
-        if (id < control.achievedSpecificForceY.size() &&
+        const bool accelValid = id < control.achievedSpecificForceY.size() &&
             id < control.achievedSpecificForceZ.size() &&
             id < sensor.accelY.size() && id < sensor.accelZ.size() &&
-            std::isfinite(sensor.accelY[id]) && std::isfinite(sensor.accelZ[id])) {
+            std::isfinite(sensor.accelY[id]) && std::isfinite(sensor.accelZ[id]);
+        if (accelValid) {
             constexpr double kAccelFiltTauSec = 0.1;
             const double blend = (dt > 0.0)
                 ? (1.0 - std::exp(-dt / kAccelFiltTauSec)) : 1.0;
@@ -308,16 +279,75 @@ namespace StrikeEngine::Kernel {
             azFilt += blend * (sensor.accelZ[id] - azFilt);
             achievedY = ayFilt;
             achievedZ = azFilt;
+        }
 
-            const double kErrCfg = valAt(control.kAccelErrP, id, -1.0);
-            const double kErr = (kErrCfg < 0.0) ? effectiveKAccel : kErrCfg;
-            if (kErr > 0.0) {
-                const double errZ = azSpecificCmd - sensor.accelZ[id];
-                const double errY = aySpecificCmd - sensor.accelY[id];
-                pitchErrP = std::clamp(-kErr * errZ, -kTrimLimit, kTrimLimit);
-                yawErrP   = std::clamp( kErr * errY, -kTrimLimit, kTrimLimit);
+        // 5b. Inner loop.
+        //     Three-loop cascade (Jackson, JHU APL 29(1), Fig. 6):
+        //       q_cmd = Ka * (a_cmd - a_meas)          [outer acceleration loop]
+        //       I     = Ki * integral(q_cmd - q) dt    [inner rate loop]
+        //       delta = trim_ff + I - Kr * q           [Kr = scaled rate damping]
+        //     Legacy: integral on the specific-force error (if enabled) plus an
+        //     optional direct specific-force error trim.
+        double pitchIntegral = id < control.pitchIntegral.size() ? control.pitchIntegral[id] : 0.0;
+        double yawIntegral = id < control.yawIntegral.size() ? control.yawIntegral[id] : 0.0;
+        double pitchErrP = 0.0;
+        double yawErrP = 0.0;
+
+        const double kAccelGain = valAt(control.kAccelErrP, id, 0.0);
+        const bool threeLoop = flagAt(control.threeLoopEnabled, id) &&
+            kAccelGain > 0.0 && accelValid;
+        if (threeLoop) {
+            const double clampI = std::max(0.0, valAt(control.integralClampRad, id, 0.05));
+            // Engine sign conventions: positive body-Y specific force needs
+            // nose-right (+wz); positive body-Z (down) needs nose-down (-wy).
+            const double wyCmd = -kAccelGain * (azSpecificCmd - achievedZ);
+            const double wzCmd = yawGate * kAccelGain * (aySpecificCmd - achievedY);
+            if (id < control.rateCommandPitch.size()) {
+                control.rateCommandPitch[id] = wyCmd;
+                control.rateCommandYaw[id] = wzCmd;
+            }
+            if (dt > 0.0) {
+                if (!control.pitchSaturated[id]) {
+                    pitchIntegral += valAt(control.kIntegralPitch, id, 0.0) * (wyCmd - wy) * dt;
+                }
+                if (!control.yawSaturated[id]) {
+                    yawIntegral += valAt(control.kIntegralYaw, id, 0.0) * (wzCmd - wz) * dt;
+                }
+            }
+            pitchIntegral = std::clamp(pitchIntegral, -clampI, clampI);
+            yawIntegral = std::clamp(yawIntegral, -clampI, clampI);
+        } else {
+            if (flagAt(control.integralEnabled, id) && dt > 0.0 && accelValid) {
+                const double clampI = std::max(0.0, valAt(control.integralClampRad, id, 0.05));
+                const double errPitch = azSpecificCmd - sensor.accelZ[id];
+                const double errYaw = aySpecificCmd - sensor.accelY[id];
+                if (!control.pitchSaturated[id]) {
+                    // Same sign convention as pitchFeedForward: positive body-Z
+                    // specific force (down) needs a NEGATIVE pitch fin, so the
+                    // integrator accumulates with the opposite sign of errPitch.
+                    pitchIntegral -= control.kIntegralPitch[id] * errPitch * dt;
+                }
+                if (!control.yawSaturated[id]) {
+                    yawIntegral += control.kIntegralYaw[id] * errYaw * dt;
+                }
+                pitchIntegral = std::clamp(pitchIntegral, -clampI, clampI);
+                yawIntegral = std::clamp(yawIntegral, -clampI, clampI);
+            } else {
+                pitchIntegral = 0.0;
+                yawIntegral = 0.0;
+            }
+            if (accelValid) {
+                const double kErr = (kAccelGain < 0.0) ? effectiveKAccel : kAccelGain;
+                if (kErr > 0.0) {
+                    const double errZ = azSpecificCmd - achievedZ;
+                    const double errY = aySpecificCmd - achievedY;
+                    pitchErrP = std::clamp(-kErr * errZ, -kTrimLimit, kTrimLimit);
+                    yawErrP   = std::clamp( kErr * errY, -kTrimLimit, kTrimLimit);
+                }
             }
         }
+        control.pitchIntegral[id] = pitchIntegral;
+        control.yawIntegral[id] = yawIntegral;
 
         double pitchDeflection = pitchFeedForward + pitchRateDampingOut + pitchAoaDamping +
                                  pitchIntegral + pitchErrP;

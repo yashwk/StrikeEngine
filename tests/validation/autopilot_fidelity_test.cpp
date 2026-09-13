@@ -39,7 +39,9 @@ ControlBlock makeControl()
     // Legacy fixtures exercise the pre-acceleration-loop paths; the loop is
     // covered by its own section below.
     c.kAccelErrP = {0.0};
+    c.threeLoopEnabled = {false};
     c.accelErrPitch = {0.0}; c.accelErrYaw = {0.0};
+    c.rateCommandPitch = {0.0}; c.rateCommandYaw = {0.0};
     c.achievedSpecificForceY = {0.0}; c.achievedSpecificForceZ = {0.0};
     c.controlEffectivenessEnabled = {false};
     c.controlEffBase = {1.0}; c.controlEffMachSlope = {0.0}; c.controlEffMachQuad = {0.0};
@@ -140,16 +142,16 @@ int main()
         sensor.accelZ = {9.80665};              // Z channel at gravity trim
         GuidanceBlock g = makeGuidance(10.0);
         ControlBlock off = makeControl();       // kAccelErrP = 0 (legacy law)
-        run(nav, sensor, g, off, dt);
+        for (int k = 0; k < 100; ++k) run(nav, sensor, g, off, dt);
         ControlBlock loop = makeControl();
         loop.kAccelErrP = {-1.0};               // auto = effectiveKAccel
-        run(nav, sensor, g, loop, dt);
+        for (int k = 0; k < 100; ++k) run(nav, sensor, g, loop, dt);
         check(std::abs(loop.yawCommand[0]) > std::abs(off.yawCommand[0]),
               "acceleration loop adds deflection when the measured force trails the demand");
         std::printf("  [info] effK=%.5f errYaw=%.4f errPitch=%.4f yawCmd=%.4f\n",
                     loop.effectiveKAccel[0], loop.accelErrYaw[0], loop.accelErrPitch[0],
                     loop.yawCommand[0]);
-        check(loop.accelErrYaw[0] > 0.0 && loop.accelErrPitch[0] == 0.0,
+        check(loop.accelErrYaw[0] > 0.0 && std::abs(loop.accelErrPitch[0]) < 1e-3,
               "acceleration-loop trim follows the demand sign convention");
         check(loop.kAccelErrP[0] == -1.0,
               "acceleration-loop gain keeps its auto sentinel");
@@ -170,6 +172,30 @@ int main()
                     loop.authorityMargin01[0]);
         check(std::abs(loop.authorityMargin01[0] - 0.2) < 0.05,
               "authority margin reports the measured delivered/demanded ratio");
+    }
+
+    // ---- 1d. Three-loop cascade (Jackson Fig. 6) ----
+    {
+        NavigationBlock nav = makeNav();
+        SensorBlock sensor = makeSensor();
+        sensor.accelY = {2.0};                  // 20% of the 10 m/s^2 maneuver
+        sensor.accelZ = {9.80665};              // Z channel at gravity trim
+        GuidanceBlock g = makeGuidance(10.0);
+        ControlBlock tl = makeControl();
+        tl.threeLoopEnabled = {true};
+        tl.kAccelErrP = {4.5};                  // Ka (accel error -> rate command)
+        tl.kIntegralPitch = {14.3};             // Ki (rate-loop integral)
+        tl.kIntegralYaw = {14.3};
+        tl.integralClampRad = {1.0};
+        for (int k = 0; k < 100; ++k) run(nav, sensor, g, tl, dt);
+        check(tl.rateCommandYaw[0] > 0.0,
+              "three-loop commands nose-right rate for a positive Y accel error");
+        check(std::abs(tl.rateCommandPitch[0]) < 1e-2,
+              "three-loop pitch rate command is zero at Z trim");
+        check(tl.yawIntegral[0] > 0.0,
+              "three-loop inner integral accumulates on the rate error");
+        check(std::abs(tl.accelErrYaw[0]) < 1e-9 && std::abs(tl.accelErrPitch[0]) < 1e-9,
+              "three-loop path bypasses the legacy direct-force trim");
     }
 
     // ---- 2. Control-effectiveness scheduling scales the feed-forward ----

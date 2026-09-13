@@ -34,9 +34,17 @@ namespace StrikeEngine::Kernel {
         // acceleration loop). Cancels feed-forward gain error, q-schedule
         // error and aero cross-coupling; the inner rate loop remains the gyro
         // damping terms. <0 = use the vehicle's scheduled feed-forward gain
-        // (default, closes the loop with unity declared effectiveness),
-        // 0 = disabled, >0 = explicit rad per (m/s^2).
+        // (auto), 0 = disabled, >0 = explicit rad per (m/s^2). In three-loop
+        // mode this field is the outer gain Ka: acceleration error -> body-rate
+        // command.
         double kAccelErrP = -1.0;
+        // Three-loop cascade (Jackson, JHU APL Tech Digest 29(1), Fig. 6):
+        //   q_cmd = Ka * (a_cmd - a_meas)
+        //   I     = Ki * integral(q_cmd - q) dt
+        //   delta = trim_ff + I - Kr * q
+        // Off = legacy direct-fin law (feed-forward + damping + optional
+        // specific-force error trim). Scenarios enable this as they are tuned.
+        bool autopilotThreeLoopEnabled = false;
         // Control effectiveness shape: eff = clamp(base + slope*M + quad*M^2).
         bool   controlEffectivenessEnabled = false;
         double controlEffBase = 1.0;
