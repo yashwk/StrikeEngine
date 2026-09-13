@@ -571,7 +571,9 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     const double cEl = std::cos(mElevation), sEl = std::sin(mElevation);
                     const double cAz = std::cos(mAzimuth), sAz = std::sin(mAzimuth);
                     const glm::dvec3 losBody(cEl * cAz, cEl * sAz, -sEl);
-                    const glm::dquat estQ(nav.estQw[i], nav.estQx[i], nav.estQy[i], nav.estQz[i]);
+                    const glm::dquat estQ = (i < nav.estQw.size())
+                        ? glm::dquat(nav.estQw[i], nav.estQx[i], nav.estQy[i], nav.estQz[i])
+                        : glm::dquat(1.0, 0.0, 0.0, 0.0);
                     const glm::dvec3 losWorldNow = estQ * losBody;
                     if (i < seeker.hasPrevLosWorld.size() && seeker.hasPrevLosWorld[i] && stepDt > 0.0) {
                         const glm::dvec3 prev(seeker.prevLosWorldX[i], seeker.prevLosWorldY[i], seeker.prevLosWorldZ[i]);
@@ -587,7 +589,6 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     seeker.prevLosWorldZ[i] = losWorldNow.z;
                     if (i < seeker.hasPrevLosWorld.size()) seeker.hasPrevLosWorld[i] = true;
                 }
-                if (i == 2) std::fprintf(stderr, "[ct] commitTrack fired\n");
                 seeker.lockActive[i] = true;
                 seeker.lockedTargetId[i] = target;
                 seeker.previousAzimuth[i] = mAzimuth;

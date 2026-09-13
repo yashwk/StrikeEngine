@@ -40,6 +40,14 @@ namespace StrikeEngine::Kernel {
         // -1 = unknown identity (track is still maintained on state only).
         std::int64_t targetId = -1;
 
+        // Seed the persistent target track from this command's target state.
+        // Default true (legacy: commands launch/refresh tracks). Per-step
+        // external demand commands (e.g. an app-side guidance override) MUST
+        // set this false: re-seeding every step pins the track to the
+        // command's aim state, which starves the terminal chain's
+        // seeker/track fusion of measurements.
+        bool seedTrack = true;
+
         // Optional cooperative-datalink re-targeting. When
         // updateDatalink is true, the command also rewires which source
         // entity's persistent track steers this entity's midcourse PN

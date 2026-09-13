@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 
 using namespace StrikeEngine::Kernel;
@@ -90,6 +91,8 @@ double quatAngleError(const NavigationBlock& nav)
 int main()
 {
     std::printf("=== navigation_aiding_test ===\n");
+    std::error_code ec;
+    std::filesystem::create_directories("/tmp/opencode", ec);
 
     // ---- 1. Barometer bounds the vertical channel ----
     {

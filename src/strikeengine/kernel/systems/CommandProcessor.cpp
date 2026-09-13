@@ -51,12 +51,8 @@ namespace StrikeEngine::Kernel {
             }
 
             // An external command seeds (or refreshes) the persistent
-            // target track. Identity comes from cmd.targetId when provided;
-            // the state machines then purges/fuses seeker measurements. The
-            // seed policy controls whether a live measurement track is
-            // overwritten: 0 = legacy clobber, 1 = init-only (no active
-            // track), 2 = refresh when not measurement-maintained.
-            if (id < tracks.size) {
+            // target track (unless seedTrack is false — see SimulationCommand).
+            if (cmd.seedTrack && id < tracks.size) {
                 const int seedPolicy = id < tracks.seedPolicy.size()
                     ? tracks.seedPolicy[id] : 0;
                 const TrackState ts = tracks.state[id];
