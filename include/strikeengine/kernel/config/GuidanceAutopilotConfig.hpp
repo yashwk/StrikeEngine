@@ -30,6 +30,13 @@ namespace StrikeEngine::Kernel {
         double kIntegralPitch = 0.0;        // rad per (m/s^2 * s)
         double kIntegralYaw = 0.0;
         double integralClampRad = 0.05;
+        // Proportional trim on the measured specific-force error (outer
+        // acceleration loop). Cancels feed-forward gain error, q-schedule
+        // error and aero cross-coupling; the inner rate loop remains the gyro
+        // damping terms. <0 = use the vehicle's scheduled feed-forward gain
+        // (default, closes the loop with unity declared effectiveness),
+        // 0 = disabled, >0 = explicit rad per (m/s^2).
+        double kAccelErrP = -1.0;
         // Control effectiveness shape: eff = clamp(base + slope*M + quad*M^2).
         bool   controlEffectivenessEnabled = false;
         double controlEffBase = 1.0;

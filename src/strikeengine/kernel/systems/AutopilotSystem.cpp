@@ -81,6 +81,13 @@ namespace StrikeEngine::Kernel {
             control.minDynamicPressurePa.resize(nav.size, 2000.0);
             control.maxDynamicPressurePa.resize(nav.size, 300000.0);
         }
+        if (control.kAccelErrP.size() < nav.size) {
+            control.kAccelErrP.resize(nav.size, -1.0);
+            control.accelErrPitch.resize(nav.size, 0.0);
+            control.accelErrYaw.resize(nav.size, 0.0);
+            control.achievedSpecificForceY.resize(nav.size, 0.0);
+            control.achievedSpecificForceZ.resize(nav.size, 0.0);
+        }
 
         for (std::size_t i = 0; i < nav.size; ++i) {
             if (!status.isAlive[i]) continue;
@@ -221,10 +228,11 @@ namespace StrikeEngine::Kernel {
         // (negative wy / fin); positive body-Y force requires nose-right
         // (positive wz / fin). The signs below match AeroModel's documented
         // X-forward/Y-right/Z-down convention.
-        const double pitchFeedForward = std::clamp(
-            -effectiveKAccel * azSpecificCmd, -0.35, 0.35);
-        const double yawFeedForward = std::clamp(
-            effectiveKAccel * aySpecificCmd, -0.35, 0.35);
+        constexpr double kTrimLimit = 0.35;
+        const double pitchFeedForwardRaw = -effectiveKAccel * azSpecificCmd;
+        const double yawFeedForwardRaw = effectiveKAccel * aySpecificCmd;
+        const double pitchFeedForward = std::clamp(pitchFeedForwardRaw, -kTrimLimit, kTrimLimit);
+        const double yawFeedForward = std::clamp(yawFeedForwardRaw, -kTrimLimit, kTrimLimit);
         const double pitchAoaDamping = std::clamp(
             -control.kAlphaP[id] * alpha * dampScale, -0.15, 0.15);
         const double yawAoaDamping = std::clamp(
@@ -259,14 +267,10 @@ namespace StrikeEngine::Kernel {
             const double errPitch = azSpecificCmd - sensor.accelZ[id];
             const double errYaw = aySpecificCmd - sensor.accelY[id];
             if (!control.pitchSaturated[id]) {
-                // NOTE: sign convention bug (known): pitchFeedForward is
-                // written as -k*azCmd (positive body-Z demand needs a negative
-                // pitch fin), so a correct integrator must accumulate with the
-                // opposite sign of errPitch. Fixing it changes every
-                // integral-enabled vehicle (e.g. the BVR mothership) and
-                // regresses the tuned scenarios; kept as-is pending a
-                // coordinated retune. See AGENT_HANDOFF.
-                pitchIntegral += control.kIntegralPitch[id] * errPitch * dt;
+                // Same sign convention as pitchFeedForward: positive body-Z
+                // specific force (down) needs a NEGATIVE pitch fin, so the
+                // integrator accumulates with the opposite sign of errPitch.
+                pitchIntegral -= control.kIntegralPitch[id] * errPitch * dt;
             }
             if (!control.yawSaturated[id]) {
                 yawIntegral += control.kIntegralYaw[id] * errYaw * dt;
@@ -280,8 +284,45 @@ namespace StrikeEngine::Kernel {
         control.pitchIntegral[id] = pitchIntegral;
         control.yawIntegral[id] = yawIntegral;
 
-        double pitchDeflection = pitchFeedForward + pitchRateDampingOut + pitchAoaDamping + pitchIntegral;
-        double yawDeflection   = yawGate * yawFeedForward + yawRateDampingOut + yawAoaDamping + yawIntegral;
+        // 5b. Proportional acceleration-error trim (outer acceleration loop).
+        //     Closes the loop on the measured body specific force so
+        //     feed-forward gain error, q-schedule error and aero cross-coupling
+        //     cannot hold a steady acceleration error. The gain defaults to the
+        //     vehicle's declared plant inversion (effectiveKAccel); positive
+        //     values override it and 0 disables the loop. The filtered
+        //     measured force also feeds the authority margin.
+        double pitchErrP = 0.0;
+        double yawErrP = 0.0;
+        double achievedY = 0.0;
+        double achievedZ = 0.0;
+        if (id < control.achievedSpecificForceY.size() &&
+            id < control.achievedSpecificForceZ.size() &&
+            id < sensor.accelY.size() && id < sensor.accelZ.size() &&
+            std::isfinite(sensor.accelY[id]) && std::isfinite(sensor.accelZ[id])) {
+            constexpr double kAccelFiltTauSec = 0.1;
+            const double blend = (dt > 0.0)
+                ? (1.0 - std::exp(-dt / kAccelFiltTauSec)) : 1.0;
+            double& ayFilt = control.achievedSpecificForceY[id];
+            double& azFilt = control.achievedSpecificForceZ[id];
+            ayFilt += blend * (sensor.accelY[id] - ayFilt);
+            azFilt += blend * (sensor.accelZ[id] - azFilt);
+            achievedY = ayFilt;
+            achievedZ = azFilt;
+
+            const double kErrCfg = valAt(control.kAccelErrP, id, -1.0);
+            const double kErr = (kErrCfg < 0.0) ? effectiveKAccel : kErrCfg;
+            if (kErr > 0.0) {
+                const double errZ = azSpecificCmd - sensor.accelZ[id];
+                const double errY = aySpecificCmd - sensor.accelY[id];
+                pitchErrP = std::clamp(-kErr * errZ, -kTrimLimit, kTrimLimit);
+                yawErrP   = std::clamp( kErr * errY, -kTrimLimit, kTrimLimit);
+            }
+        }
+
+        double pitchDeflection = pitchFeedForward + pitchRateDampingOut + pitchAoaDamping +
+                                 pitchIntegral + pitchErrP;
+        double yawDeflection   = yawGate * yawFeedForward + yawRateDampingOut + yawAoaDamping +
+                                 yawIntegral + yawGate * yawErrP;
 
         // 6. Roll stabilization: wings-level P-D, referenced to the local
         // gravity direction (attitude-independent). Roll is optionally
@@ -321,6 +362,10 @@ namespace StrikeEngine::Kernel {
             control.rateDampingYaw[id] = yawRateDampingOut;
             control.aoaDampingPitch[id] = pitchAoaDamping;
             control.aoaDampingYaw[id] = yawAoaDamping;
+            if (id < control.accelErrPitch.size()) {
+                control.accelErrPitch[id] = pitchErrP;
+                control.accelErrYaw[id] = yawErrP;
+            }
         }
         const double maxDeflection = control.maxDeflectionRad[id];
         const double pitchClamped = std::clamp(pitchDeflection, -maxDeflection, maxDeflection);
@@ -333,6 +378,22 @@ namespace StrikeEngine::Kernel {
             const double yMag = std::abs(yawDeflection);
             if (pMag > maxDeflection) margin = std::min(margin, maxDeflection / pMag);
             if (yMag > maxDeflection) margin = std::min(margin, maxDeflection / yMag);
+            // Measured authority on the MANEUVER component only: the trim
+            // specific force (gravity compensation) is common to demand and
+            // measurement, so comparing total specific force would mask a
+            // lateral-authority shortfall behind the trim term. Demand
+            // maneuver = body-frame guidance acceleration; achieved maneuver =
+            // filtered measured force plus the body gravity component
+            // (measured - trim). Data-independent.
+            const double manDemY = ayCmdB;
+            const double manDemZ = azCmdB;
+            const double manAchY = achievedY + gravityBy;
+            const double manAchZ = achievedZ + gravityBz;
+            const double demMag = std::sqrt(manDemY * manDemY + manDemZ * manDemZ);
+            const double achMag = std::sqrt(manAchY * manAchY + manAchZ * manAchZ);
+            if (demMag > 1.0) {
+                margin = std::min(margin, std::clamp(achMag / demMag, 0.0, 1.0));
+            }
             control.authorityMargin01[id] = std::clamp(margin, 0.0, 1.0);
         }
 

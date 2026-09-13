@@ -522,6 +522,7 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["kIntegralPitch"] = g.kIntegralPitch;
     j["kIntegralYaw"] = g.kIntegralYaw;
     j["integralClampRad"] = g.integralClampRad;
+    j["kAccelErrP"] = g.kAccelErrP;
     j["controlEffectivenessEnabled"] = g.controlEffectivenessEnabled;
     j["controlEffBase"] = g.controlEffBase;
     j["controlEffMachSlope"] = g.controlEffMachSlope;
@@ -604,6 +605,7 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.kIntegralPitch = j.value("kIntegralPitch", 0.0);
     g.kIntegralYaw = j.value("kIntegralYaw", 0.0);
     g.integralClampRad = j.value("integralClampRad", 0.05);
+    g.kAccelErrP = j.value("kAccelErrP", -1.0);
     g.controlEffectivenessEnabled = j.value("controlEffectivenessEnabled", false);
     g.controlEffBase = j.value("controlEffBase", 1.0);
     g.controlEffMachSlope = j.value("controlEffMachSlope", 0.0);

@@ -36,6 +36,11 @@ ControlBlock makeControl()
     c.scheduleAllTerms = {false};
     c.integralEnabled = {false};
     c.kIntegralPitch = {0.0}; c.kIntegralYaw = {0.0}; c.integralClampRad = {0.05};
+    // Legacy fixtures exercise the pre-acceleration-loop paths; the loop is
+    // covered by its own section below.
+    c.kAccelErrP = {0.0};
+    c.accelErrPitch = {0.0}; c.accelErrYaw = {0.0};
+    c.achievedSpecificForceY = {0.0}; c.achievedSpecificForceZ = {0.0};
     c.controlEffectivenessEnabled = {false};
     c.controlEffBase = {1.0}; c.controlEffMachSlope = {0.0}; c.controlEffMachQuad = {0.0};
     c.controlEffMin = {0.2}; c.controlEffMax = {5.0};
@@ -126,6 +131,45 @@ int main()
               "integral trim adds deflection toward the specific-force error");
         check(std::abs(integral.yawIntegral[0]) > 0.0,
               "integral state accumulates while the error persists");
+    }
+
+    // ---- 1b. Acceleration-error loop (outer loop, default auto gain) ----
+    {
+        NavigationBlock nav = makeNav();
+        SensorBlock sensor = makeSensor();      // measured force 0: lags the demand
+        sensor.accelZ = {9.80665};              // Z channel at gravity trim
+        GuidanceBlock g = makeGuidance(10.0);
+        ControlBlock off = makeControl();       // kAccelErrP = 0 (legacy law)
+        run(nav, sensor, g, off, dt);
+        ControlBlock loop = makeControl();
+        loop.kAccelErrP = {-1.0};               // auto = effectiveKAccel
+        run(nav, sensor, g, loop, dt);
+        check(std::abs(loop.yawCommand[0]) > std::abs(off.yawCommand[0]),
+              "acceleration loop adds deflection when the measured force trails the demand");
+        std::printf("  [info] effK=%.5f errYaw=%.4f errPitch=%.4f yawCmd=%.4f\n",
+                    loop.effectiveKAccel[0], loop.accelErrYaw[0], loop.accelErrPitch[0],
+                    loop.yawCommand[0]);
+        check(loop.accelErrYaw[0] > 0.0 && loop.accelErrPitch[0] == 0.0,
+              "acceleration-loop trim follows the demand sign convention");
+        check(loop.kAccelErrP[0] == -1.0,
+              "acceleration-loop gain keeps its auto sentinel");
+    }
+
+    // ---- 1c. Authority margin tracks measured delivery ----
+    {
+        NavigationBlock nav = makeNav();
+        SensorBlock sensor = makeSensor();
+        sensor.accelY = {2.0};                  // 20% of the 10 m/s^2 maneuver demand
+        sensor.accelZ = {9.80665};              // Z channel at gravity trim
+        GuidanceBlock g = makeGuidance(10.0);
+        ControlBlock loop = makeControl();
+        loop.kAccelErrP = {-1.0};
+        for (int k = 0; k < 100; ++k) run(nav, sensor, g, loop, dt);
+        std::printf("  [info] achY=%.4f achZ=%.4f margin=%.4f\n",
+                    loop.achievedSpecificForceY[0], loop.achievedSpecificForceZ[0],
+                    loop.authorityMargin01[0]);
+        check(std::abs(loop.authorityMargin01[0] - 0.2) < 0.05,
+              "authority margin reports the measured delivered/demanded ratio");
     }
 
     // ---- 2. Control-effectiveness scheduling scales the feed-forward ----

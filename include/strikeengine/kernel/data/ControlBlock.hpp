@@ -34,6 +34,7 @@ struct ControlBlock {
 	std::vector<double> kIntegralPitch;
 	std::vector<double> kIntegralYaw;
 	std::vector<double> integralClampRad;
+	std::vector<double> kAccelErrP;
 	std::vector<bool>   controlEffectivenessEnabled;
 	std::vector<double> controlEffBase;
 	std::vector<double> controlEffMachSlope;
@@ -67,6 +68,10 @@ struct ControlBlock {
 	std::vector<double> rateDampingYaw;
 	std::vector<double> aoaDampingPitch;
 	std::vector<double> aoaDampingYaw;
+	std::vector<double> accelErrPitch;          // demand breakdown (rad)
+	std::vector<double> accelErrYaw;
+	std::vector<double> achievedSpecificForceY; // filtered body specific force
+	std::vector<double> achievedSpecificForceZ;
 	std::vector<double> authorityMargin01;      // delivered/demanded fin, <= 1
 
 	// True when the commanded deflection hit the fin clamp.

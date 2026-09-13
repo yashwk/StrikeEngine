@@ -287,6 +287,7 @@ namespace StrikeEngine::Kernel {
             controlBlock.kIntegralPitch.push_back(0.0);
             controlBlock.kIntegralYaw.push_back(0.0);
             controlBlock.integralClampRad.push_back(0.05);
+            controlBlock.kAccelErrP.push_back(-1.0);
             controlBlock.controlEffectivenessEnabled.push_back(false);
             controlBlock.controlEffBase.push_back(1.0);
             controlBlock.controlEffMachSlope.push_back(0.0);
@@ -316,6 +317,10 @@ namespace StrikeEngine::Kernel {
             controlBlock.rateDampingYaw.push_back(0.0);
             controlBlock.aoaDampingPitch.push_back(0.0);
             controlBlock.aoaDampingYaw.push_back(0.0);
+            controlBlock.accelErrPitch.push_back(0.0);
+            controlBlock.accelErrYaw.push_back(0.0);
+            controlBlock.achievedSpecificForceY.push_back(0.0);
+            controlBlock.achievedSpecificForceZ.push_back(0.0);
             controlBlock.authorityMargin01.push_back(1.0);
             controlBlock.pitchSaturated.push_back(false);
             controlBlock.yawSaturated.push_back(false);
@@ -575,6 +580,7 @@ namespace StrikeEngine::Kernel {
         controlBlock.kIntegralPitch[id] = resolved.guidanceAutopilot.kIntegralPitch;
         controlBlock.kIntegralYaw[id] = resolved.guidanceAutopilot.kIntegralYaw;
         controlBlock.integralClampRad[id] = resolved.guidanceAutopilot.integralClampRad;
+        controlBlock.kAccelErrP[id] = resolved.guidanceAutopilot.kAccelErrP;
         controlBlock.controlEffectivenessEnabled[id] = resolved.guidanceAutopilot.controlEffectivenessEnabled;
         controlBlock.controlEffBase[id] = resolved.guidanceAutopilot.controlEffBase;
         controlBlock.controlEffMachSlope[id] = resolved.guidanceAutopilot.controlEffMachSlope;
@@ -604,6 +610,10 @@ namespace StrikeEngine::Kernel {
         controlBlock.rateDampingYaw[id] = 0.0;
         controlBlock.aoaDampingPitch[id] = 0.0;
         controlBlock.aoaDampingYaw[id] = 0.0;
+        controlBlock.accelErrPitch[id] = 0.0;
+        controlBlock.accelErrYaw[id] = 0.0;
+        controlBlock.achievedSpecificForceY[id] = 0.0;
+        controlBlock.achievedSpecificForceZ[id] = 0.0;
         controlBlock.authorityMargin01[id] = 1.0;
         physicsBlock.maxDeflectionRad[id] = resolved.guidanceAutopilot.maxDeflectionRad;
         physicsBlock.servoTimeConstantSec[id] = resolved.guidanceAutopilot.servoTimeConstantSec;

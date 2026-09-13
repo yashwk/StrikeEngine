@@ -70,6 +70,7 @@ int main() {
         cfg.guidanceAutopilot.waypointGain = 10.0;
         cfg.guidanceAutopilot.maxDeflectionRad = 0.1;
         cfg.guidanceAutopilot.kAccelP = 0.045;
+        cfg.guidanceAutopilot.kAccelErrP = 0.0;
         const auto id = kernel.createVehicle(makeInit(), cfg);
 
         check(kernel.getGuidance().navigationConstant[id] == 5.0,
@@ -127,6 +128,7 @@ int main() {
         VehicleConfig cfg1;
         cfg1.guidanceAutopilot.gainSchedulingEnabled = false;
         cfg1.guidanceAutopilot.kAccelP = 0.030;
+        cfg1.guidanceAutopilot.kAccelErrP = 0.0;
         cfg1.guidanceAutopilot.maxDeflectionRad = 0.40;
         auto init1 = makeInit();
         init1.px = 0.0; init1.py = 0.0; init1.pz = 100.0; // sea level (dense air, rho~1.21)
@@ -140,6 +142,7 @@ int main() {
         cfg2.guidanceAutopilot.minDynamicPressurePa = 2000.0;
         cfg2.guidanceAutopilot.maxDynamicPressurePa = 300000.0;
         cfg2.guidanceAutopilot.kAccelP = 0.030;
+        cfg2.guidanceAutopilot.kAccelErrP = 0.0;
         cfg2.guidanceAutopilot.maxDeflectionRad = 0.40;
         auto init2 = makeInit();
         init2.px = 0.0; init2.py = 0.0; init2.pz = 100.0;
