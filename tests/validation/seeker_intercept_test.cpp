@@ -104,6 +104,9 @@ VehicleConfig makeInterceptorConfig(const std::string& srcDir)
     cfg.guidanceAutopilot.kRollD = 0.05;
     // W36 phase manager: 0.5 s acquisition->terminal blend.
     cfg.guidanceAutopilot.handoffBlendTimeSec = 0.5;
+    // This test validates the seeker/guidance chain; the optional outer
+    // acceleration loop is exercised by autopilot_fidelity.
+    cfg.guidanceAutopilot.kAccelErrP = 0.0;
     return cfg;
 }
 
