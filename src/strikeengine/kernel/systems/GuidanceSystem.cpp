@@ -616,6 +616,64 @@ namespace StrikeEngine::Kernel {
                 out.valid = false;
                 return out;
             }
+
+            // Predictor-based terminal (terminalLaw == 2, opt-in): command PN
+            // toward the KF-smoothed track's predicted intercept point instead
+            // of differentiated seeker rates. The seeker-rate law limit-cycles
+            // at high closing speed (demand sign flips ~1 Hz); the track PIP
+            // geometry is smooth and delay-free, giving the terminal loop a
+            // designed phase margin. Falls back to the legacy seeker-rate law
+            // whenever the predictor or track is unusable.
+            if (id < guidance.terminalLaw.size() && guidance.terminalLaw[id] == 2 &&
+                tracks && id < tracks->size && tracks->active(id) &&
+                tracks->updateCount[id] > 0)
+            {
+                const Models::Vec3 ownP{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
+                const Models::Vec3 ownV{nav.estVx[id], nav.estVy[id], nav.estVz[id]};
+                const Models::Vec3 tgtP{tracks->posX[id], tracks->posY[id], tracks->posZ[id]};
+                const Models::Vec3 tgtV{tracks->velX[id], tracks->velY[id], tracks->velZ[id]};
+                bool accelAvail = id < tracks->accelAvailable.size() &&
+                                  tracks->accelAvailable[id];
+                Models::Vec3 tgtA{0.0, 0.0, 0.0};
+                if (accelAvail && !isFinite3(tracks->accelX[id], tracks->accelY[id], tracks->accelZ[id]))
+                    accelAvail = false;
+                if (accelAvail) tgtA = {tracks->accelX[id], tracks->accelY[id], tracks->accelZ[id]};
+                Models::Vec3 ownA{0.0, 0.0, 0.0};
+                bool ownAccelAvail = false;
+                if (id < nav.estAx.size() && id < nav.estAy.size() && id < nav.estAz.size()) {
+                    ownA = {nav.estAx[id], nav.estAy[id], nav.estAz[id]};
+                    ownAccelAvail = isFinite3(ownA[0], ownA[1], ownA[2]);
+                }
+                const double minSpeed = (id < guidance.trajectoryMinSpeedMps.size())
+                    ? guidance.trajectoryMinSpeedMps[id] : 30.0;
+                const Models::InterceptResult pred = Models::predictIntercept(
+                    ownP, ownV, tgtP, tgtV, tgtA, accelAvail, N, minSpeed, ownA, ownAccelAvail);
+                if (pred.valid) {
+                    const Models::Vec3 rPip = Models::vec3Sub(pred.pip, ownP);
+                    const Models::Vec3 vClose = {
+                        (tgtV[0] + (accelAvail ? tgtA[0] : 0.0) * pred.tgoSec) - ownV[0],
+                        (tgtV[1] + (accelAvail ? tgtA[1] : 0.0) * pred.tgoSec) - ownV[1],
+                        (tgtV[2] + (accelAvail ? tgtA[2] : 0.0) * pred.tgoSec) - ownV[2]};
+                    const Models::GuidanceSolution sol = Models::proportionalNavigation(rPip, vClose, N);
+                    if (sol.valid) {
+                        if (id < guidance.predictedInterceptX.size()) {
+                            guidance.predictedInterceptX[id] = pred.pip[0];
+                            guidance.predictedInterceptY[id] = pred.pip[1];
+                            guidance.predictedInterceptZ[id] = pred.pip[2];
+                            guidance.predictedTgoSec[id] = pred.tgoSec;
+                        }
+                        if (id < guidance.closingSpeed.size())
+                            guidance.closingSpeed[id] = sol.closingSpeed;
+                        out.ax = sol.acceleration[0];
+                        out.ay = sol.acceleration[1];
+                        out.az = sol.acceleration[2];
+                        out.tgoSec = pred.tgoSec;
+                        return out;
+                    }
+                }
+                // Predictor unusable this step: fall through to the legacy
+                // seeker-rate law below.
+            }
             const double vc = std::max(std::abs(rangeRate), 1.0);
             const double dAz = seeker.targetAzimuthRate[id];
             const double dEl = seeker.targetElevationRate[id];
