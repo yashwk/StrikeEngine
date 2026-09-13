@@ -4,12 +4,14 @@
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/data/GuidanceBlock.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
+#include <strikeengine/kernel/config/VehicleInitState.hpp>
 
 namespace StrikeEngine::Kernel {
+
+    class SimulationKernel;  // loadInto body lives in ConfigSerialization.cpp
 
     // Represents an initial state and configuration for an entity in a scenario
     struct ScenarioEntityConfig {
@@ -45,6 +47,37 @@ namespace StrikeEngine::Kernel {
         // Optional target identity for the persistent track; -1 unknown
         // (the seeker supplies identity once it locks).
         std::int64_t initialTargetId = -1;
+
+        // Data-driven rail launch. When enabled, loadInto does NOT create
+        // the entity; the kernel spawns it in-flight when the parent's
+        // seeker has held lock for lockHoldSec and the parent->target slant
+        // range is inside rangeGateM (0 = no gate, targetIndex -1 = any
+        // lock). Spawn geometry models carriage release: parent position
+        // shifted dropM along local up, parent velocity minus pushMps along
+        // local up, parent attitude, zero body rates. This replaces
+        // app-side hardcoded launch directors: the scenario file fully
+        // declares the mission.
+        struct LaunchSpec {
+            bool enabled = false;
+            std::size_t parentIndex = 0;
+            std::int64_t targetIndex = -1;
+            double dropM = 0.0;
+            double pushMps = 0.0;
+            double lockHoldSec = 0.0;
+            double rangeGateM = 0.0;
+            // Separation flyout phase (0 = off): after spawn, hold a
+            // straight-ahead Waypoint (aim = spawn position + spawn
+            // velocity direction * flyoutAheadM + local up * flyoutClimbM)
+            // for flyoutSec, then switch to the entity's initial guidance
+            // command seeded from the parent's relayed datalink track. This
+            // is the booster-separation phase of a rail launch: the round
+            // flies clean while the motor lights and the datalink solution
+            // refines before homing starts.
+            double flyoutSec = 0.0;
+            double flyoutAheadM = 6000.0;
+            double flyoutClimbM = 0.0;
+        };
+        LaunchSpec launch;
     };
 
     struct ScenarioConfig {
@@ -72,39 +105,7 @@ namespace StrikeEngine::Kernel {
         static ScenarioConfig load(const std::string& path);
 
         // Apply this scenario to the given kernel
-        void loadInto(SimulationKernel& kernel) const {
-            kernel.reset();
-            kernel.setEnvironment(environment);
-
-            for (const auto& entityCfg : entities) {
-                PhysicsId id = kernel.createVehicle(
-                    entityCfg.initState, entityCfg.vehicleConfig);
-                
-                if (entityCfg.initialGuidanceMode != GuidanceMode::None) {
-                    SimulationCommand cmd;
-                    cmd.entityId = id;
-                    cmd.mode = entityCfg.initialGuidanceMode;
-                    cmd.targetX = entityCfg.initialTargetX;
-                    cmd.targetY = entityCfg.initialTargetY;
-                    cmd.targetZ = entityCfg.initialTargetZ;
-                    cmd.targetVx = entityCfg.initialTargetVx;
-                    cmd.targetVy = entityCfg.initialTargetVy;
-                    cmd.targetVz = entityCfg.initialTargetVz;
-                    cmd.maxAccel = entityCfg.initialMaxAccel;
-                    cmd.targetAccelX = entityCfg.initialTargetAccelX;
-                    cmd.targetAccelY = entityCfg.initialTargetAccelY;
-                    cmd.targetAccelZ = entityCfg.initialTargetAccelZ;
-                    cmd.targetAccelAvailable = entityCfg.initialTargetAccelAvailable;
-                    cmd.targetId = entityCfg.initialTargetId;
-                    kernel.queueCommand(cmd);
-                }
-            }
-
-            // Single fan-out point: the scenario seed becomes the kernel
-            // seed, which setRandomSeed copies into every stochastic system
-            // inside (sensor, nav alignment, split warhead streams).
-            kernel.setRandomSeed(randomSeed);
-        }
+        void loadInto(SimulationKernel& kernel) const;
     };
 
 } // namespace StrikeEngine::Kernel

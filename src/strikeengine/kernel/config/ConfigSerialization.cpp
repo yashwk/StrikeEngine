@@ -1,4 +1,5 @@
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
+#include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/SeekerTypeStrings.hpp>
 
 #include <nlohmann/json.hpp>
@@ -993,6 +994,22 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
     if (e.initialTargetId >= 0) {
         j["initial_target_id"] = e.initialTargetId;
     }
+    // Rail-launch spec (optional; omitted entirely when disabled so legacy
+    // scenario files stay byte-stable).
+    if (e.launch.enabled) {
+        j["launch"] = {
+            {"enabled", true},
+            {"parentIndex", e.launch.parentIndex},
+            {"targetIndex", e.launch.targetIndex},
+            {"dropM", e.launch.dropM},
+            {"pushMps", e.launch.pushMps},
+            {"lockHoldSec", e.launch.lockHoldSec},
+            {"rangeGateM", e.launch.rangeGateM},
+            {"flyoutSec", e.launch.flyoutSec},
+            {"flyoutAheadM", e.launch.flyoutAheadM},
+            {"flyoutClimbM", e.launch.flyoutClimbM},
+        };
+    }
 }
 
 void from_json(const json& j, ScenarioEntityConfig& e) {
@@ -1014,6 +1031,20 @@ void from_json(const json& j, ScenarioEntityConfig& e) {
     e.initialTargetId = j.value("initial_target_id", static_cast<std::int64_t>(-1));
 
     e.designRef = j.value("design_ref", std::string(""));
+    // Rail-launch spec (optional; legacy scenario files omit it).
+    if (j.contains("launch")) {
+        const auto& jl = j.at("launch");
+        e.launch.enabled = jl.value("enabled", false);
+        e.launch.parentIndex = jl.value("parentIndex", std::size_t{0});
+        e.launch.targetIndex = jl.value("targetIndex", static_cast<std::int64_t>(-1));
+        e.launch.dropM = jl.value("dropM", 0.0);
+        e.launch.pushMps = jl.value("pushMps", 0.0);
+        e.launch.lockHoldSec = jl.value("lockHoldSec", 0.0);
+        e.launch.rangeGateM = jl.value("rangeGateM", 0.0);
+        e.launch.flyoutSec = jl.value("flyoutSec", 0.0);
+        e.launch.flyoutAheadM = jl.value("flyoutAheadM", 6000.0);
+        e.launch.flyoutClimbM = jl.value("flyoutClimbM", 0.0);
+    }
     if (!e.designRef.empty()) {
         // A design file overrides any inline vehicle config.
         e.vehicleConfig = loadDesignPhysics(e.designRef);
@@ -1039,6 +1070,46 @@ void from_json(const json& j, ScenarioConfig& s) {
     s.primaryEntityIndex = j.at("primary_entity_index").get<std::size_t>();
     s.randomSeed = j.value("random_seed", 0xDEADBEEFu);
     s.entities = j.at("entities").get<std::vector<ScenarioEntityConfig>>();
+}
+
+void ScenarioConfig::loadInto(SimulationKernel& kernel) const {
+    kernel.reset();
+    kernel.setEnvironment(environment);
+
+    for (const auto& entityCfg : entities) {
+        // Rail-launched entities are held by the kernel and spawned
+        // in-flight when their launch conditions are met.
+        if (entityCfg.launch.enabled) {
+            kernel.addPendingLaunch(entityCfg);
+            continue;
+        }
+        PhysicsId id = kernel.createVehicle(
+            entityCfg.initState, entityCfg.vehicleConfig);
+
+        if (entityCfg.initialGuidanceMode != GuidanceMode::None) {
+            SimulationCommand cmd;
+            cmd.entityId = id;
+            cmd.mode = entityCfg.initialGuidanceMode;
+            cmd.targetX = entityCfg.initialTargetX;
+            cmd.targetY = entityCfg.initialTargetY;
+            cmd.targetZ = entityCfg.initialTargetZ;
+            cmd.targetVx = entityCfg.initialTargetVx;
+            cmd.targetVy = entityCfg.initialTargetVy;
+            cmd.targetVz = entityCfg.initialTargetVz;
+            cmd.maxAccel = entityCfg.initialMaxAccel;
+            cmd.targetAccelX = entityCfg.initialTargetAccelX;
+            cmd.targetAccelY = entityCfg.initialTargetAccelY;
+            cmd.targetAccelZ = entityCfg.initialTargetAccelZ;
+            cmd.targetAccelAvailable = entityCfg.initialTargetAccelAvailable;
+            cmd.targetId = entityCfg.initialTargetId;
+            kernel.queueCommand(cmd);
+        }
+    }
+
+    // Single fan-out point: the scenario seed becomes the kernel
+    // seed, which setRandomSeed copies into every stochastic system
+    // inside (sensor, nav alignment, split warhead streams).
+    kernel.setRandomSeed(randomSeed);
 }
 
 // ---------------------------------------------------------------------------

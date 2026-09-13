@@ -29,6 +29,9 @@ namespace StrikeEngine::Kernel {
             guidance.targetVy[id] = cmd.targetVy;
             guidance.targetVz[id] = cmd.targetVz;
             guidance.maxAccel[id] = cmd.maxAccel;
+            if (cmd.waypointGain > 0.0 && id < guidance.waypointGain.size()) {
+                guidance.waypointGain[id] = cmd.waypointGain;
+            }
             guidance.targetAccelX[id] = cmd.targetAccelX;
             guidance.targetAccelY[id] = cmd.targetAccelY;
             guidance.targetAccelZ[id] = cmd.targetAccelZ;

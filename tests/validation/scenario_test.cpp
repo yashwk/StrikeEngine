@@ -1,3 +1,4 @@
+#include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/ScenarioConfig.hpp>
 #include <strikeengine/simulation/BatchRunner.hpp>
 

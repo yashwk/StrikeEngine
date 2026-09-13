@@ -66,58 +66,59 @@ int main()
     };
 
     PhysicsBlock physics;
+    NavigationBlock nav;
     EntityStatusBlock status;
     SeekerBlock seeker;
     makeBlocks(physics, status, seeker);
     SeekerSystem system;
 
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(seeker.isLocked[0] && seeker.lockedTargetId[0] == 1,
           "front target is acquired");
 
     physics.px[1] = -100.0;
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(!seeker.isLocked[0], "target behind the seeker is rejected by the FOV");
 
     physics.px[1] = 100.0;
     physics.py[1] = 100.0 * std::tan(50.0 * pi / 180.0);
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(!seeker.isLocked[0], "target outside the FOV cone is rejected");
 
     seeker.fieldOfViewHalfAngleRad[0] = pi / 2.0;
     seeker.gimbalAzimuthLimitRad[0] = 30.0 * pi / 180.0;
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(!seeker.isLocked[0], "target beyond the azimuth gimbal stop is rejected");
 
     physics.py[1] = 0.0;
     seeker.fieldOfViewHalfAngleRad[0] = pi / 4.0;
     seeker.gimbalAzimuthLimitRad[0] = pi / 3.0;
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(seeker.isLocked[0], "target is reacquired inside seeker limits");
 
     physics.py[1] = 20.0;
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(seeker.targetAzimuthRate[0] > 0.0,
           "tracked azimuth produces a positive filtered LOS rate");
 
     seeker.measurementLatencySec[0] = 0.05;
     const double publishedAzimuth = seeker.targetAzimuth[0];
     physics.py[1] = 30.0;
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(std::abs(seeker.targetAzimuth[0] - publishedAzimuth) < 1e-12,
           "configured seeker latency delays the new angle measurement");
-    for (int step = 0; step < 5; ++step) system.update(physics, status, seeker, 0.01);
+    for (int step = 0; step < 5; ++step) system.update(physics, status, seeker, nav, 0.01);
     check(seeker.targetAzimuth[0] > 0.0,
           "delayed seeker measurement becomes available after its latency");
 
     seeker.noiseFloorW[0] = 3.0e-3; // below acquisition SNR, above hold SNR
-    system.update(physics, status, seeker, 0.01);
+    system.update(physics, status, seeker, nav, 0.01);
     check(seeker.isLocked[0] && seeker.lockLostTimeSec[0] > 0.0,
           "same-target lock is held through a short signal dropout");
 
     seeker.noiseFloorW[0] = 1.0e-1;
-    system.update(physics, status, seeker, 0.06);
-    system.update(physics, status, seeker, 0.06);
+    system.update(physics, status, seeker, nav, 0.06);
+    system.update(physics, status, seeker, nav, 0.06);
     check(!seeker.isLocked[0], "lock is released after the dropout timeout");
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

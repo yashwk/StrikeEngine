@@ -1,4 +1,5 @@
 #include <strikeengine/simulation/BatchRunner.hpp>
+#include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/simulation/Reporting.hpp>
 
 #include <algorithm>

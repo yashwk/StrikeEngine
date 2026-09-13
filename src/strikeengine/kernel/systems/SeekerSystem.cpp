@@ -49,6 +49,13 @@ void ensureState(SeekerBlock& s, std::size_t n)
     rdouble(s.lastSignalStrength, 0.0);
     rint(s.lockRejectReason, 0);
     rdouble(s.glintAzM, 0.0);
+    rdouble(s.targetLosRateWorldX, 0.0);
+    rdouble(s.targetLosRateWorldY, 0.0);
+    rdouble(s.targetLosRateWorldZ, 0.0);
+    rdouble(s.prevLosWorldX, 0.0);
+    rdouble(s.prevLosWorldY, 0.0);
+    rdouble(s.prevLosWorldZ, 0.0);
+    if (s.hasPrevLosWorld.size() < n) s.hasPrevLosWorld.resize(n, false);
     rdouble(s.glintElM, 0.0);
 }
 
@@ -136,6 +143,7 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
         const PhysicsBlock& physics,
         const EntityStatusBlock& status,
         SeekerBlock& seeker,
+        const NavigationBlock& nav,
         double dt,
         const EnvironmentConfig& environment)
     {
@@ -173,6 +181,10 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                 seeker.targetElevationRate[i] = 0.0;
                 seeker.glintAzM[i] = 0.0;
                 seeker.glintElM[i] = 0.0;
+                if (i < seeker.targetLosRateWorldX.size()) seeker.targetLosRateWorldX[i] = 0.0;
+                if (i < seeker.targetLosRateWorldY.size()) seeker.targetLosRateWorldY[i] = 0.0;
+                if (i < seeker.targetLosRateWorldZ.size()) seeker.targetLosRateWorldZ[i] = 0.0;
+                if (i < seeker.hasPrevLosWorld.size()) seeker.hasPrevLosWorld[i] = false;
             };
 
             if (!physics.active[i] || !status.isAlive[i] ||
@@ -548,6 +560,34 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     seeker.glintAzM[i] = 0.0;
                     seeker.glintElM[i] = 0.0;
                 }
+                if (i < seeker.hasPrevLosWorld.size()) seeker.hasPrevLosWorld[i] = false;
+
+                // World-frame inertial LOS rate: rotate the MEASURED body LOS
+                // into the world with the host's ESTIMATED attitude and
+                // difference consecutive fixes. The host's own body rotation
+                // cancels exactly, unlike the body-frame az/el rates, which it
+                // dominates during aggressive terminal flight.
+                if (i < seeker.targetLosRateWorldX.size()) {
+                    const double cEl = std::cos(mElevation), sEl = std::sin(mElevation);
+                    const double cAz = std::cos(mAzimuth), sAz = std::sin(mAzimuth);
+                    const glm::dvec3 losBody(cEl * cAz, cEl * sAz, -sEl);
+                    const glm::dquat estQ(nav.estQw[i], nav.estQx[i], nav.estQy[i], nav.estQz[i]);
+                    const glm::dvec3 losWorldNow = estQ * losBody;
+                    if (i < seeker.hasPrevLosWorld.size() && seeker.hasPrevLosWorld[i] && stepDt > 0.0) {
+                        const glm::dvec3 prev(seeker.prevLosWorldX[i], seeker.prevLosWorldY[i], seeker.prevLosWorldZ[i]);
+                        const glm::dvec3 rate = (losWorldNow - prev) / stepDt;
+                        const double tau = std::max(valAt(seeker.rateFilterTauSec, i, 0.05), 1e-9);
+                        const double blend = 1.0 - std::exp(-stepDt / tau);
+                        seeker.targetLosRateWorldX[i] += blend * (rate.x - seeker.targetLosRateWorldX[i]);
+                        seeker.targetLosRateWorldY[i] += blend * (rate.y - seeker.targetLosRateWorldY[i]);
+                        seeker.targetLosRateWorldZ[i] += blend * (rate.z - seeker.targetLosRateWorldZ[i]);
+                    }
+                    seeker.prevLosWorldX[i] = losWorldNow.x;
+                    seeker.prevLosWorldY[i] = losWorldNow.y;
+                    seeker.prevLosWorldZ[i] = losWorldNow.z;
+                    if (i < seeker.hasPrevLosWorld.size()) seeker.hasPrevLosWorld[i] = true;
+                }
+                if (i == 2) std::fprintf(stderr, "[ct] commitTrack fired\n");
                 seeker.lockActive[i] = true;
                 seeker.lockedTargetId[i] = target;
                 seeker.previousAzimuth[i] = mAzimuth;

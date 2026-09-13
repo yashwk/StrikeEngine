@@ -1,5 +1,6 @@
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/backend/BackendFactory.hpp>
+#include <strikeengine/models/physics/earth/EarthModel.hpp>
 #include <strikeengine/kernel/backend/CPUBackend.hpp>
 #include <strikeengine/kernel/profiles/AeroProfileDatabase.hpp>
 #include <strikeengine/kernel/profiles/MotorProfileDatabase.hpp>
@@ -107,6 +108,8 @@ namespace StrikeEngine::Kernel {
         freeList.clear();
         stagePlans.clear();
         warheads.clear();
+        pendingLaunches.clear();
+        activeFlyouts.clear();
         time.reset();
     }
 
@@ -1512,6 +1515,199 @@ namespace StrikeEngine::Kernel {
         commandProcessor.enqueueCommand(cmd);
     }
 
+    void SimulationKernel::addPendingLaunch(const ScenarioEntityConfig& entityCfg) {
+        PendingLaunch pl;
+        pl.cfg = entityCfg;
+        pendingLaunches.push_back(std::move(pl));
+    }
+
+    void SimulationKernel::queueInitialGuidance(PhysicsId id, const ScenarioEntityConfig& cfg) {
+        if (cfg.initialGuidanceMode == GuidanceMode::None) return;
+        SimulationCommand cmd;
+        cmd.entityId = id;
+        cmd.mode = cfg.initialGuidanceMode;
+        // Seed the aim from the launcher's relayed datalink track when one
+        // exists (its solution is strictly better than the stale pre-launch
+        // seed); fall back to the entity's configured seed.
+        const std::size_t src = static_cast<std::size_t>(
+            cfg.vehicleConfig.guidanceAutopilot.datalinkSourceId);
+        bool seeded = false;
+        if (cfg.vehicleConfig.guidanceAutopilot.datalinkSourceId >= 0 &&
+            src < trackBlock.size && trackBlock.updateCount[src] > 0) {
+            cmd.targetX = trackBlock.posX[src];
+            cmd.targetY = trackBlock.posY[src];
+            cmd.targetZ = trackBlock.posZ[src];
+            cmd.targetVx = trackBlock.velX[src];
+            cmd.targetVy = trackBlock.velY[src];
+            cmd.targetVz = trackBlock.velZ[src];
+            cmd.targetAccelX = trackBlock.accelX[src];
+            cmd.targetAccelY = trackBlock.accelY[src];
+            cmd.targetAccelZ = trackBlock.accelZ[src];
+            cmd.targetAccelAvailable = trackBlock.accelAvailable[src];
+            seeded = true;
+        }
+        if (!seeded) {
+            cmd.targetX = cfg.initialTargetX;
+            cmd.targetY = cfg.initialTargetY;
+            cmd.targetZ = cfg.initialTargetZ;
+            cmd.targetVx = cfg.initialTargetVx;
+            cmd.targetVy = cfg.initialTargetVy;
+            cmd.targetVz = cfg.initialTargetVz;
+            cmd.targetAccelX = cfg.initialTargetAccelX;
+            cmd.targetAccelY = cfg.initialTargetAccelY;
+            cmd.targetAccelZ = cfg.initialTargetAccelZ;
+            cmd.targetAccelAvailable = cfg.initialTargetAccelAvailable;
+        }
+        cmd.maxAccel = cfg.initialMaxAccel;
+        cmd.targetId = cfg.initialTargetId;
+        queueCommand(cmd);
+    }
+
+    // Spawn one pending rail-launched entity: rail-release geometry relative
+    // to its parent (drop along local up, small push, parent attitude, zero
+    // rates), then its initial guidance command — exactly the sequence
+    // ScenarioConfig::loadInto uses for t=0 entities.
+    PhysicsId SimulationKernel::spawnPendingLaunch(PendingLaunch& pl) {
+        const auto& spec = pl.cfg.launch;
+        const std::size_t parent = spec.parentIndex;
+        if (parent >= physicsBlock.size || !physicsBlock.active[parent]) {
+            return std::numeric_limits<PhysicsId>::max();
+        }
+
+        // Local up: geodetic nadir under ECEF truth, +Z otherwise.
+        double ux = 0.0, uy = 0.0, uz = 1.0;
+        if (environment.earth.useEcefTruth) {
+            const auto geo = Models::ecefToGeodetic(
+                {physicsBlock.px[parent], physicsBlock.py[parent], physicsBlock.pz[parent]});
+            const double cLat = std::cos(geo.latitudeRad), sLat = std::sin(geo.latitudeRad);
+            const double cLon = std::cos(geo.longitudeRad), sLon = std::sin(geo.longitudeRad);
+            ux = cLat * cLon; uy = cLat * sLon; uz = sLat;
+        }
+
+        VehicleInitState init;
+        init.px = physicsBlock.px[parent] - ux * spec.dropM;
+        init.py = physicsBlock.py[parent] - uy * spec.dropM;
+        init.pz = physicsBlock.pz[parent] - uz * spec.dropM;
+        init.vx = physicsBlock.vx[parent] - ux * spec.pushMps;
+        init.vy = physicsBlock.vy[parent] - uy * spec.pushMps;
+        init.vz = physicsBlock.vz[parent] - uz * spec.pushMps;
+        init.qw = physicsBlock.qw[parent]; init.qx = physicsBlock.qx[parent];
+        init.qy = physicsBlock.qy[parent]; init.qz = physicsBlock.qz[parent];
+        init.wx = 0.0; init.wy = 0.0; init.wz = 0.0;
+        init.mass = (pl.cfg.initState.mass > 0.0)
+            ? pl.cfg.initState.mass : pl.cfg.vehicleConfig.initialMass;
+        init.allegiance = pl.cfg.initState.allegiance;
+
+        const PhysicsId id = createVehicle(init, pl.cfg.vehicleConfig);
+
+        // Separation flyout: hold a straight-ahead Waypoint for flyoutSec
+        // (the vehicle's own gentle waypointGain shapes the demand), then
+        // switch to the initial guidance command. The aim direction is the
+        // PARENT's velocity (the rail heading) — not the pushed spawn
+        // velocity: the separation push tilts the round ~1 deg off the rail
+        // axis, and thrust-vector ignition amplifies that into a divergent
+        // terminal geometry.
+        if (spec.flyoutSec > 0.0 && pl.cfg.initialGuidanceMode != GuidanceMode::None) {
+            double sx = physicsBlock.vx[parent], sy = physicsBlock.vy[parent],
+                   sz = physicsBlock.vz[parent];
+            const double spd = std::sqrt(sx * sx + sy * sy + sz * sz);
+            if (spd > 1.0) { sx /= spd; sy /= spd; sz /= spd; }
+            else { sx = ux; sy = uy; sz = uz; }
+            SimulationCommand wp;
+            wp.entityId = id;
+            wp.mode = GuidanceMode::Waypoint;
+            wp.targetX = init.px + sx * spec.flyoutAheadM + ux * spec.flyoutClimbM;
+            wp.targetY = init.py + sy * spec.flyoutAheadM + uy * spec.flyoutClimbM;
+            wp.targetZ = init.pz + sz * spec.flyoutAheadM + uz * spec.flyoutClimbM;
+            wp.maxAccel = pl.cfg.initialMaxAccel;
+            wp.targetId = -1;
+            queueCommand(wp);
+            ActiveFlyout fo;
+            fo.entityId = id;
+            fo.switchTime = time.currentTime() + spec.flyoutSec;
+            fo.cfg = pl.cfg;
+            activeFlyouts.push_back(std::move(fo));
+        } else {
+            queueInitialGuidance(id, pl.cfg);
+        }
+
+        SimulationEvent evt;
+        evt.timestamp = time.currentTime();
+        evt.entityId = id;
+        evt.type = EventType::Custom;
+        evt.customCode = 1;  // scenario rail launch (see app-side labeling)
+        eventSystem.dispatch(evt);
+        return id;
+    }
+
+    // Evaluate pending rail launches: lock-hold on the parent's seeker plus
+    // an optional slant-range gate. Runs before the systems update so the
+    // spawned entity participates in the current step.
+    void SimulationKernel::processPendingLaunches() {
+        if (pendingLaunches.empty()) return;
+        for (std::size_t i = 0; i < pendingLaunches.size();) {
+            auto& pl = pendingLaunches[i];
+            const auto& spec = pl.cfg.launch;
+            const std::size_t parent = spec.parentIndex;
+            const std::size_t tgt = spec.targetIndex;
+            if (parent >= physicsBlock.size || !physicsBlock.active[parent] ||
+                (spec.targetIndex >= 0 &&
+                 (tgt >= physicsBlock.size || !physicsBlock.active[tgt]))) {
+                ++i;
+                continue;
+            }
+
+            bool locked = parent < seekerBlock.isLocked.size() && seekerBlock.isLocked[parent];
+            if (locked && spec.targetIndex >= 0) {
+                locked = (parent < seekerBlock.lockedTargetId.size() &&
+                          seekerBlock.lockedTargetId[parent] ==
+                              static_cast<std::int64_t>(tgt));
+            }
+            if (!locked) {
+                pl.lockSince = -1.0;
+                ++i;
+                continue;
+            }
+            const double t = time.currentTime();
+            if (pl.lockSince < 0.0) pl.lockSince = t;
+            if (t - pl.lockSince < spec.lockHoldSec) {
+                ++i;
+                continue;
+            }
+            if (spec.rangeGateM > 0.0 && spec.targetIndex >= 0) {
+                const double dx = physicsBlock.px[tgt] - physicsBlock.px[parent];
+                const double dy = physicsBlock.py[tgt] - physicsBlock.py[parent];
+                const double dz = physicsBlock.pz[tgt] - physicsBlock.pz[parent];
+                if (std::sqrt(dx * dx + dy * dy + dz * dz) > spec.rangeGateM) {
+                    ++i;
+                    continue;
+                }
+            }
+            spawnPendingLaunch(pl);
+            pendingLaunches.erase(pendingLaunches.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
+
+    // End separation flyouts whose timer expired: hand the round to its
+    // initial guidance law with the launcher's freshest relayed track.
+    void SimulationKernel::processActiveFlyouts() {
+        if (activeFlyouts.empty()) return;
+        const double t = time.currentTime();
+        for (std::size_t i = 0; i < activeFlyouts.size();) {
+            auto& fo = activeFlyouts[i];
+            if (fo.entityId >= physicsBlock.size || !physicsBlock.active[fo.entityId]) {
+                activeFlyouts.erase(activeFlyouts.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            if (t < fo.switchTime) {
+                ++i;
+                continue;
+            }
+            queueInitialGuidance(fo.entityId, fo.cfg);
+            activeFlyouts.erase(activeFlyouts.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
+
     void SimulationKernel::setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad) {
         if (id >= physicsBlock.size) {
             throw std::out_of_range("SimulationKernel::setThrustVectorCommand: entity id out of range");
@@ -1531,6 +1727,13 @@ namespace StrikeEngine::Kernel {
         const std::vector<double> previousPx = physicsBlock.px;
         const std::vector<double> previousPy = physicsBlock.py;
         const std::vector<double> previousPz = physicsBlock.pz;
+        // Rail launches + flyout switches run BEFORE the clock advances, at
+        // the same evaluation point the old app-side directors used. Spawning
+        // after time.advance shifted every time-gated event (motor ignition,
+        // pulse timing) by one tick, which the marginal terminal fight
+        // amplifies into a materially different engagement.
+        processPendingLaunches();
+        processActiveFlyouts();
         time.advance(dt);
         commandProcessor.process(guidanceBlock, trackBlock, time.currentTime());
         
@@ -1547,7 +1750,7 @@ namespace StrikeEngine::Kernel {
         navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt, environment);
         
         // 3.5 Process Seekers
-        seekerSystem.update(physicsBlock, statusBlock, seekerBlock, dt, environment);
+        seekerSystem.update(physicsBlock, statusBlock, seekerBlock, navigationBlock, dt, environment);
 
         // 3.75 Persistent target-track manager (seeker measurements + command
         // seeds -> estimate; prediction at the sim rate between measurements)

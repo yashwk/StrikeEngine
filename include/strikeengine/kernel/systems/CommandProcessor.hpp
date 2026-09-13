@@ -21,6 +21,13 @@ namespace StrikeEngine::Kernel {
                                  // (0 = unlimited). Real guidance laws shape
                                  // commanded g; unbounded demands over-drive
                                  // the fins into saturation.
+        // Optional Waypoint-law gain override (> 0 applies). The Waypoint law
+        // commands a fixed magnitude a = waypointGain * unit(aim - pos); an
+        // external director that wants to command an exact acceleration aims
+        // along the demand direction and transfers the magnitude through
+        // maxAccel, which needs a gain above any expected demand. 0 preserves
+        // the vehicle's configured gain (legacy behavior).
+        double waypointGain = 0.0;
         // Target acceleration for APN feed-forward (augmented PN). Consumed
         // only when targetAccelAvailable is true; otherwise the law explicitly
         // falls back to pure PN (never reads an uninitialized value).

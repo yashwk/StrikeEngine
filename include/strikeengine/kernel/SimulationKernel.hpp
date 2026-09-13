@@ -24,22 +24,15 @@
 #include <strikeengine/kernel/systems/SensorSystem.hpp>
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
 #include <strikeengine/kernel/systems/TrackManagerSystem.hpp>
+#include <strikeengine/kernel/config/VehicleInitState.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
+#include <strikeengine/kernel/config/ScenarioConfig.hpp>
 #include <strikeengine/kernel/integrator/IntegratorFactory.hpp>
 
 namespace StrikeEngine::Kernel {
 
     using PhysicsId = std::size_t;
-
-    struct VehicleInitState {
-        double px = 0.0, py = 0.0, pz = 0.0;
-        double vx = 0.0, vy = 0.0, vz = 0.0;
-        double qx = 0.0, qy = 0.0, qz = 0.0, qw = 1.0;
-        double wx = 0.0, wy = 0.0, wz = 0.0;
-        double mass = 0.0;
-        Allegiance allegiance = Allegiance::Friendly;
-    };
 
     // Per-entity multi-stage propulsion plan (see SimulationKernel::processStaging).
     struct StagePlan {
@@ -56,6 +49,24 @@ namespace StrikeEngine::Kernel {
         std::vector<double> enginePositionX;
         std::vector<double> enginePositionY;
         std::vector<double> enginePositionZ;
+    };
+
+    // A scenario entity deferred by its LaunchSpec: held by the kernel until
+    // the launch conditions (parent seeker lock hold + range gate) are met,
+    // then spawned with rail-release geometry and its initial guidance
+    // command. See ScenarioEntityConfig::LaunchSpec.
+    struct PendingLaunch {
+        ScenarioEntityConfig cfg;
+        double lockSince = -1.0;
+    };
+
+    // A spawned rail round still in its straight-ahead separation flyout;
+    // at switchTime the kernel queues the entity's initial guidance command
+    // (seeded from the parent's relayed datalink track).
+    struct ActiveFlyout {
+        PhysicsId entityId = 0;
+        double switchTime = 0.0;
+        ScenarioEntityConfig cfg;
     };
 
     // Per-entity warhead state (see SimulationKernel::processWarheads).
@@ -118,7 +129,13 @@ namespace StrikeEngine::Kernel {
 
         // Simulation control
         void queueCommand(const SimulationCommand& cmd);
-        void setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad);
+
+        // Hold a launch-enabled scenario entity for in-flight spawning
+        // (called by ScenarioConfig::loadInto; see LaunchSpec).
+        void addPendingLaunch(const ScenarioEntityConfig& entityCfg);
+        // True while any rail-launched entity is still gating on its
+        // launch conditions (run-end logic treats the opening as pre-launch).
+        [[nodiscard]] bool hasPendingLaunches() const { return !pendingLaunches.empty(); }        void setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad);
         void step(double dt);
         void runSteps(std::size_t steps, double dt);
 
@@ -194,6 +211,16 @@ namespace StrikeEngine::Kernel {
 
         void processStaging();
         void processWarheads();
+
+        // Rail-launch deferred spawns (see ScenarioEntityConfig::LaunchSpec).
+        void processPendingLaunches();
+        void processActiveFlyouts();
+        PhysicsId spawnPendingLaunch(PendingLaunch& pl);
+        // Queue the entity's initial guidance command, seeded from the
+        // parent's relayed datalink track when one exists.
+        void queueInitialGuidance(PhysicsId id, const ScenarioEntityConfig& cfg);
+        std::vector<PendingLaunch> pendingLaunches;
+        std::vector<ActiveFlyout> activeFlyouts;
     };
 
 } // namespace StrikeEngine::Kernel

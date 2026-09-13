@@ -103,6 +103,7 @@ int main()
     {
         auto run = [&](bool noise, std::uint32_t seed, double& azOut) {
             PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
             makeBlocks(physics, status, seeker);
             seeker.measurementNoiseEnabled = {noise, false};
             seeker.angleNoiseStdDevRad = {0.01, 0.0};
@@ -110,7 +111,7 @@ int main()
             seeker.rangeRateNoiseStdDevMps = {1.0, 0.0};
             SeekerSystem system;
             system.setSeed(seed);
-            for (int k = 0; k < 10; ++k) system.update(physics, status, seeker, dt);
+            for (int k = 0; k < 10; ++k) system.update(physics, status, seeker, nav, dt);
             azOut = seeker.targetAzimuth[0];
         };
         double exact = 0.0, noisyA = 0.0, noisyB = 0.0, noisySeed2 = 0.0;
@@ -128,13 +129,14 @@ int main()
     {
         auto run = [&](double glintSigma, double& azOut) {
             PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
             makeBlocks(physics, status, seeker);
             seeker.measurementNoiseEnabled = {true, false};
             seeker.angleNoiseStdDevRad = {0.0, 0.0};
             seeker.glintSigmaM = {glintSigma, 0.0};
             SeekerSystem system;
             system.setSeed(3);
-            for (int k = 0; k < 20; ++k) system.update(physics, status, seeker, dt);
+            for (int k = 0; k < 20; ++k) system.update(physics, status, seeker, nav, dt);
             azOut = seeker.targetAzimuth[0];
         };
         double noGlint = 0.0, glint = 0.0;
@@ -147,34 +149,36 @@ int main()
     // ---- 3. Range gate rejects an out-of-gate target ----
     {
         PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
         makeBlocks(physics, status, seeker);
         seeker.maxRangeGateM = {50.0, 0.0}; // target is at 100 m
         SeekerSystem system;
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         check(!seeker.isLocked[0], "target beyond the max range gate is not locked");
         check(seeker.lockRejectReason[0] == static_cast<int>(SeekerRejectReason::RangeGate),
               "range-gate rejection is reported in the diagnostics");
         seeker.maxRangeGateM[0] = 200.0;
         seeker.minRangeGateM = {50.0, 0.0};
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         check(seeker.isLocked[0], "target inside the range gate acquires");
     }
 
     // ---- 4. Gimbal servo slews toward the LOS instead of snapping ----
     {
         PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
         makeBlocks(physics, status, seeker);
         seeker.gimbalRateLimitRadPerSec = {0.2, 0.0};
         SeekerSystem system;
-        system.update(physics, status, seeker, dt); // acquire at az 0
+        system.update(physics, status, seeker, nav, dt); // acquire at az 0
         check(seeker.gimbalAzimuthRad[0] == 0.0, "gimbal starts on the acquired LOS");
         // Jump the target to ~0.5 rad azimuth (within the 45 deg FOV).
         physics.py[1] = 100.0 * std::tan(0.5);
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         const double afterOne = seeker.gimbalAzimuthRad[0];
         check(afterOne > 0.0 && afterOne < 0.1,
               "gimbal lags the LOS on the first step (rate limited)");
-        for (int k = 0; k < 300; ++k) system.update(physics, status, seeker, dt);
+        for (int k = 0; k < 300; ++k) system.update(physics, status, seeker, nav, dt);
         check(std::abs(seeker.gimbalAzimuthRad[0] - 0.5) < 0.02,
               "gimbal converges onto the stepped LOS");
         check(seeker.isLocked[0], "servo-tracked target stays locked");
@@ -183,13 +187,14 @@ int main()
     // ---- 5. Lock publication waits for the first delivered measurement ----
     {
         PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
         makeBlocks(physics, status, seeker);
         seeker.measurementLatencySec = {0.15, 0.0};
         SeekerSystem system;
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         check(seeker.lockActive[0] && !seeker.hasPublishedMeasurement[0] && !seeker.isLocked[0],
               "latency-delayed lock is not reported until a measurement is published");
-        for (int k = 0; k < 20; ++k) system.update(physics, status, seeker, dt);
+        for (int k = 0; k < 20; ++k) system.update(physics, status, seeker, nav, dt);
         check(seeker.hasPublishedMeasurement[0] && seeker.isLocked[0],
               "lock is reported once the delayed measurement arrives");
     }
@@ -198,11 +203,12 @@ int main()
     {
         auto run = [&](double rejection) {
             PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
             makeBlocks(physics, status, seeker);
             status.type[1] = EntityType::Chaff;
             seeker.decoyRejectionDb = {rejection, 0.0};
             SeekerSystem system;
-            system.update(physics, status, seeker, dt);
+            system.update(physics, status, seeker, nav, dt);
             return static_cast<bool>(seeker.isLocked[0]);
         };
         check(run(0.0), "chaff is a valid RF target with no rejection configured");
@@ -213,6 +219,7 @@ int main()
     {
         auto run = [&](double duty) {
             PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
             makeBlocks(physics, status, seeker);
             seeker.type[0] = SeekerType::PassiveRF;
             status.emitterEirpW[1] = 1000.0;
@@ -221,7 +228,7 @@ int main()
             system.setSeed(11);
             bool everLocked = false;
             for (int k = 0; k < 5; ++k) {
-                system.update(physics, status, seeker, dt);
+                system.update(physics, status, seeker, nav, dt);
                 everLocked = everLocked || seeker.isLocked[0];
             }
             return everLocked;
@@ -234,12 +241,13 @@ int main()
     {
         auto run = [&](bool masking) {
             PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
             makeBlocks(physics, status, seeker);
             seeker.terrainMaskingEnabled = {masking, false};
             EnvironmentConfig env;
             env.terrainElevation = [](double, double) { return 2000.0; }; // ridge above both
             SeekerSystem system;
-            system.update(physics, status, seeker, dt, env);
+            system.update(physics, status, seeker, nav, dt, env);
             return static_cast<bool>(seeker.isLocked[0]);
         };
         check(run(false), "terrain masking off locks through the ridge");
@@ -249,26 +257,28 @@ int main()
     // ---- 9. SARH live illuminator binding ----
     {
         PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
         makeBlocks(physics, status, seeker, 3);
         physics.px[2] = 50.0;   // third entity is the illuminator
         status.allegiance[2] = Allegiance::Friendly;
         seeker.type[0] = SeekerType::SARH;
         seeker.illuminatorEntityId = {2, -1, -1};
         SeekerSystem system;
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         check(seeker.isLocked[0], "SARH locks with a live illuminator entity bound");
         seeker.illuminatorEntityId[0] = -1; // fall back to the static configured point
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         check(seeker.isLocked[0], "SARH locks with the static illuminator fallback");
     }
 
     // ---- 9b. Velocity gate + RF jammer ----
     {
         PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
         makeBlocks(physics, status, seeker);
         seeker.minClosingRateMps = {100.0, 0.0}; // static target is not closing
         SeekerSystem system;
-        system.update(physics, status, seeker, dt);
+        system.update(physics, status, seeker, nav, dt);
         check(!seeker.isLocked[0] &&
               seeker.lockRejectReason[0] == static_cast<int>(SeekerRejectReason::VelocityGate),
               "velocity gate rejects a non-closing target");
@@ -276,10 +286,11 @@ int main()
     {
         auto runJammer = [&](double jammerW) {
             PhysicsBlock physics; EntityStatusBlock status; SeekerBlock seeker;
+            NavigationBlock nav;
             makeBlocks(physics, status, seeker);
             status.jammerEirpW = {0.0, jammerW};
             SeekerSystem system;
-            system.update(physics, status, seeker, dt);
+            system.update(physics, status, seeker, nav, dt);
             return static_cast<bool>(seeker.isLocked[0]);
         };
         check(runJammer(0.0), "no jammer acquires the RF target");

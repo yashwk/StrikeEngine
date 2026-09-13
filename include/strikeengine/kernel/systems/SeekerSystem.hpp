@@ -3,6 +3,7 @@
 #include <strikeengine/kernel/data/PhysicsBlock.hpp>
 #include <strikeengine/kernel/data/SeekerBlock.hpp>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
+#include <strikeengine/kernel/data/NavigationBlock.hpp>
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <strikeengine/models/signatures/RCSDatabase.hpp>
 #include <strikeengine/models/signatures/IRSignatureDatabase.hpp>
@@ -31,6 +32,7 @@ namespace StrikeEngine::Kernel {
             const PhysicsBlock& physics,
             const EntityStatusBlock& status,
             SeekerBlock& seeker,
+            const NavigationBlock& nav,
             double dt,
             const EnvironmentConfig& environment = EnvironmentConfig{}
         );
