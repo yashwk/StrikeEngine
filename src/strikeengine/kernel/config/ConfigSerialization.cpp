@@ -1164,10 +1164,16 @@ VehicleConfig loadDesignPhysics(const std::string& filePath) {
     const std::string text = readTextFile(filePath, "design");
     json j = parseJsonText(text, "design file");
     try {
-        return j.at("physics").get<VehicleConfig>();
+        if (j.contains("vehicle_config")) {
+            return j.at("vehicle_config").get<VehicleConfig>();
+        } else if (j.contains("physics")) {
+            return j.at("physics").get<VehicleConfig>();
+        } else {
+            return j.get<VehicleConfig>();
+        }
     } catch (const std::exception& e) {
         throw std::runtime_error(std::string("ConfigSerialization: design file '") +
-                                 filePath + "' has invalid or missing 'physics': " +
+                                 filePath + "' has invalid or missing 'physics' or 'vehicle_config': " +
                                  e.what());
     }
 }
