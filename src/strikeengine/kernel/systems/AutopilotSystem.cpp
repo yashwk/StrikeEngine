@@ -259,6 +259,13 @@ namespace StrikeEngine::Kernel {
             const double errPitch = azSpecificCmd - sensor.accelZ[id];
             const double errYaw = aySpecificCmd - sensor.accelY[id];
             if (!control.pitchSaturated[id]) {
+                // NOTE: sign convention bug (known): pitchFeedForward is
+                // written as -k*azCmd (positive body-Z demand needs a negative
+                // pitch fin), so a correct integrator must accumulate with the
+                // opposite sign of errPitch. Fixing it changes every
+                // integral-enabled vehicle (e.g. the BVR mothership) and
+                // regresses the tuned scenarios; kept as-is pending a
+                // coordinated retune. See AGENT_HANDOFF.
                 pitchIntegral += control.kIntegralPitch[id] * errPitch * dt;
             }
             if (!control.yawSaturated[id]) {
