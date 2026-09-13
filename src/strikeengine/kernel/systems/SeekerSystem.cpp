@@ -555,12 +555,15 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                 } else {
                     seeker.targetAzimuthRate[i] = 0.0;
                     seeker.targetElevationRate[i] = 0.0;
+                    // Track change / re-acquisition: never difference the world
+                    // LOS across a target switch. This reset must not run on
+                    // every step or targetLosRateWorld* stays permanently zero.
+                    if (i < seeker.hasPrevLosWorld.size()) seeker.hasPrevLosWorld[i] = false;
                 }
                 if (newLock) {
                     seeker.glintAzM[i] = 0.0;
                     seeker.glintElM[i] = 0.0;
                 }
-                if (i < seeker.hasPrevLosWorld.size()) seeker.hasPrevLosWorld[i] = false;
 
                 // World-frame inertial LOS rate: rotate the MEASURED body LOS
                 // into the world with the host's ESTIMATED attitude and
