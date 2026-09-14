@@ -185,7 +185,7 @@ carries per-entity `stageIndex`/`stageCount`.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, latency.
 - `GuidanceSystem.cpp`: phase selection separated from law computation; explicit
   `GuidancePhase` (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and
-  `GuidanceLaw` (`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`); acquisition→
+  `GuidanceLaw` (`Tpn`/`Apn`/`BodyRatePn`/`InertialPn`); acquisition→
   terminal blend (`handoffBlendTimeSec`, 0 = legacy instant override), bounded
   lock-loss retention (`lockLossRetentionSec`, 0 = none) with `LostTrack`
   recovery via midcourse PN; APN target-accel feed-forward only when

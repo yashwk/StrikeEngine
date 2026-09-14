@@ -498,7 +498,7 @@ Autopilot translates world accel into bounded body fin demands.
 Phase selection is separated from law computation (§W38). Per entity the
 guidance system tracks an explicit `GuidancePhase`
 (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and a `GuidanceLaw`
-(`None`/`Waypoint`/`PureProNav`/`SeekerRateAPN`/`AugmentedProNav`/`Trajectory`). A seeker lock moves the
+(`None`/`Waypoint`/`Tpn`/`Apn`/`BodyRatePn`/`InertialPn`/`Trajectory`/`Cruise`). A seeker lock moves the
 state `Midcourse → Acquisition → Terminal`: during `Acquisition` the terminal
 APN weight `handoffWeight` ramps 0 → 1 over the configured
 `handoffBlendTimeSec` (0 = the legacy instant override), blending midcourse PN
