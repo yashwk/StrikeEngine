@@ -508,8 +508,13 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                 double mAzimuth = candidate.azimuth;
                 double mElevation = candidate.elevation;
                 if (flagAt(seeker.measurementNoiseEnabled, i)) {
-                    mRange += stdNorm(rng) * valAt(seeker.rangeNoiseStdDevM, i, 0.0);
-                    mRangeRate += stdNorm(rng) * valAt(seeker.rangeRateNoiseStdDevMps, i, 0.0);
+                    // Per-step white noise: scale with sqrt(dt/dtRef) so the
+                    // modeled seeker keeps a fixed noise density at any step
+                    // size (10 ms reference preserves existing behavior).
+                    constexpr double kNoiseRefDt = 0.01;
+                    const double noiseScale = (stepDt > 0.0) ? std::sqrt(stepDt / kNoiseRefDt) : 1.0;
+                    mRange += stdNorm(rng) * valAt(seeker.rangeNoiseStdDevM, i, 0.0) * noiseScale;
+                    mRangeRate += stdNorm(rng) * valAt(seeker.rangeRateNoiseStdDevMps, i, 0.0) * noiseScale;
 
                     double snrDb = candidate.signalStrength;
                     if (seeker.type[i] == SeekerType::IR) {
@@ -522,8 +527,8 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     const double ref = valAt(seeker.angleNoiseRefSnrDb, i, 20.0);
                     double angleSigma = valAt(seeker.angleNoiseStdDevRad, i, 0.0);
                     angleSigma *= std::pow(10.0, -(snrDb - ref) / 20.0);
-                    mAzimuth += stdNorm(rng) * angleSigma;
-                    mElevation += stdNorm(rng) * angleSigma;
+                    mAzimuth += stdNorm(rng) * angleSigma * noiseScale;
+                    mElevation += stdNorm(rng) * angleSigma * noiseScale;
 
                     const double glintSigma = valAt(seeker.glintSigmaM, i, 0.0);
                     if (glintSigma > 0.0) {

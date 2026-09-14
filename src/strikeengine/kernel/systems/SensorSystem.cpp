@@ -265,25 +265,34 @@ namespace StrikeEngine::Kernel {
                 bfz += termAz + termCz;
             }
 
+            // The IMU is sampled every kernel step, so the configured sigmas are
+            // per-sample values at the 10 ms reference rate. Scale white noise by
+            // sqrt(dt/dtRef) and random-walk steps by sqrt(dtRef*dt) so the
+            // modeled sensor keeps a fixed noise density at any step size while
+            // the 10 ms reference behavior is unchanged.
+            constexpr double kNoiseRefDt = 0.01;
+            const double noiseScale = (dt > 0.0) ? std::sqrt(dt / kNoiseRefDt) : 1.0;
+            const double biasStepScale = (dt > 0.0) ? std::sqrt(kNoiseRefDt * dt) : 0.0;
+
             // Random walk biases + measurement output. A disabled IMU freezes
             // its last measurements and stops its streaming-bias drift.
             if (sensors.imuEnabled[i]) {
                 // Random walk biases (slow drift) - very simple model
-                trueAccelBiasX[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
-                trueAccelBiasY[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
-                trueAccelBiasZ[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * dt;
-                trueGyroBiasX[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
-                trueGyroBiasY[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
-                trueGyroBiasZ[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * dt;
+                trueAccelBiasX[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * biasStepScale;
+                trueAccelBiasY[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * biasStepScale;
+                trueAccelBiasZ[i] += stdNorm(rng) * sensors.accelBiasStdDev[i] * biasStepScale;
+                trueGyroBiasX[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * biasStepScale;
+                trueGyroBiasY[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * biasStepScale;
+                trueGyroBiasZ[i]  += stdNorm(rng) * sensors.gyroBiasStdDev[i] * biasStepScale;
 
                 // Add noise and bias
-                sensors.accelX[i] = bfx + trueAccelBiasX[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
-                sensors.accelY[i] = bfy + trueAccelBiasY[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
-                sensors.accelZ[i] = bfz + trueAccelBiasZ[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i];
+                sensors.accelX[i] = bfx + trueAccelBiasX[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i] * noiseScale;
+                sensors.accelY[i] = bfy + trueAccelBiasY[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i] * noiseScale;
+                sensors.accelZ[i] = bfz + trueAccelBiasZ[i] + stdNorm(rng) * sensors.accelNoiseStdDev[i] * noiseScale;
 
-                sensors.gyroX[i] = bwx + trueGyroBiasX[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
-                sensors.gyroY[i] = bwy + trueGyroBiasY[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
-                sensors.gyroZ[i] = bwz + trueGyroBiasZ[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i];
+                sensors.gyroX[i] = bwx + trueGyroBiasX[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i] * noiseScale;
+                sensors.gyroY[i] = bwy + trueGyroBiasY[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i] * noiseScale;
+                sensors.gyroZ[i] = bwz + trueGyroBiasZ[i] + stdNorm(rng) * sensors.gyroNoiseStdDev[i] * noiseScale;
             }
 
             // 2. GPS Update (antenna position = CM + body-frame lever arm).
