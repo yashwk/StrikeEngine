@@ -580,7 +580,7 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
     g.guidanceGyroDecouplingEnabled = j.value("guidanceGyroDecouplingEnabled", false);
-    g.terminalLaw = j.value("terminalLaw", 0);
+    g.terminalLaw = j.value("terminalLaw", 1);
     g.guidanceCommandLagSec = j.value("guidanceCommandLagSec", 0.0);
     g.guidanceCommandSlewLimitMps3 = j.value("guidanceCommandSlewLimitMps3", 0.0);
     g.guidanceScaleDemandOnInfeasible = j.value("guidanceScaleDemandOnInfeasible", false);

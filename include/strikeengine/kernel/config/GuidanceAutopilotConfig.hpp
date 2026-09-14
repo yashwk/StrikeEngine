@@ -124,7 +124,12 @@ namespace StrikeEngine::Kernel {
 
         // --- Terminal conditioning + law selection (defaults = legacy) ------
         bool   guidanceGyroDecouplingEnabled = false;   // remove body rate from the seeker LOS rate
-        int    terminalLaw = 0;                         // 0 = SeekerRateAPN, 1 = BodyPN (3D)
+        // Terminal homing law: 0 = legacy body-rate APN (host rotation couples
+        // into the command; kept for regression), 1 = BodyPN with gyro
+        // decoupling (default; the only law that passes the clean
+        // seeker_intercept regression at both 10 ms and 1 ms), 2 = world-rate
+        // APN (opt-in, not validated).
+        int    terminalLaw = 1;
         double guidanceCommandLagSec = 0.0;             // first-order demand lag (s); 0 = off
         double guidanceCommandSlewLimitMps3 = 0.0;      // demand slew limit (m/s^3); 0 = off
         bool   guidanceScaleDemandOnInfeasible = false; // scale over-budget demand to the limit
