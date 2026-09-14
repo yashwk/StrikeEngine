@@ -176,6 +176,66 @@ int main() {
         check(!t.isValid(&err), "lateral table without beta breakpoints rejected");
     }
 
+    // One-sided exported grids (positive angles only, as the designer writes
+    // symmetric airframes) must mirror odd coefficients so the vehicle can
+    // push over and yaw both ways. Regression: a negative angle clamped to the
+    // zero-lift column, leaving a table+fins missile with no body sideslip
+    // force in one direction.
+    {
+        AeroTables t;
+        t.machBreakpoints = {0.5, 1.0, 2.0};
+        t.aoaBreakpointsRad = {0.0, 0.1, 0.2};
+        t.clTable = {{0.0, 0.7, 1.4}, {0.0, 0.7, 1.4}, {0.0, 0.6, 1.2}};
+        t.cdTable = std::vector<std::vector<double>>(3, std::vector<double>(3, 0.02));
+        std::string err;
+        check(t.isValid(&err), "one-sided grid accepted");
+
+        StrikeEngine::Models::AeroParams p;
+        p.referenceArea = 0.05;
+        p.referenceLength = 1.0;
+        p.clAlpha = 0.0;
+        p.clFin = 0.0;
+        p.clMax = 10.0;
+        p.tables = std::make_shared<const AeroTables>(t);
+        p.fins = StrikeEngine::Models::buildFinsGeometry(
+            StrikeEngine::Models::FinShape::Trapezoidal, 4,
+            0.5, 0.35, 0.25, 0.15, -1.6, 0.0, {}, 0.05, &err);
+        check(p.fins != nullptr, "test fin set builds");
+
+        StrikeEngine::Models::BasicAeroModel model;
+        const double V = 100.0;  // Mach 1 at sound speed 100, q = 5 kPa
+        auto atBeta = [&](double b) {
+            return model.computeWrench(V, V * std::tan(b), 0.0, 0, 0, 0,
+                                       0, 0, 0, 1.0, 100.0, p);
+        };
+        auto atAlpha = [&](double a) {
+            return model.computeWrench(V, 0.0, V * std::tan(a), 0, 0, 0,
+                                       0, 0, 0, 1.0, 100.0, p);
+        };
+        const auto yPlus = atBeta(0.05), yMinus = atBeta(-0.05);
+        check(yPlus.force_y < -1.0 && yMinus.force_y > 1.0,
+              "body sideslip force opposes beta in both directions");
+        checkClose(yPlus.force_y + yMinus.force_y, 0.0,
+                   1e-9 * std::abs(yPlus.force_y),
+                   "side force antisymmetric in beta");
+        check(yPlus.torque_z > 0.0 && yMinus.torque_z < 0.0,
+              "yaw moment restores in both directions");
+        const auto aPlus = atAlpha(0.05), aMinus = atAlpha(-0.05);
+        checkClose(aPlus.force_z + aMinus.force_z, 0.0,
+                   1e-9 * std::abs(aPlus.force_z),
+                   "pitch lift antisymmetric in alpha");
+        check(std::abs(aMinus.force_z) > 1.0, "negative alpha produces lift");
+
+        // Same mirror requirement on the finless abstract path.
+        p.fins = nullptr;
+        const auto nPlus = atBeta(0.05), nMinus = atBeta(-0.05);
+        check(nPlus.force_y < -1.0 && nMinus.force_y > 1.0,
+              "finless sideslip force opposes beta in both directions");
+        checkClose(nPlus.force_y + nMinus.force_y, 0.0,
+                   1e-9 * std::abs(nPlus.force_y),
+                   "finless side force antisymmetric in beta");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

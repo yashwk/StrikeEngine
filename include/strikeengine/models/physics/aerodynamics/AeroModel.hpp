@@ -138,13 +138,36 @@ namespace StrikeEngine::Models {
                     ? p.tables.get() : nullptr;
 
             // --- Forces (body frame) ---
+            // Aero tables are exported one-sided (positive angles) for a
+            // symmetric airframe and the interpolator clamps out-of-range
+            // queries to the first column, so a negative angle would read the
+            // zero-lift column and the airframe could not push over or yaw the
+            // other way. Odd coefficients (lift and all moments) mirror
+            // C(-a) = -C(a); cd is even. Two-sided grids are used as supplied.
+            const auto gridIsOneSided = [](const std::vector<double>& grid) {
+                return !grid.empty() && grid.front() >= 0.0;
+            };
+            const auto evalCoeff = [&](double angle, const std::vector<double>& grid,
+                                       const std::vector<std::vector<double>>& table,
+                                       bool odd) {
+                const bool mirror = odd && gridIsOneSided(grid);
+                const double query = mirror ? std::abs(angle) : angle;
+                const double value = interpolateCoefficient(
+                    mach, query, tables->machBreakpoints, grid, table);
+                return (mirror && angle < 0.0) ? -value : value;
+            };
+            const auto tableAtAlpha = [&](const std::vector<std::vector<double>>& table) {
+                return evalCoeff(alpha, tables->aoaBreakpointsRad, table, true);
+            };
+            const auto tableAtBeta = [&](const std::vector<std::vector<double>>& table) {
+                return evalCoeff(beta, tables->betaBreakpointsRad, table, true);
+            };
+
             // Drag opposes velocity. With tables the cd(M,a) grid is
             // authoritative; otherwise the flat p.cd coefficient is used.
             double cd;
             if (tables) {
-                cd = interpolateCoefficient(mach, alpha,
-                    tables->machBreakpoints, tables->aoaBreakpointsRad,
-                    tables->cdTable);
+                cd = evalCoeff(alpha, tables->aoaBreakpointsRad, tables->cdTable, false);
             } else {
                 cd = p.cd;
             }
@@ -157,15 +180,6 @@ namespace StrikeEngine::Models {
             const bool hasCyTable = tables && tables->hasCyTable();
             const bool hasCnTable = tables && tables->hasCnTable();
             const bool hasClRollTable = tables && tables->hasClRollTable();
-
-            const auto tableAtAlpha = [&](const std::vector<std::vector<double>>& table) {
-                return interpolateCoefficient(mach, alpha,
-                    tables->machBreakpoints, tables->aoaBreakpointsRad, table);
-            };
-            const auto tableAtBeta = [&](const std::vector<std::vector<double>>& table) {
-                return interpolateCoefficient(mach, beta,
-                    tables->machBreakpoints, tables->betaBreakpointsRad, table);
-            };
 
             const auto fList = p.activeFins();
 
@@ -195,18 +209,12 @@ namespace StrikeEngine::Models {
                     finLift += clFin * (alpha + deflPitch);
                 }
                 if (tables) {
-                    cl = interpolateCoefficient(mach, alpha,
-                             tables->machBreakpoints, tables->aoaBreakpointsRad,
-                             tables->clTable)
-                         + finLift;
+                    cl = tableAtAlpha(tables->clTable) + finLift;
                 } else {
                     cl = p.clAlpha * alpha + finLift;
                 }
             } else if (tables) {
-                cl = interpolateCoefficient(mach, alpha,
-                         tables->machBreakpoints, tables->aoaBreakpointsRad,
-                         tables->clTable)
-                     + p.clFin * finPitch;
+                cl = tableAtAlpha(tables->clTable) + p.clFin * finPitch;
             } else {
                 cl = p.clAlpha * alpha + p.clFin * finPitch;
             }
@@ -215,8 +223,7 @@ namespace StrikeEngine::Models {
 
             // Side force (yaw plane). Cy is a body +Y force coefficient. An
             // optional table supplies the body contribution; geometric or
-            // abstract fin control terms are then added as before. With no
-            // table and no fins, the legacy path remains byte-identical.
+            // abstract fin control terms are then added as before.
             if (hasCyTable) {
                 fy += q * S * tableAtBeta(tables->cyTable);
             }
@@ -236,10 +243,32 @@ namespace StrikeEngine::Models {
                         (f->cpLeverArmM >= 0.0) ? -effYaw : effYaw;
                     cySum += clFin * (beta + deflYaw);
                 }
+                // Body sideslip lift. The pitch plane carries cl(M,alpha) or
+                // clAlpha*alpha on top of its fin terms; without the same body
+                // term in beta the airframe pitches far harder than it yaws
+                // (the fin share alone is a fraction of the normal-force
+                // slope). Supplying cy_table keeps that table authoritative.
+                if (!hasCyTable) {
+                    cySum += tables ? evalCoeff(beta, tables->aoaBreakpointsRad,
+                                                tables->clTable, true)
+                                    : p.clAlpha * beta;
+                }
                 fy -= q * S * std::clamp(cySum, -p.clMax, p.clMax);
             } else {
+                // Abstract (finless) airframe: mirror the pitch body lift onto
+                // the yaw axis. An axisymmetric airframe develops the same side
+                // force in sideslip as it does lift in angle of attack; the
+                // pitch plane got the body term from cl(M,alpha) or
+                // clAlpha*alpha, but the yaw plane only ever had the direct fin
+                // force, so the vehicle could pitch but not yaw. Supplying
+                // cy_table keeps that table authoritative instead.
+                const double cyBody = hasCyTable ? 0.0 : std::clamp(
+                    tables ? evalCoeff(beta, tables->aoaBreakpointsRad,
+                                       tables->clTable, true)
+                           : p.clAlpha * beta,
+                    -p.clMax, p.clMax);
                 const double cyFin  = std::clamp(p.clFin * finYaw, -p.clMax, p.clMax);
-                fy += q * S * cyFin;
+                fy += q * S * (cyFin - cyBody);
             }
 
             // Static aerodynamic coefficients. Cm is pitch moment about +Y,
@@ -250,9 +279,12 @@ namespace StrikeEngine::Models {
             const double cmStatic = hasCmTable
                 ? tableAtAlpha(tables->cmTable)
                 : -0.5 * alpha;
+            // Yaw static term mirrors pitch with the opposite sign: tau_z =
+            // +x*Fy with Fy = -qS*cy, so a nose-right restoring moment for
+            // positive sideslip is +0.5*beta, not -0.5*beta.
             const double cnStatic = hasCnTable
                 ? tableAtBeta(tables->cnTable)
-                : 0.0 * beta;
+                : 0.5 * beta;
             const double clRollStatic = hasClRollTable
                 ? tableAtBeta(tables->clRollTable)
                 : 0.0;
