@@ -18,6 +18,10 @@ namespace StrikeEngine::Kernel {
         VehicleInitState initState;
         VehicleConfig vehicleConfig;
 
+        // Display name / callsign and operational role (e.g. "interceptor", "target", "escort")
+        std::string name = "";
+        std::string role = "";
+
         // Path to a design file (JSON). During scenario deserialization a
         // non-empty designRef is resolved via loadDesignPhysics and OVERRIDES
         // any inline vehicleConfig. loadInto does not resolve it.

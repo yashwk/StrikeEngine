@@ -42,6 +42,8 @@ namespace StrikeEngine::Kernel {
         // Structural failure is represented by isAlive=false + health=0.
 
         // Target Signature Metadata
+        std::vector<std::string> name;
+        std::vector<std::string> role;
         std::vector<std::string> rcsProfileId;
         std::vector<std::string> irProfileId;
         // Target-side effective radiated power (W); used by PassiveRF seekers.

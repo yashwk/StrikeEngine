@@ -2,6 +2,7 @@
 // round-trip, environment earth-block round-trip, ScenarioConfig serialize/
 // deserialize plus save/load, and the designRef/design-file concept.
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
+#include <strikeengine/kernel/SimulationKernel.hpp>
 
 #include <cstdio>
 #include <cstdlib>
@@ -441,6 +442,50 @@ int main()
                   "designRef is preserved through the scenario round-trip");
         }
         std::remove(path.c_str());
+    }
+
+    // ---- 4.6 Entity name and role round-trip and kernel propagation ----
+    {
+        ScenarioConfig scenario;
+        scenario.name = "role-test";
+        ScenarioEntityConfig e0;
+        e0.name = "Tejas Lead";
+        e0.role = "shooter";
+        e0.initState.px = 0.0;
+        e0.initState.py = 0.0;
+        e0.initState.pz = 5000.0;
+        e0.initState.qw = 1.0;
+        e0.initState.mass = 9500.0;
+
+        ScenarioEntityConfig e1;
+        e1.name = "Astra Round 1";
+        e1.role = "interceptor";
+        e1.initState.px = 0.0;
+        e1.initState.py = 0.0;
+        e1.initState.pz = 5000.0;
+        e1.initState.qw = 1.0;
+        e1.initState.mass = 160.0;
+
+        scenario.entities.push_back(e0);
+        scenario.entities.push_back(e1);
+
+        const std::string serialized = serializeScenario(scenario);
+        const ScenarioConfig loaded = deserializeScenario(serialized);
+
+        check(loaded.entities.size() == 2, "scenario round-trips 2 entities");
+        check(loaded.entities[0].name == "Tejas Lead", "entity 0 name preserved");
+        check(loaded.entities[0].role == "shooter", "entity 0 role preserved");
+        check(loaded.entities[1].name == "Astra Round 1", "entity 1 name preserved");
+        check(loaded.entities[1].role == "interceptor", "entity 1 role preserved");
+
+        SimulationKernel kernel;
+        loaded.loadInto(kernel);
+        const auto& sb = kernel.getStatus();
+        check(sb.size >= 2, "kernel loaded at least 2 entities");
+        check(sb.name[0] == "Tejas Lead", "kernel statusBlock.name[0] propagated");
+        check(sb.role[0] == "shooter", "kernel statusBlock.role[0] propagated");
+        check(sb.name[1] == "Astra Round 1", "kernel statusBlock.name[1] propagated");
+        check(sb.role[1] == "interceptor", "kernel statusBlock.role[1] propagated");
     }
 
     // ---- 5. Malformed JSON and unknown enums throw std::runtime_error ----

@@ -404,6 +404,8 @@ namespace StrikeEngine::Kernel {
             statusBlock.actuatorFailed.push_back(false);
             statusBlock.sensorFailed.push_back(false);
             statusBlock.commsFailed.push_back(false);
+            statusBlock.name.push_back("");
+            statusBlock.role.push_back("");
             statusBlock.rcsProfileId.push_back("");
             statusBlock.irProfileId.push_back("");
             statusBlock.emitterEirpW.push_back(0.0);
@@ -941,6 +943,8 @@ namespace StrikeEngine::Kernel {
 
         statusBlock.type[id] = config.type;
         statusBlock.allegiance[id] = init.allegiance;
+        statusBlock.name[id] = init.name;
+        statusBlock.role[id] = init.role;
         statusBlock.health[id] = resolved.structuralHardness;
         statusBlock.isAlive[id] = true;
         statusBlock.motorFailed[id] = false;
@@ -1611,6 +1615,8 @@ namespace StrikeEngine::Kernel {
         init.mass = (pl.cfg.initState.mass > 0.0)
             ? pl.cfg.initState.mass : pl.cfg.vehicleConfig.initialMass;
         init.allegiance = pl.cfg.initState.allegiance;
+        init.name = !pl.cfg.name.empty() ? pl.cfg.name : pl.cfg.initState.name;
+        init.role = !pl.cfg.role.empty() ? pl.cfg.role : pl.cfg.initState.role;
 
         const PhysicsId id = createVehicle(init, pl.cfg.vehicleConfig);
 

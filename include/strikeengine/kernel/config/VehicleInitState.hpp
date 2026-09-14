@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 #include <strikeengine/kernel/data/EntityStatusBlock.hpp>
 
 namespace StrikeEngine::Kernel {
@@ -16,6 +17,8 @@ namespace StrikeEngine::Kernel {
         double wx = 0.0, wy = 0.0, wz = 0.0;
         double mass = 0.0;
         Allegiance allegiance = Allegiance::Friendly;
+        std::string name = "";
+        std::string role = "";
     };
 
 } // namespace StrikeEngine::Kernel

@@ -951,6 +951,8 @@ void to_json(json& j, const VehicleInitState& s) {
     j["wz"] = s.wz;
     j["mass"] = s.mass;
     j["allegiance"] = allegianceToString(s.allegiance);
+    if (!s.name.empty()) j["name"] = s.name;
+    if (!s.role.empty()) j["role"] = s.role;
 }
 
 void from_json(const json& j, VehicleInitState& s) {
@@ -971,6 +973,8 @@ void from_json(const json& j, VehicleInitState& s) {
     s.wz = j.value("wz", 0.0);
     s.mass = j.value("mass", 0.0);
     s.allegiance = allegianceFromString(j.value("allegiance", std::string("friendly")));
+    s.name = j.value("name", std::string(""));
+    s.role = j.value("role", std::string(""));
 }
 
 // --- ScenarioEntityConfig / ScenarioConfig -----------------------------------
@@ -980,6 +984,8 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
     j["init_state"] = e.initState;
     j["vehicle_config"] = e.vehicleConfig;
     j["design_ref"] = e.designRef;
+    if (!e.name.empty()) j["name"] = e.name;
+    if (!e.role.empty()) j["role"] = e.role;
     j["initial_guidance_mode"] = guidanceModeToString(e.initialGuidanceMode);
     j["initial_target_x"] = e.initialTargetX;
     j["initial_target_y"] = e.initialTargetY;
@@ -1018,6 +1024,10 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
 
 void from_json(const json& j, ScenarioEntityConfig& e) {
     e.initState = j.at("init_state").get<VehicleInitState>();
+    e.name = j.value("name", std::string(""));
+    e.role = j.value("role", std::string(""));
+    if (e.name.empty() && !e.initState.name.empty()) e.name = e.initState.name;
+    if (e.role.empty() && !e.initState.role.empty()) e.role = e.initState.role;
     e.initialGuidanceMode = guidanceModeFromString(
         j.at("initial_guidance_mode").get<std::string>());
     e.initialTargetX = j.at("initial_target_x").get<double>();
@@ -1087,8 +1097,10 @@ void ScenarioConfig::loadInto(SimulationKernel& kernel) const {
             kernel.addPendingLaunch(entityCfg);
             continue;
         }
-        PhysicsId id = kernel.createVehicle(
-            entityCfg.initState, entityCfg.vehicleConfig);
+        VehicleInitState init = entityCfg.initState;
+        if (init.name.empty()) init.name = entityCfg.name;
+        if (init.role.empty()) init.role = entityCfg.role;
+        PhysicsId id = kernel.createVehicle(init, entityCfg.vehicleConfig);
 
         if (entityCfg.initialGuidanceMode != GuidanceMode::None) {
             SimulationCommand cmd;
