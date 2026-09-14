@@ -491,7 +491,7 @@ int main()
         seeker.targetAzimuthRate = {0.02};
         seeker.targetElevationRate = {-0.01};
         system.update(status, nav, seeker, tracks, g, control, 0.01, env);
-        check(g.phase[0] == GuidancePhase::Terminal && g.law[0] == GuidanceLaw::SeekerRateAPN,
+        check(g.phase[0] == GuidancePhase::Terminal && g.law[0] == GuidanceLaw::BodyRatePn,
               "a seeker lock overrides Trajectory with terminal APN");
         check(g.trajectoryAimSource[0] == GuidanceAimSource::None &&
                   !g.trajectoryFeasible[0] &&

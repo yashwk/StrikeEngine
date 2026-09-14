@@ -67,7 +67,10 @@ namespace StrikeEngine::Kernel {
 
             cfg.trajectoryMinSpeedMps = getDoubleKey(data, "trajectory_min_speed_mps", "trajectoryMinSpeedMps", cfg.trajectoryMinSpeedMps);
             cfg.trajectoryFeasibilityAccelFactor = getDoubleKey(data, "trajectory_feasibility_accel_factor", "trajectoryFeasibilityAccelFactor", cfg.trajectoryFeasibilityAccelFactor);
-            cfg.terminalLaw = getIntKey(data, "terminal_law", "terminalLaw", cfg.terminalLaw);
+            cfg.seekerLosRate = static_cast<SeekerLosRate>(getIntKey(
+                data, "seeker_los_rate", "seekerLosRate",
+                getIntKey(data, "terminal_law", "terminalLaw",
+                          static_cast<int>(cfg.seekerLosRate))));
             cfg.guidanceCommandLagSec = getDoubleKey(data, "guidance_command_lag_sec", "guidanceCommandLagSec", cfg.guidanceCommandLagSec);
             cfg.guidanceCommandSlewLimitMps3 = getDoubleKey(data, "guidance_command_slew_limit_mps3", "guidanceCommandSlewLimitMps3", cfg.guidanceCommandSlewLimitMps3);
             cfg.guidanceScaleDemandOnInfeasible = getBoolKey(data, "guidance_scale_demand_on_infeasible", "guidanceScaleDemandOnInfeasible", cfg.guidanceScaleDemandOnInfeasible);

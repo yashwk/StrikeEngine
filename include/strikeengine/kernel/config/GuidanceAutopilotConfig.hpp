@@ -1,5 +1,7 @@
 #pragma once
 
+#include <strikeengine/kernel/data/GuidanceBlock.hpp>
+
 namespace StrikeEngine::Kernel {
 
     struct GuidanceAutopilotConfig {
@@ -123,12 +125,11 @@ namespace StrikeEngine::Kernel {
         double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
 
         // --- Terminal conditioning + law selection ---------------------------
-        // Terminal homing law: 0 = legacy body-rate APN (host rotation couples
-        // into the command; kept for regression), 1 = BodyPN with gyro
-        // decoupling (default; the only law that passes the clean
-        // seeker_intercept regression at both 10 ms and 1 ms), 2 = world-rate
-        // APN (opt-in, not validated).
-        int    terminalLaw = 1;
+        // How the seeker LOS rate is resolved for terminal homing. The
+        // gyro-decoupled rate is the default (the only variant that passes the
+        // clean seeker_intercept regression at both 10 ms and 1 ms); the
+        // legacy body-rate path is kept for regression.
+        SeekerLosRate seekerLosRate = SeekerLosRate::GyroDecoupled;
         double guidanceCommandLagSec = 0.0;             // first-order demand lag (s); 0 = off
         double guidanceCommandSlewLimitMps3 = 0.0;      // demand slew limit (m/s^3); 0 = off
         bool   guidanceScaleDemandOnInfeasible = false; // scale over-budget demand to the limit

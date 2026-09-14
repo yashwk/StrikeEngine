@@ -250,7 +250,7 @@ namespace StrikeEngine::Kernel {
         // Midcourse PN / APN on the commanded target track (world frame).
         // Aim source: a measurement-anchored persistent target track
         // wins over the raw external command state; see update().
-        LawResult computeMidcourse(
+        LawResult computeAimPn(
             std::size_t id, const NavigationBlock& nav,
             const TrackBlock* tracks, GuidanceBlock& guidance,
             const EnvironmentConfig& env)
@@ -350,8 +350,8 @@ namespace StrikeEngine::Kernel {
             const double N = rangeShapedN(id, guidance, range);
             const bool feedforward = guidance.apnFeedforwardEnabled[id] && ffAvailable;
             const Models::GuidanceSolution sol = feedforward
-                ? Models::augmentedProportionalNavigation(r, v, {atx, aty, atz}, N)
-                : Models::proportionalNavigation(r, v, N);
+                ? Models::apn(r, v, {atx, aty, atz}, N)
+                : Models::tpn(r, v, N);
             out.ffUsed = feedforward;
 
             if (!sol.valid) {
@@ -531,7 +531,7 @@ namespace StrikeEngine::Kernel {
                     (tvy + (accelAvailable ? aty : 0.0) * pred.tgoSec) - nav.estVy[id],
                     (tvz + (accelAvailable ? atz : 0.0) * pred.tgoSec) - nav.estVz[id]};
                 const Models::GuidanceSolution sol =
-                    Models::proportionalNavigation(rPip, vClose, N);
+                    Models::tpn(rPip, vClose, N);
                 if (sol.valid) {
                     out.ax = sol.acceleration[0];
                     out.ay = sol.acceleration[1];
@@ -548,7 +548,7 @@ namespace StrikeEngine::Kernel {
             // Infeasible / unpredicable: bounded best-effort PN toward the raw
             // aim (same shape as legacy midcourse) while the trajectory
             // diagnostics keep the infeasibility explicit and the demand finite.
-            LawResult fallback = computeMidcourse(id, nav, tracks, g, env);
+            LawResult fallback = computeAimPn(id, nav, tracks, g, env);
             if (id < g.scaleDemandOnInfeasible.size() && g.scaleDemandOnInfeasible[id] &&
                 lim > 0.0 && fallback.valid) {
                 const double mag = std::sqrt(fallback.ax * fallback.ax +
@@ -583,7 +583,7 @@ namespace StrikeEngine::Kernel {
         // the inertial LOS rate, and commands N*Vc*(omega_in x u). With the
         // body rate zero this reproduces the legacy component mapping to first
         // order; the legacy path is kept byte-identical when disabled.
-        LawResult computeSeekerAPN(
+        LawResult computeSeekerPn(
             std::size_t id, const NavigationBlock& nav,
             const SeekerBlock& seeker, const TrackBlock* tracks, GuidanceBlock& guidance)
         {
@@ -633,13 +633,13 @@ namespace StrikeEngine::Kernel {
             glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
             const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
 
-            // terminalLaw 1 = BodyPN (gyro-decoupled, default); 0 = legacy
-            // body-rate law kept for regression.
-            const bool bodyPN = id < guidance.terminalLaw.size() &&
-                                guidance.terminalLaw[id] == 1;
+            // GyroDecoupled (default) reconstructs the inertial LOS rate with
+            // the gyro; BodyRate keeps the legacy body-frame law for regression.
+            const bool gyroDecoupled = id < guidance.seekerLosRate.size() &&
+                guidance.seekerLosRate[id] == SeekerLosRate::GyroDecoupled;
 
             glm::dvec3 aWorld;
-            if (!bodyPN) {
+            if (!gyroDecoupled) {
                 const double ayBody = N * vc * dAz;
                 const double azBody = -N * vc * dEl;
                 aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
@@ -786,13 +786,13 @@ namespace StrikeEngine::Kernel {
                 }
                 if (w >= 1.0) phase = GuidancePhase::Terminal;
 
-                law = (i < guidance.terminalLaw.size() && guidance.terminalLaw[i] == 1)
-                    ? GuidanceLaw::BodyPN : GuidanceLaw::SeekerRateAPN;
-                LawResult apn = computeSeekerAPN(i, nav, seeker, &tracks, guidance);
+                law = (i < guidance.seekerLosRate.size() && guidance.seekerLosRate[i] == SeekerLosRate::GyroDecoupled)
+                    ? GuidanceLaw::InertialPn : GuidanceLaw::BodyRatePn;
+                LawResult apn = computeSeekerPn(i, nav, seeker, &tracks, guidance);
                 LawResult out = apn;
                 if (phase == GuidancePhase::Acquisition) {
                     // Blend midcourse PN -> terminal APN (deterministic ramp).
-                    const LawResult pn = computeMidcourse(i, nav, &tracks, guidance, environment);
+                    const LawResult pn = computeAimPn(i, nav, &tracks, guidance, environment);
                     if (!apn.valid && pn.valid) {
                         // Seeker solution unusable: fly pure midcourse rather
                         // than zeroing a valid demand.
@@ -827,7 +827,7 @@ namespace StrikeEngine::Kernel {
                     const double w = (coneRad > 1e-6)
                         ? std::clamp(1.0 - targetOff / coneRad, 0.0, 1.0) : 0.0;
                     if (w < 1.0) {
-                        const LawResult mc = computeMidcourse(i, nav, &tracks, guidance, environment);
+                        const LawResult mc = computeAimPn(i, nav, &tracks, guidance, environment);
                         if (mc.valid) {
                             out.ax = w * out.ax + (1.0 - w) * mc.ax;
                             out.ay = w * out.ay + (1.0 - w) * mc.ay;
@@ -876,8 +876,8 @@ namespace StrikeEngine::Kernel {
                     // command (last valid seeker-APN demand, already clamped by
                     // maxAccel) while the track identity/age is retained.
                     phase = GuidancePhase::Terminal;
-                    law = (i < guidance.terminalLaw.size() && guidance.terminalLaw[i] == 1)
-                        ? GuidanceLaw::BodyPN : GuidanceLaw::SeekerRateAPN;
+                    law = (i < guidance.seekerLosRate.size() && guidance.seekerLosRate[i] == SeekerLosRate::GyroDecoupled)
+                        ? GuidanceLaw::InertialPn : GuidanceLaw::BodyRatePn;
                     LawResult retained;
                     retained.ax = guidance.retainedAccelX[i];
                     retained.ay = guidance.retainedAccelY[i];
@@ -905,13 +905,13 @@ namespace StrikeEngine::Kernel {
 
             if (mode == GuidanceMode::ProportionalNavigation) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
-                const LawResult mc = computeMidcourse(i, nav, &tracks, guidance, environment);
+                const LawResult mc = computeAimPn(i, nav, &tracks, guidance, environment);
                 // Label from what the law actually consumed: the feed-forward
                 // may come from the persistent track, not just the command.
                 law = (mc.ffUsed ||
                        (guidance.apnFeedforwardEnabled[i] &&
                         guidance.targetAccelAvailable[i]))
-                    ? GuidanceLaw::AugmentedProNav : GuidanceLaw::PureProNav;
+                    ? GuidanceLaw::Apn : GuidanceLaw::Tpn;
                 applyDemand(i, mc, guidance, dt, authorityScale);
             } else if (mode == GuidanceMode::Waypoint) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;

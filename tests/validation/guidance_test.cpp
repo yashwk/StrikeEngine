@@ -73,25 +73,25 @@ int main()
     {
         const StrikeEngine::Models::Vec3 r{1000.0, 0.0, 0.0};
         // Head-on: zero LOS rate -> zero commanded acceleration.
-        const auto headOn = StrikeEngine::Models::proportionalNavigation(
+        const auto headOn = StrikeEngine::Models::tpn(
             r, StrikeEngine::Models::Vec3{-100.0, 0.0, 0.0}, 3.0);
         check(headOn.valid && std::abs(headOn.acceleration[1]) < 1e-12 &&
                   std::abs(headOn.acceleration[0]) < 1e-12,
               "head-on geometry: PN commands zero acceleration");
         // Crossing: lateral acceleration proportional to N*Vc*LOS rate.
-        const auto crossing = StrikeEngine::Models::proportionalNavigation(
+        const auto crossing = StrikeEngine::Models::tpn(
             r, StrikeEngine::Models::Vec3{-100.0, 10.0, 0.0}, 3.0);
         check(crossing.valid && std::abs(crossing.closingSpeed - 100.0) < 1e-12 &&
                   std::abs(crossing.acceleration[1] - 3.0) < 1e-12 &&
                   std::abs(crossing.acceleration[0]) < 1e-12,
               "crossing geometry: PN normal to LOS with expected magnitude");
         // Non-closing: explicit invalid status.
-        const auto receding = StrikeEngine::Models::proportionalNavigation(
+        const auto receding = StrikeEngine::Models::tpn(
             StrikeEngine::Models::Vec3{-1000.0, 0.0, 0.0},
             StrikeEngine::Models::Vec3{-100.0, 0.0, 0.0}, 3.0);
         check(!receding.valid, "non-closing geometry: PN reports invalid");
 
-        const auto apn = StrikeEngine::Models::augmentedProportionalNavigation(
+        const auto apn = StrikeEngine::Models::apn(
             r, StrikeEngine::Models::Vec3{-100.0, 0.0, 0.0},
             StrikeEngine::Models::Vec3{0.0, 2.0, 0.0}, 3.5);
         check(apn.valid && std::abs(apn.acceleration[1] - 3.5) < 1e-12,
@@ -137,8 +137,8 @@ int main()
         check(std::abs(guidance.commandedAccelY[0] - 3.5) < 1e-12,
               "kernel PN mode applies the configured navigation constant");
         check(guidance.phase[0] == GuidancePhase::Midcourse &&
-                  guidance.law[0] == GuidanceLaw::PureProNav,
-              "PN sets phase Midcourse and law PureProNav");
+                  guidance.law[0] == GuidanceLaw::Tpn,
+              "PN sets phase Midcourse and law Tpn");
         check(std::abs(guidance.tgoSec[0] - 1000.0 / 100.0) < 1e-6,
               "PN publishes tgo = range / closing speed");
         check(!guidance.lawInvalid[0] && !guidance.nonClosing[0],
@@ -179,8 +179,8 @@ int main()
         system.update(status, nav, seeker, tracks, guidance, control, 0.01, env);
         check(std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
               "augmented APN: 0.5*N*a_t_perp added when available+enabled");
-        check(guidance.law[0] == GuidanceLaw::AugmentedProNav,
-              "law reports AugmentedProNav when feed-forward active");
+        check(guidance.law[0] == GuidanceLaw::Apn,
+              "law reports Apn when feed-forward active");
 
         // Availability false -> explicit fallback to pure PN.
         GuidanceBlock g2 = makeBlock();
@@ -192,7 +192,7 @@ int main()
         g2.targetAccelY = {2.0};
         system.update(status, nav, seeker, tracks, g2, control, 0.01, env);
         check(std::abs(g2.commandedAccelY[0] - 3.5) < 1e-12 &&
-                  g2.law[0] == GuidanceLaw::PureProNav,
+                  g2.law[0] == GuidanceLaw::Tpn,
               "feed-forward unavailable: pure PN, never reads uninitialized accel");
     }
 
@@ -212,7 +212,7 @@ int main()
         check(std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12 &&
                   std::abs(guidance.commandedAccelZ[0]) < 1e-12 &&
                   guidance.phase[0] == GuidancePhase::Terminal &&
-                  guidance.law[0] == GuidanceLaw::SeekerRateAPN &&
+                  guidance.law[0] == GuidanceLaw::BodyRatePn &&
                   std::abs(guidance.handoffWeight[0] - 1.0) < 1e-12,
               "azimuth rate -> +body-Y APN; instant handoff gives Terminal+full weight");
 
@@ -251,8 +251,8 @@ int main()
         // Total commandedAccelY = 7.0 + 7.0 = 14.0
         check(std::abs(guidance.commandedAccelY[0] - 14.0) < 1e-12,
               "true APN: adds 0.5*N*a_T_perp target acceleration feedforward in terminal seeker APN");
-        check(guidance.law[0] == GuidanceLaw::SeekerRateAPN,
-              "seeker APN reports SeekerRateAPN guidance law");
+        check(guidance.law[0] == GuidanceLaw::BodyRatePn,
+              "seeker PN reports BodyRatePn guidance law");
     }
 
     // --- Acquisition blend ramp ----------------------------------------------
@@ -313,7 +313,7 @@ int main()
         seeker.isLocked = {false};
         system.update(status, nav, seeker, tracks, guidance, control, 0.01, env);
         check(guidance.phase[0] == GuidancePhase::Terminal &&
-                  guidance.law[0] == GuidanceLaw::SeekerRateAPN &&
+                  guidance.law[0] == GuidanceLaw::BodyRatePn &&
                   std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
               "retention window applies the bounded retained terminal command");
         // 18 more unlocked steps reach trackAge 0.19 (inside the 0.2 s window).
@@ -328,7 +328,7 @@ int main()
         system.update(status, nav, seeker, tracks, guidance, control, 0.01, env);
         system.update(status, nav, seeker, tracks, guidance, control, 0.01, env);
         check(guidance.phase[0] == GuidancePhase::LostTrack &&
-                  guidance.law[0] == GuidanceLaw::PureProNav &&
+                  guidance.law[0] == GuidanceLaw::Tpn &&
                   std::abs(guidance.commandedAccelY[0] - 3.5) < 1e-12,
               "after retention expiry: LostTrack with midcourse PN recovery");
 

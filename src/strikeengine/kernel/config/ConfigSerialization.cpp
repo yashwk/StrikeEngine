@@ -492,7 +492,7 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     // Trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
-    j["terminalLaw"] = g.terminalLaw;
+    j["seekerLosRate"] = static_cast<int>(g.seekerLosRate);
     j["guidanceCommandLagSec"] = g.guidanceCommandLagSec;
     j["guidanceCommandSlewLimitMps3"] = g.guidanceCommandSlewLimitMps3;
     j["guidanceScaleDemandOnInfeasible"] = g.guidanceScaleDemandOnInfeasible;
@@ -578,7 +578,9 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackVelocityBlend = j.value("trackVelocityBlend", 0.08);
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
-    g.terminalLaw = j.value("terminalLaw", 1);
+    // "terminalLaw" is the pre-rename key; keep reading it for old files.
+    g.seekerLosRate = static_cast<SeekerLosRate>(j.value("seekerLosRate",
+        j.value("terminalLaw", static_cast<int>(SeekerLosRate::GyroDecoupled))));
     g.guidanceCommandLagSec = j.value("guidanceCommandLagSec", 0.0);
     g.guidanceCommandSlewLimitMps3 = j.value("guidanceCommandSlewLimitMps3", 0.0);
     g.guidanceScaleDemandOnInfeasible = j.value("guidanceScaleDemandOnInfeasible", false);

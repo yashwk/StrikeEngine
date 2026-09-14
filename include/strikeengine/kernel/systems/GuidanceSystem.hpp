@@ -16,8 +16,8 @@ namespace StrikeEngine::Kernel {
      * Runs after truth physics/sensors/navigation/seekers and before the
      * autopilot, one step later than the physics it commands. Phase selection
      * (None -> Midcourse -> Acquisition -> Terminal, with LostTrack recovery)
-     * is separated from law computation (PureProNav / SeekerRateAPN /
-     * AugmentedProNav). All demand output passes through the per-entity
+     * is separated from law computation (Tpn / Apn / BodyRatePn / InertialPn).
+     * All demand output passes through the per-entity
      * maxAccel magnitude clamp, and diagnostics (phase, law, track id/age,
      * handoff weight, raw demand, limit/invalid/non-closing flags, tgo) are
      * published per entity each step.

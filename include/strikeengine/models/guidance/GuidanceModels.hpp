@@ -35,7 +35,7 @@ namespace StrikeEngine::Models {
      * thrust feed-forward component; the autopilot supplies the airframe
      * response to this command.
      */
-    inline GuidanceSolution proportionalNavigation(
+    inline GuidanceSolution tpn(
         const Vec3& relativePosition,
         const Vec3& relativeVelocity,
         double navigationConstant = 3.0)
@@ -72,13 +72,13 @@ namespace StrikeEngine::Models {
      * Target acceleration is projected normal to the current line of sight
      * before the standard APN feed-forward term is added.
      */
-    inline GuidanceSolution augmentedProportionalNavigation(
+    inline GuidanceSolution apn(
         const Vec3& relativePosition,
         const Vec3& relativeVelocity,
         const Vec3& targetAcceleration,
         double navigationConstant = 3.5)
     {
-        GuidanceSolution solution = proportionalNavigation(
+        GuidanceSolution solution = tpn(
             relativePosition, relativeVelocity, navigationConstant);
         if (!solution.valid) return solution;
 
@@ -264,7 +264,7 @@ namespace StrikeEngine::Models {
             (targetVel[1] + at[1] * tStar) - (interceptorVel[1] + ai[1] * tStar),
             (targetVel[2] + at[2] * tStar) - (interceptorVel[2] + ai[2] * tStar)};
 
-        const GuidanceSolution sol = proportionalNavigation(
+        const GuidanceSolution sol = tpn(
             vec3Sub(pip, interceptorPos), vClose, navigationConstant);
         if (!sol.valid) {
             out.status = InterceptStatus::NoIntercept;

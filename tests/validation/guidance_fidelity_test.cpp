@@ -64,7 +64,7 @@ GuidanceBlock makeBlock()
     g.trajectoryFeasible = {false};
     g.trajectoryReason = {TrajectoryReason::None};
     // New conditioning config/state (sized so shaping operates in tests).
-    g.terminalLaw = {0};
+    g.seekerLosRate = {SeekerLosRate::BodyRate};
     g.commandLagSec = {0.0};
     g.commandSlewLimitMps3 = {0.0};
     g.scaleDemandOnInfeasible = {false};
@@ -159,28 +159,29 @@ int main()
     SeekerBlock seeker = makeTerminalSeeker();
     TrackBlock noTracks; // size 0
 
-    // ---- 1. Legacy rate-APN commands the analytic demand; BodyPN matches it ----
+    // ---- 1. Legacy body-rate PN commands the analytic demand; InertialPn matches it ----
     {
         GuidanceBlock legacy = makeBlock();
         legacy.mode = {GuidanceMode::ProportionalNavigation};
         runTerminal(nav, seeker, noTracks, legacy, dt);
-        check(legacy.law[0] == GuidanceLaw::SeekerRateAPN &&
+        check(legacy.law[0] == GuidanceLaw::BodyRatePn &&
               near(legacy.commandedAccelY[0], 7.0, 1e-9),
-              "legacy rate-APN commands N*Vc*dAz (7.0)");
+              "legacy body-rate PN commands N*Vc*dAz (7.0)");
         check(near(legacy.closingSpeed[0], 100.0, 1e-9) &&
               near(legacy.losRateMag[0], 0.02, 1e-12),
               "Vc and LOS-rate diagnostics are published");
 
         GuidanceBlock body = makeBlock();
         body.mode = {GuidanceMode::ProportionalNavigation};
-        body.terminalLaw = {1};
+        body.seekerLosRate = {SeekerLosRate::GyroDecoupled};
         runTerminal(nav, seeker, noTracks, body, dt);
-        check(body.law[0] == GuidanceLaw::BodyPN, "terminalLaw=1 selects the BodyPN law");
+        check(body.law[0] == GuidanceLaw::InertialPn,
+              "seekerLosRate=GyroDecoupled selects the InertialPn law");
         check(std::abs(body.commandedAccelY[0] - 7.0) < 0.1,
-              "BodyPN reproduces rate-APN with zero body rate");
+              "InertialPn reproduces body-rate PN with zero body rate");
     }
 
-    // ---- 2. BodyPN removes the parasitic body-rate term ----
+    // ---- 2. InertialPn removes the parasitic body-rate term ----
     {
         NavigationBlock rotating = nav;
         rotating.estWz = {0.3}; // 0.3 rad/s yaw
@@ -190,10 +191,10 @@ int main()
 
         GuidanceBlock decoupled = makeBlock();
         decoupled.mode = {GuidanceMode::ProportionalNavigation};
-        decoupled.terminalLaw = {1};
+        decoupled.seekerLosRate = {SeekerLosRate::GyroDecoupled};
         runTerminal(rotating, seeker, noTracks, decoupled, dt);
         check(std::abs(decoupled.commandedAccelY[0] - legacy.commandedAccelY[0]) > 1e-6,
-              "BodyPN changes the command under a body rotation");
+              "InertialPn changes the command under a body rotation");
         check(std::isfinite(decoupled.commandedAccelY[0]) &&
               std::abs(decoupled.commandedAccelY[0]) < 1e6,
               "decoupled command stays finite");
@@ -340,7 +341,7 @@ int main()
     // ---- 9. Config round-trip of the new guidance keys ----
     {
         VehicleConfig cfg;
-        cfg.guidanceAutopilot.terminalLaw = 1;
+        cfg.guidanceAutopilot.seekerLosRate = SeekerLosRate::GyroDecoupled;
         cfg.guidanceAutopilot.guidanceCommandLagSec = 0.05;
         cfg.guidanceAutopilot.guidanceCommandSlewLimitMps3 = 250.0;
         cfg.guidanceAutopilot.guidanceScaleDemandOnInfeasible = true;
@@ -354,7 +355,7 @@ int main()
         cfg.guidanceAutopilot.guidanceLoftRangeM = 30000.0;
         const VehicleConfig back = deserializeVehicleConfig(serializeVehicleConfig(cfg));
         const auto& g = back.guidanceAutopilot;
-        check(g.terminalLaw == 1 &&
+        check(g.seekerLosRate == SeekerLosRate::GyroDecoupled &&
               g.guidanceCommandLagSec == 0.05 && g.guidanceCommandSlewLimitMps3 == 250.0,
               "terminal conditioning keys round-trip");
         check(g.guidanceScaleDemandOnInfeasible && g.guidanceRangeGainShapingEnabled &&
