@@ -181,8 +181,8 @@ body-X =  0
 The command must then be rotated into the world frame using navigation
 attitude and bounded by `maxAccel`.
 
-The implementation should clearly distinguish this seeker-rate APN from APN
-with target-acceleration feed-forward. If target acceleration is unavailable,
+The implementation should clearly distinguish the seeker PN law (body-rate or
+gyro-decoupled) from APN with target-acceleration feed-forward. If target acceleration is unavailable,
 the behavior must be explicit rather than reading an uninitialized value.
 
 ### Waypoint and future laws

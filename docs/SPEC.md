@@ -502,9 +502,9 @@ guidance system tracks an explicit `GuidancePhase`
 state `Midcourse → Acquisition → Terminal`: during `Acquisition` the terminal
 APN weight `handoffWeight` ramps 0 → 1 over the configured
 `handoffBlendTimeSec` (0 = the legacy instant override), blending midcourse PN
-with seeker-rate APN. On lock loss during `Acquisition`/`Terminal`, the layer
-retains the track identity and applies the bounded predicted terminal command
-(the last valid seeker-APN demand, already clamped by `maxAccel`) for up to
+with the gyro-decoupled seeker PN. On lock loss during `Acquisition`/`Terminal`,
+the layer retains the track identity and applies the bounded predicted terminal
+command (the last valid seeker-PN demand, already clamped by `maxAccel`) for up to
 `lockLossRetentionSec` (0 = none); once retention expires it drops to
 `LostTrack` and recovers via midcourse PN on the commanded target. APN
 target-acceleration feed-forward is emitted only when
