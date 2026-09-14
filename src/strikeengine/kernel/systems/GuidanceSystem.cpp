@@ -651,7 +651,14 @@ namespace StrikeEngine::Kernel {
                     -sEl * sa * dEl + cEl * ca * dAz,
                     -cEl * dEl);
                 glm::dvec3 omegaIn = glm::cross(losBody, du);
-                if (id < nav.estWx.size()) {
+                if (id < seeker.bodyRateFilteredX.size()) {
+                    // Interval-averaged and filter-matched body rate from the
+                    // seeker (see SeekerSystem): cancels host rotation without
+                    // a half-step/filter residual.
+                    omegaIn += glm::dvec3(seeker.bodyRateFilteredX[id],
+                                          seeker.bodyRateFilteredY[id],
+                                          seeker.bodyRateFilteredZ[id]);
+                } else if (id < nav.estWx.size()) {
                     omegaIn += glm::dvec3(nav.estWx[id], nav.estWy[id], nav.estWz[id]);
                 }
                 aWorld = estQ * (N * vc * glm::cross(omegaIn, losBody));

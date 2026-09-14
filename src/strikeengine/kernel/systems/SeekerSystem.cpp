@@ -50,6 +50,12 @@ void ensureState(SeekerBlock& s, std::size_t n)
     rint(s.lockRejectReason, 0);
     rdouble(s.glintAzM, 0.0);
     rdouble(s.glintElM, 0.0);
+    rdouble(s.bodyRateFilteredX, 0.0);
+    rdouble(s.bodyRateFilteredY, 0.0);
+    rdouble(s.bodyRateFilteredZ, 0.0);
+    rdouble(s.prevBodyRateX, 0.0);
+    rdouble(s.prevBodyRateY, 0.0);
+    rdouble(s.prevBodyRateZ, 0.0);
 }
 
 double wrapPi(double angle)
@@ -174,6 +180,11 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                 seeker.targetElevationRate[i] = 0.0;
                 seeker.glintAzM[i] = 0.0;
                 seeker.glintElM[i] = 0.0;
+                if (i < seeker.bodyRateFilteredX.size()) {
+                    seeker.bodyRateFilteredX[i] = 0.0;
+                    seeker.bodyRateFilteredY[i] = 0.0;
+                    seeker.bodyRateFilteredZ[i] = 0.0;
+                }
             };
 
             if (!physics.active[i] || !status.isAlive[i] ||
@@ -541,9 +552,33 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                         (rawAzRate - seeker.targetAzimuthRate[i]);
                     seeker.targetElevationRate[i] += blend *
                         (rawElRate - seeker.targetElevationRate[i]);
+                    // Pair the backward-differenced LOS rate with the body rate
+                    // averaged over the SAME interval and filtered with the SAME
+                    // blend. The endpoint gyro rate leaves a residual of order
+                    // dt*omega_dot plus the filter lag, which the law mistakes
+                    // for target motion while the host oscillates.
+                    if (i < seeker.bodyRateFilteredX.size() && i < nav.estWx.size()) {
+                        const double wx = 0.5 * (nav.estWx[i] + seeker.prevBodyRateX[i]);
+                        const double wy = 0.5 * (nav.estWy[i] + seeker.prevBodyRateY[i]);
+                        const double wz = 0.5 * (nav.estWz[i] + seeker.prevBodyRateZ[i]);
+                        seeker.bodyRateFilteredX[i] += blend * (wx - seeker.bodyRateFilteredX[i]);
+                        seeker.bodyRateFilteredY[i] += blend * (wy - seeker.bodyRateFilteredY[i]);
+                        seeker.bodyRateFilteredZ[i] += blend * (wz - seeker.bodyRateFilteredZ[i]);
+                    }
                 } else {
                     seeker.targetAzimuthRate[i] = 0.0;
                     seeker.targetElevationRate[i] = 0.0;
+                    if (i < seeker.bodyRateFilteredX.size()) {
+                        seeker.bodyRateFilteredX[i] = 0.0;
+                        seeker.bodyRateFilteredY[i] = 0.0;
+                        seeker.bodyRateFilteredZ[i] = 0.0;
+                    }
+                }
+                // Endpoint body rate for the next interval average.
+                if (i < seeker.prevBodyRateX.size() && i < nav.estWx.size()) {
+                    seeker.prevBodyRateX[i] = nav.estWx[i];
+                    seeker.prevBodyRateY[i] = nav.estWy[i];
+                    seeker.prevBodyRateZ[i] = nav.estWz[i];
                 }
                 if (newLock) {
                     seeker.glintAzM[i] = 0.0;

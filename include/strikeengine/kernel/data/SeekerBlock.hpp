@@ -102,6 +102,16 @@ namespace StrikeEngine::Kernel {
         std::vector<double> targetElevation;
         std::vector<double> targetAzimuthRate;
         std::vector<double> targetElevationRate;
+        // Body rate paired with the az/el backward difference: averaged over
+        // the same step and filtered with the same blend, so the gyro
+        // decoupling does not leave a half-step/filter residual during host
+        // oscillation. Internal state + published to guidance.
+        std::vector<double> bodyRateFilteredX;
+        std::vector<double> bodyRateFilteredY;
+        std::vector<double> bodyRateFilteredZ;
+        std::vector<double> prevBodyRateX;
+        std::vector<double> prevBodyRateY;
+        std::vector<double> prevBodyRateZ;
         std::vector<double> previousAzimuth;
         std::vector<double> previousElevation;
         std::vector<double> lockLostTimeSec;
