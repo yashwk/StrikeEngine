@@ -64,7 +64,6 @@ GuidanceBlock makeBlock()
     g.trajectoryFeasible = {false};
     g.trajectoryReason = {TrajectoryReason::None};
     // New conditioning config/state (sized so shaping operates in tests).
-    g.gyroDecouplingEnabled = {false};
     g.terminalLaw = {0};
     g.commandLagSec = {0.0};
     g.commandSlewLimitMps3 = {0.0};
@@ -181,7 +180,7 @@ int main()
               "BodyPN reproduces rate-APN with zero body rate");
     }
 
-    // ---- 2. Gyro decoupling removes the parasitic body-rate term ----
+    // ---- 2. BodyPN removes the parasitic body-rate term ----
     {
         NavigationBlock rotating = nav;
         rotating.estWz = {0.3}; // 0.3 rad/s yaw
@@ -191,10 +190,10 @@ int main()
 
         GuidanceBlock decoupled = makeBlock();
         decoupled.mode = {GuidanceMode::ProportionalNavigation};
-        decoupled.gyroDecouplingEnabled = {true};
+        decoupled.terminalLaw = {1};
         runTerminal(rotating, seeker, noTracks, decoupled, dt);
         check(std::abs(decoupled.commandedAccelY[0] - legacy.commandedAccelY[0]) > 1e-6,
-              "gyro decoupling changes the command under a body rotation");
+              "BodyPN changes the command under a body rotation");
         check(std::isfinite(decoupled.commandedAccelY[0]) &&
               std::abs(decoupled.commandedAccelY[0]) < 1e6,
               "decoupled command stays finite");
@@ -341,7 +340,6 @@ int main()
     // ---- 9. Config round-trip of the new guidance keys ----
     {
         VehicleConfig cfg;
-        cfg.guidanceAutopilot.guidanceGyroDecouplingEnabled = true;
         cfg.guidanceAutopilot.terminalLaw = 1;
         cfg.guidanceAutopilot.guidanceCommandLagSec = 0.05;
         cfg.guidanceAutopilot.guidanceCommandSlewLimitMps3 = 250.0;
@@ -356,7 +354,7 @@ int main()
         cfg.guidanceAutopilot.guidanceLoftRangeM = 30000.0;
         const VehicleConfig back = deserializeVehicleConfig(serializeVehicleConfig(cfg));
         const auto& g = back.guidanceAutopilot;
-        check(g.guidanceGyroDecouplingEnabled && g.terminalLaw == 1 &&
+        check(g.terminalLaw == 1 &&
               g.guidanceCommandLagSec == 0.05 && g.guidanceCommandSlewLimitMps3 == 250.0,
               "terminal conditioning keys round-trip");
         check(g.guidanceScaleDemandOnInfeasible && g.guidanceRangeGainShapingEnabled &&

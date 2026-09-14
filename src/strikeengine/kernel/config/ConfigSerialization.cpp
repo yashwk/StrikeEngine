@@ -492,7 +492,6 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     // Trajectory-core keys (optional with defaults).
     j["trajectoryMinSpeedMps"] = g.trajectoryMinSpeedMps;
     j["trajectoryFeasibilityAccelFactor"] = g.trajectoryFeasibilityAccelFactor;
-    j["guidanceGyroDecouplingEnabled"] = g.guidanceGyroDecouplingEnabled;
     j["terminalLaw"] = g.terminalLaw;
     j["guidanceCommandLagSec"] = g.guidanceCommandLagSec;
     j["guidanceCommandSlewLimitMps3"] = g.guidanceCommandSlewLimitMps3;
@@ -579,7 +578,6 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.trackVelocityBlend = j.value("trackVelocityBlend", 0.08);
     g.trajectoryMinSpeedMps = j.value("trajectoryMinSpeedMps", 30.0);
     g.trajectoryFeasibilityAccelFactor = j.value("trajectoryFeasibilityAccelFactor", 0.95);
-    g.guidanceGyroDecouplingEnabled = j.value("guidanceGyroDecouplingEnabled", false);
     g.terminalLaw = j.value("terminalLaw", 1);
     g.guidanceCommandLagSec = j.value("guidanceCommandLagSec", 0.0);
     g.guidanceCommandSlewLimitMps3 = j.value("guidanceCommandSlewLimitMps3", 0.0);

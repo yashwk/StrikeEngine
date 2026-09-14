@@ -619,38 +619,6 @@ namespace StrikeEngine::Kernel {
 
             const double vc = std::max(std::abs(rangeRate), 1.0);
 
-            // World-rate terminal (terminalLaw == 2, opt-in): command
-            // N*Vc*(omega x los) using the seeker's published WORLD-frame
-            // inertial LOS rate. The body-frame az/el rates are dominated by
-            // the host's own rotation during aggressive terminal flight (the
-            // measured ~1 Hz demand limit cycle); the world rate cancels the
-            // host rotation exactly, so the true ~0.3 deg/s LOS rate produces
-            // a ~15 m/s^2 demand instead of a chattering 260 m/s^2 one.
-            // Falls back to the legacy seeker-rate law when unavailable.
-            if (id < guidance.terminalLaw.size() && guidance.terminalLaw[id] == 2 &&
-                id < seeker.targetLosRateWorldX.size() &&
-                id < seeker.targetLosRateWorldY.size() &&
-                id < seeker.targetLosRateWorldZ.size())
-            {
-                const double azW = seeker.targetAzimuth[id];
-                const double elW = seeker.targetElevation[id];
-                const double cElW = std::cos(elW), sElW = std::sin(elW);
-                const glm::dvec3 losBody(cElW * std::cos(azW), cElW * std::sin(azW), -sElW);
-                glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
-                const glm::dvec3 losW = estQ * losBody;
-                const glm::dvec3 omegaW(seeker.targetLosRateWorldX[id],
-                                        seeker.targetLosRateWorldY[id],
-                                        seeker.targetLosRateWorldZ[id]);
-                const glm::dvec3 aWorldW = N * vc * glm::cross(omegaW, losW);
-                if (id < guidance.closingSpeed.size()) guidance.closingSpeed[id] = vc;
-                if (id < guidance.losRateMag.size())
-                    guidance.losRateMag[id] = glm::length(omegaW);
-                out.ax = aWorldW.x;
-                out.ay = aWorldW.y;
-                out.az = aWorldW.z;
-                out.tgoSec = range / std::max(std::abs(rangeRate), 1.0);
-                return out;
-            }
             const double dAz = seeker.targetAzimuthRate[id];
             const double dEl = seeker.targetElevationRate[id];
             out.tgoSec = range / std::max(std::abs(rangeRate), 1.0);
@@ -665,14 +633,13 @@ namespace StrikeEngine::Kernel {
             glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
             const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
 
+            // terminalLaw 1 = BodyPN (gyro-decoupled, default); 0 = legacy
+            // body-rate law kept for regression.
             const bool bodyPN = id < guidance.terminalLaw.size() &&
                                 guidance.terminalLaw[id] == 1;
-            const bool decoupled = bodyPN ||
-                (id < guidance.gyroDecouplingEnabled.size() &&
-                 guidance.gyroDecouplingEnabled[id]);
 
             glm::dvec3 aWorld;
-            if (!decoupled) {
+            if (!bodyPN) {
                 const double ayBody = N * vc * dAz;
                 const double azBody = -N * vc * dEl;
                 aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);

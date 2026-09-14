@@ -122,8 +122,7 @@ namespace StrikeEngine::Kernel {
         double trajectoryMinSpeedMps = 30.0;           // own est-speed floor for an intercept prediction
         double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
 
-        // --- Terminal conditioning + law selection (defaults = legacy) ------
-        bool   guidanceGyroDecouplingEnabled = false;   // remove body rate from the seeker LOS rate
+        // --- Terminal conditioning + law selection ---------------------------
         // Terminal homing law: 0 = legacy body-rate APN (host rotation couples
         // into the command; kept for regression), 1 = BodyPN with gyro
         // decoupling (default; the only law that passes the clean

@@ -366,7 +366,6 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.retainedAccelZ.push_back(0);
             guidanceBlock.trajectoryMinSpeedMps.push_back(30.0);
             guidanceBlock.trajectoryFeasibilityAccelFactor.push_back(0.95);
-            guidanceBlock.gyroDecouplingEnabled.push_back(false);
             guidanceBlock.terminalLaw.push_back(0);
             guidanceBlock.commandLagSec.push_back(0.0);
             guidanceBlock.commandSlewLimitMps3.push_back(0.0);
@@ -666,7 +665,6 @@ namespace StrikeEngine::Kernel {
         // Trajectory-core config + state/diagnostics reset (fresh and reused).
         guidanceBlock.trajectoryMinSpeedMps[id] = resolved.guidanceAutopilot.trajectoryMinSpeedMps;
         guidanceBlock.trajectoryFeasibilityAccelFactor[id] = resolved.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
-        guidanceBlock.gyroDecouplingEnabled[id] = resolved.guidanceAutopilot.guidanceGyroDecouplingEnabled;
         guidanceBlock.terminalLaw[id] = resolved.guidanceAutopilot.terminalLaw;
         guidanceBlock.commandLagSec[id] = resolved.guidanceAutopilot.guidanceCommandLagSec;
         guidanceBlock.commandSlewLimitMps3[id] = resolved.guidanceAutopilot.guidanceCommandSlewLimitMps3;

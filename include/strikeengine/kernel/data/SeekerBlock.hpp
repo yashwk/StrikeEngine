@@ -102,18 +102,6 @@ namespace StrikeEngine::Kernel {
         std::vector<double> targetElevation;
         std::vector<double> targetAzimuthRate;
         std::vector<double> targetElevationRate;
-        // World-frame INERTIAL LOS rate (d/dt of the LOS unit vector rotated
-        // into the world frame with the host's estimated attitude). Unlike the
-        // body-frame az/el rates it is free of the host's own rotation, which
-        // dominates them during aggressive terminal flight.
-        std::vector<double> targetLosRateWorldX;
-        std::vector<double> targetLosRateWorldY;
-        std::vector<double> targetLosRateWorldZ;
-        // Previous world LOS unit vector + validity, for differencing.
-        std::vector<double> prevLosWorldX;
-        std::vector<double> prevLosWorldY;
-        std::vector<double> prevLosWorldZ;
-        std::vector<bool>   hasPrevLosWorld;
         std::vector<double> previousAzimuth;
         std::vector<double> previousElevation;
         std::vector<double> lockLostTimeSec;
