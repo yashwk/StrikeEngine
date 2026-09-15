@@ -172,6 +172,7 @@ namespace StrikeEngine::Kernel
             params.clAlpha         = s.clAlpha[i];
             params.clFin           = s.clFin[i];
             params.clMax           = s.clMax[i];
+            params.tailControl     = s.tailControl[i];
             params.tables          = s.aeroTables[i];
             params.fins            = s.fins[i];
             if (s.finSets.size() > i) {

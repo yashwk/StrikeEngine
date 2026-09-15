@@ -58,6 +58,7 @@ struct PhysicsBlock {
 	std::vector<double> clAlpha;           // lift slope 1/rad
 	std::vector<double> clFin;             // fin lift 1/rad (deflection)
 	std::vector<double> clMax;             // max |CL| (stall / control limit)
+	std::vector<bool>   tailControl;       // abstract-fin surface type (false = canard)
 	std::vector<std::shared_ptr<const Models::AeroTables>> aeroTables;  // data-driven cd/cl tables; nullptr = flat coefficients
 	std::vector<std::shared_ptr<const Models::FinsGeometry>> fins;     // geometric fins (primary / legacy); nullptr = abstract fins
 	std::vector<std::vector<std::shared_ptr<const Models::FinsGeometry>>> finSets; // all geometric fin sets

@@ -269,7 +269,9 @@ void to_json(json& j, const AeroConfig& a) {
         {"cd",               a.cd},
         {"cl_alpha",         a.clAlpha},
         {"cl_fin",           a.clFin},
-        {"cl_max",           a.clMax}
+        {"cl_max",           a.clMax},
+        // Abstract-fin surface type; absent = canard (historic default).
+        {"tail_control",     a.tailControl}
     };
     if (!a.tables.empty()) {
         j["aero_tables"] = a.tables;
@@ -321,6 +323,7 @@ void from_json(const json& j, AeroConfig& a) {
     a.clAlpha = j.at("cl_alpha").get<double>();
     a.clFin = j.at("cl_fin").get<double>();
     a.clMax = j.at("cl_max").get<double>();
+    a.tailControl = j.value("tail_control", j.value("tailControl", false));
     // Optional: existing files without aero_tables must still load.
     if (j.contains("aero_tables")) {
         a.tables = j.at("aero_tables").get<Models::AeroTables>();

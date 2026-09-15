@@ -25,6 +25,10 @@ namespace StrikeEngine::Models {
         double clFin     = 0.0;        // fin lift coefficient per rad of deflection
         double clMax     = 2.0;        // max |CL| (stall / control surface limit)
 
+        // Abstract-fin control surface type (see AeroConfig::tailControl).
+        // Geometric fin sets derive the sign from their CP lever arm.
+        bool tailControl = false;      // false = canard (legacy), true = tail
+
         // Optional data-driven cd(M,a)/cl(M,a) tables. When present they are
         // authoritative for cd/cl; nullptr keeps the constant-coefficient path
         // (byte-identical to the legacy behavior).
@@ -214,9 +218,11 @@ namespace StrikeEngine::Models {
                     cl = p.clAlpha * alpha + finLift;
                 }
             } else if (tables) {
-                cl = tableAtAlpha(tables->clTable) + p.clFin * finPitch;
+                cl = tableAtAlpha(tables->clTable) +
+                     (p.tailControl ? -p.clFin : p.clFin) * finPitch;
             } else {
-                cl = p.clAlpha * alpha + p.clFin * finPitch;
+                cl = p.clAlpha * alpha +
+                     (p.tailControl ? -p.clFin : p.clFin) * finPitch;
             }
             cl = std::clamp(cl, -p.clMax, p.clMax);
             fz -= q * S * cl;
@@ -267,8 +273,12 @@ namespace StrikeEngine::Models {
                                        tables->clTable, true)
                            : p.clAlpha * beta,
                     -p.clMax, p.clMax);
+                // Abstract fin force sign by surface type: canard adds the
+                // lifting force (legacy), tail opposes it (geometric parity).
                 const double cyFin  = std::clamp(p.clFin * finYaw, -p.clMax, p.clMax);
-                fy += q * S * (cyFin - cyBody);
+                fy += p.tailControl
+                    ? -q * S * (cyFin + cyBody)
+                    :  q * S * (cyFin - cyBody);
             }
 
             // Static aerodynamic coefficients. Cm is pitch moment about +Y,

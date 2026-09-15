@@ -82,6 +82,14 @@ namespace StrikeEngine::Kernel {
         double clFin   = 0.0;   // fin lift coefficient per rad deflection
         double clMax   = 2.0;   // max |CL|
 
+        // Control-surface type for the ABSTRACT fin terms (clFin/CM_delta).
+        // Geometric fin sets derive this from each fin's CP lever arm and
+        // ignore the flag. false = canard (the abstract default: +deflection
+        // pairs a nose-up moment with a lifting force, the historic behavior);
+        // true = tail (+deflection pairs the nose-up moment with a download,
+        // matching the physical geometric-fin path).
+        bool tailControl = false;
+
         // Data-driven cd(M,a)/cl(M,a) coefficient tables. Empty by default;
         // when non-empty they are authoritative for cd/cl at runtime.
         Models::AeroTables tables;

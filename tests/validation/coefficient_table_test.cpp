@@ -234,6 +234,36 @@ int main() {
         checkClose(nPlus.force_y + nMinus.force_y, 0.0,
                    1e-9 * std::abs(nPlus.force_y),
                    "finless side force antisymmetric in beta");
+
+        // Abstract-fin control-surface type. Canard (default) pairs +pitch with
+        // a lifting force and +yaw with a rightward force; tail pairs the same
+        // nose-up/nose-right moments with downloads. Geometric fins derive this
+        // from their CP lever arm and ignore the flag.
+        {
+            p.fins = nullptr;
+            p.tailControl = false;
+            p.clFin = 2.0;
+            const double V = 100.0, rho = 1.0, sound = 100.0;
+            const auto run = [&](double finPitch, double finYaw) {
+                return StrikeEngine::Models::BasicAeroModel{}.computeWrench(
+                    V, 0.0, 0.0, 0, 0, 0, finPitch, finYaw, 0.0, rho, sound, p);
+            };
+            const auto canardP = run(0.2, 0.0);
+            check(canardP.force_z < -1.0 && canardP.torque_y > 0.0,
+                  "canard abstract fin: +pitch -> nose-up moment + lifting force");
+            const auto canardY = run(0.0, 0.2);
+            check(canardY.force_y > 1.0 && canardY.torque_z > 0.0,
+                  "canard abstract fin: +yaw -> nose-right moment + rightward force");
+            p.tailControl = true;
+            const auto tailP = run(0.2, 0.0);
+            check(tailP.force_z > 1.0 && tailP.torque_y > 0.0,
+                  "tail abstract fin: +pitch -> nose-up moment + download (geometric parity)");
+            const auto tailY = run(0.0, 0.2);
+            check(tailY.force_y < -1.0 && tailY.torque_z > 0.0,
+                  "tail abstract fin: +yaw -> nose-right moment + leftward force");
+            p.tailControl = false;
+            p.clFin = 0.0;
+        }
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

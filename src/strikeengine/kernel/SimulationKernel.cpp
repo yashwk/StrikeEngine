@@ -231,6 +231,7 @@ namespace StrikeEngine::Kernel {
             physicsBlock.clAlpha.push_back(0.0);
             physicsBlock.clFin.push_back(0.0);
             physicsBlock.clMax.push_back(2.0);
+            physicsBlock.tailControl.push_back(false);
             physicsBlock.aeroTables.push_back(nullptr);
             physicsBlock.fins.push_back(nullptr);
             physicsBlock.finSets.push_back({});
@@ -893,6 +894,7 @@ namespace StrikeEngine::Kernel {
         physicsBlock.clAlpha[id] = resolved.aero.clAlpha;
         physicsBlock.clFin[id] = resolved.aero.clFin;
         physicsBlock.clMax[id] = resolved.aero.clMax;
+        physicsBlock.tailControl[id] = resolved.aero.tailControl;
         physicsBlock.aeroTables[id] = resolved.aero.tables.empty()
             ? nullptr
             : std::make_shared<const Models::AeroTables>(resolved.aero.tables);

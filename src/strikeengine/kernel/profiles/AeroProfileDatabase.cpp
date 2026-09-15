@@ -70,6 +70,8 @@ namespace StrikeEngine::Kernel {
             cfg.cd              = data.value("cd", cfg.cd);
             cfg.clAlpha         = data.value("cl_alpha", cfg.clAlpha);
             cfg.clFin           = data.value("cl_fin", cfg.clFin);
+            cfg.tailControl     = data.value("tail_control",
+                                  data.value("tailControl", cfg.tailControl));
             cfg.clMax           = data.value("cl_max", cfg.clMax);
             if (data.contains("aero_tables")) {
                 const auto& t = data["aero_tables"];
