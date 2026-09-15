@@ -37,10 +37,14 @@ Public include prefix `<strikeengine/...>`; no GLM/nlohmann in public headers.
 ## 3. Build and package workflow
 
 ```sh
-cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
-cmake --build build-linux --config Release -j2
-ctest --test-dir build-linux -C Release --output-on-failure
+cmake --preset dev && cmake --build --preset dev -j4 && ctest --preset dev
+cmake --preset release && cmake --build --preset release -j4 && cmake --install build/release
+cmake --preset asan  && cmake --build --preset asan -j4 && ctest --preset asan
 ```
+
+Presets: `dev` (RelWithDebInfo `-O2 -g`, asserts on), `release` (installs to
+`~/projects/dist/strikeengine`), `asan` (ASan+UBSan). A bare configure
+defaults to Debug.
 
 GLM `1.0.2` and nlohmann/json `v3.12.0` via FetchContent; offline builds must
 provide them.
