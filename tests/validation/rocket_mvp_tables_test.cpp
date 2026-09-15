@@ -237,7 +237,6 @@ int main() {
     const FlightKeyPoints tbl = run(true);
 
     // ---- Comparison table ----
-    const double gLat = EarthModel::normalGravity(kLatRad);
     std::printf("\n  %-14s %14s %14s\n", "metric", "constant", "tables");
     std::printf("  %-14s %14.1f %14.1f   m/s^2 (T0 accel)\n",
                 "T0 accel", cst.firstStepAccel, tbl.firstStepAccel);

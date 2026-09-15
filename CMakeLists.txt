@@ -5,6 +5,20 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Warnings for our own targets (add_compile_options applies from this
+# directory down; FetchContent deps are header-only interface targets).
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra)
+endif()
+
+# A bare configure must not silently produce an unoptimized cache: presets
+# provide the optimized dev (RelWithDebInfo) and release configurations; the
+# implicit default stays assert-friendly.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 # Dependencies
 include(FetchContent)
 
@@ -12,6 +26,7 @@ include(FetchContent)
 # GPU must build with this ON; core simulations are CPU-only by default.
 option(STRIKEENGINE_WITH_VULKAN "Build the optional Vulkan compute backend" OFF)
 option(STRIKEENGINE_WITH_GDAL "Build GDAL-backed terrain loading" OFF)
+option(STRIKEENGINE_BUILD_TESTS "Build the StrikeEngine test suite" ON)
 
 FetchContent_Declare(
         glm
@@ -30,13 +45,13 @@ FetchContent_MakeAvailable(json)
 
 # Public API layout: headers under include/strikeengine, implementation under
 # src/strikeengine. Consumers use #include <strikeengine/...>.
-file(GLOB_RECURSE STRIKEENGINE_SOURCES "src/strikeengine/*.cpp")
+file(GLOB_RECURSE STRIKEENGINE_SOURCES CONFIGURE_DEPENDS "src/strikeengine/*.cpp")
 list(FILTER STRIKEENGINE_SOURCES EXCLUDE REGEX ".*/backend/vulkan/.*")
 
 add_library(strikeengine STATIC ${STRIKEENGINE_SOURCES})
 
 target_include_directories(strikeengine PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
@@ -63,7 +78,7 @@ endif()
 # strikeengine/kernel/backend/BackendFactory). Building without it throws a
 # clear error.
 if(STRIKEENGINE_WITH_VULKAN)
-    find_package(Vulkan REQUIRED)
+    find_package(Vulkan REQUIRED COMPONENTS glslc)
 
     add_library(strikeengine_vulkan STATIC
         src/strikeengine/kernel/backend/vulkan/VulkanContext.cpp
@@ -71,14 +86,14 @@ if(STRIKEENGINE_WITH_VULKAN)
     )
 
     target_include_directories(strikeengine_vulkan PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     )
     target_link_libraries(strikeengine_vulkan PUBLIC Vulkan::Vulkan)
 
     # Compile Compute Shader
     add_custom_command(
         TARGET strikeengine_vulkan PRE_BUILD
-        COMMAND glslc ${CMAKE_SOURCE_DIR}/src/strikeengine/kernel/backend/vulkan/shaders/physics_step.comp -o ${CMAKE_BINARY_DIR}/physics_step.spv
+        COMMAND Vulkan::glslc ${CMAKE_CURRENT_SOURCE_DIR}/src/strikeengine/kernel/backend/vulkan/shaders/physics_step.comp -o ${CMAKE_BINARY_DIR}/physics_step.spv
         COMMENT "Compiling compute shader to SPIR-V"
     )
 endif()
@@ -131,5 +146,7 @@ install(FILES
 )
 
 # Subdirectories
-enable_testing()
-add_subdirectory(tests)
+if(STRIKEENGINE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

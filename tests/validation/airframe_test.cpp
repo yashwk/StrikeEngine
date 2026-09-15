@@ -194,7 +194,6 @@ static void levelFlightChecks()
     double altAt20 = 0.0;
     for (int step = 1; step <= 20000; ++step) {
         kk.step(dt);
-        const double t = kk.getSimulationTime();
         auto g = EM::ecefToGeodetic({phys.px[id], phys.py[id], phys.pz[id]});
         if (step == 2000) altAt20 = g.altitudeM;
         altMin = std::min(altMin, g.altitudeM);

@@ -29,17 +29,17 @@ target_link_libraries(integrator_test PRIVATE strikeengine)
 add_executable(seeker_test validation/seeker_test.cpp)
 target_link_libraries(seeker_test PRIVATE strikeengine)
 target_compile_definitions(seeker_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(seeker_rich_test validation/seeker_rich_test.cpp)
 target_link_libraries(seeker_rich_test PRIVATE strikeengine)
 target_compile_definitions(seeker_rich_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(seeker_fidelity_test validation/seeker_fidelity_test.cpp)
 target_link_libraries(seeker_fidelity_test PRIVATE strikeengine)
 target_compile_definitions(seeker_fidelity_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(track_manager_fidelity_test validation/track_manager_fidelity_test.cpp)
 target_link_libraries(track_manager_fidelity_test PRIVATE strikeengine)
@@ -92,7 +92,7 @@ target_link_libraries(guidance_test PRIVATE strikeengine)
 add_executable(seeker_intercept_test validation/seeker_intercept_test.cpp)
 target_link_libraries(seeker_intercept_test PRIVATE strikeengine)
 target_compile_definitions(seeker_intercept_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(track_manager_test validation/track_manager_test.cpp)
 target_link_libraries(track_manager_test PRIVATE strikeengine)
@@ -118,7 +118,7 @@ target_link_libraries(propulsion_test PRIVATE strikeengine)
 add_executable(global_terrain_test validation/global_terrain_test.cpp)
 target_link_libraries(global_terrain_test PRIVATE strikeengine)
 target_compile_definitions(global_terrain_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 if(STRIKEENGINE_WITH_GDAL)
     target_compile_definitions(global_terrain_test PRIVATE STRIKEENGINE_WITH_GDAL=1)
 endif()
@@ -138,12 +138,12 @@ target_link_libraries(serialization_test PRIVATE strikeengine)
 add_executable(profile_database_test validation/profile_database_test.cpp)
 target_link_libraries(profile_database_test PRIVATE strikeengine)
 target_compile_definitions(profile_database_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(designer_pipeline_test validation/designer_pipeline_test.cpp)
 target_link_libraries(designer_pipeline_test PRIVATE strikeengine)
 target_compile_definitions(designer_pipeline_test PRIVATE
-    STRIKEENGINE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    STRIKEENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(multithread_test validation/multithread_test.cpp)
 target_link_libraries(multithread_test PRIVATE strikeengine)
@@ -274,3 +274,9 @@ set_tests_properties(multithread PROPERTIES TIMEOUT 120)
 
 add_executable(navigation_aiding_test validation/navigation_aiding_test.cpp)
 target_link_libraries(navigation_aiding_test PRIVATE strikeengine)
+
+# Fail a hung test instead of blocking the suite.
+get_property(strikeengine_tests DIRECTORY PROPERTY TESTS)
+if(strikeengine_tests)
+    set_tests_properties(${strikeengine_tests} PROPERTIES TIMEOUT 900)
+endif()

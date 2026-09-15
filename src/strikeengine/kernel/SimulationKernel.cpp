@@ -1680,8 +1680,7 @@ namespace StrikeEngine::Kernel {
             bool locked = parent < seekerBlock.isLocked.size() && seekerBlock.isLocked[parent];
             if (locked && spec.targetIndex >= 0) {
                 locked = (parent < seekerBlock.lockedTargetId.size() &&
-                          seekerBlock.lockedTargetId[parent] ==
-                              static_cast<std::int64_t>(tgt));
+                          seekerBlock.lockedTargetId[parent] == tgt);
             }
             if (!locked) {
                 pl.lockSince = -1.0;

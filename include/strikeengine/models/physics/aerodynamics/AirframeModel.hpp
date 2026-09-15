@@ -73,6 +73,7 @@ namespace StrikeEngine::Models {
         double fuselageDiameterM, double fuselageLengthM,
         double cd0, double oswaldEff, double clMax)
     {
+        (void)wingSweepDeg;  // swept-wing corrections not modelled yet
         if (wingSpanM <= 1e-6 || wingRootChordM <= 1e-6) return nullptr;
 
         auto a = std::make_shared<AirframeParams>();

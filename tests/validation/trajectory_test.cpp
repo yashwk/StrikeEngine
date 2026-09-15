@@ -411,7 +411,6 @@ int main()
         StrikeEngine::Kernel::EnvironmentConfig env;
         double t = 0.0;
         bool coastStreamed = false;
-        bool trackAimWhileCoasting = false;
         // Maintain -> Coast (0.5 s): predictions keep streaming from the track.
         while (trackState(tracks) == TrackState::Maintain) {
             t += dt;
