@@ -22,12 +22,6 @@ namespace StrikeEngine::Kernel {
         LostTrack    // retention expired; recovering via midcourse PN
     };
 
-    // How the seeker LOS rate is resolved for terminal homing.
-    enum class SeekerLosRate : uint8_t {
-        BodyRate = 0,      // body-frame LOS rates; host rotation couples in
-        GyroDecoupled = 1  // add the gyro body rate to reconstruct the inertial rate
-    };
-
     // Active guidance law used to produce the current demand.
     enum class GuidanceLaw : uint8_t {
         None,
@@ -35,9 +29,7 @@ namespace StrikeEngine::Kernel {
         Tpn,            // true PN: N * Vc * (LOS-rate cross LOS)
         Apn,            // TPN + target-acceleration feed-forward (0.5*N*a_t_perp)
         Trajectory,     // PN aimed at a predicted intercept point
-        Cruise,         // aircraft altitude-hold + waypoint course
-        BodyRatePn,     // legacy body-rate PN (no gyro decoupling)
-        InertialPn      // gyro-decoupled TPN from the reconstructed seeker LOS
+        Cruise          // aircraft altitude-hold + waypoint course
     };
 
     // Aim source for the trajectory predictor (diagnostic).
@@ -110,8 +102,7 @@ namespace StrikeEngine::Kernel {
         std::vector<double> trajectoryMinSpeedMps;          // own est-speed floor for an intercept prediction (default 30.0)
         std::vector<double> trajectoryFeasibilityAccelFactor; // feasibility: requiredAccel <= factor * maxAccel when maxAccel > 0 (0.95)
 
-        // Terminal conditioning + law selection.
-        std::vector<SeekerLosRate> seekerLosRate;    // how the seeker LOS rate is resolved
+        // Terminal conditioning.
         std::vector<double> commandLagSec;           // first-order demand lag (s); 0 = off
         std::vector<double> commandSlewLimitMps3;    // demand slew limit (m/s^3); 0 = off
         std::vector<bool>   scaleDemandOnInfeasible; // scale, not just flag, an over-budget demand

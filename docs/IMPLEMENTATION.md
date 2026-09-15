@@ -183,9 +183,9 @@ carries per-entity `stageIndex`/`stageCount`.
 - `NavigationSystem.cpp`: alignment, strapdown INS, coupled 15-state EKF with
   configurable scalar GPS innovation gating and rejection diagnostics.
 - `SeekerSystem.cpp`: RF/IR signatures, geometry, lock, rates, latency.
-- `GuidanceSystem.cpp`: phase selection separated from law computation; explicit
+- `GuidanceSystem.cpp`: one PN kernel with phase = source + blend; explicit
   `GuidancePhase` (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and
-  `GuidanceLaw` (`Tpn`/`Apn`/`BodyRatePn`/`InertialPn`); acquisition→
+  `GuidanceLaw` (`Tpn`/`Apn`/`Waypoint`/`Trajectory`/`Cruise`); acquisition→
   terminal blend (`handoffBlendTimeSec`, 0 = legacy instant override), bounded
   lock-loss retention (`lockLossRetentionSec`, 0 = none) with `LostTrack`
   recovery via midcourse PN; APN target-accel feed-forward only when

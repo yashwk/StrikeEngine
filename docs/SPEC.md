@@ -495,14 +495,14 @@ elevation → −Z; unchanged contract). Seeker-locked APN
 clamps commanded accel to per-entity `maxAccel`, matching PN/Waypoint.
 Autopilot translates world accel into bounded body fin demands.
 
-Phase selection is separated from law computation (§W38). Per entity the
-guidance system tracks an explicit `GuidancePhase`
+Phase selection is a source+blend weight, not a separate law implementation
+(§W38). Per entity the guidance system tracks an explicit `GuidancePhase`
 (`None`/`Midcourse`/`Acquisition`/`Terminal`/`LostTrack`) and a `GuidanceLaw`
-(`None`/`Waypoint`/`Tpn`/`Apn`/`BodyRatePn`/`InertialPn`/`Trajectory`/`Cruise`). A seeker lock moves the
+(`None`/`Waypoint`/`Tpn`/`Apn`/`Trajectory`/`Cruise`). A seeker lock moves the
 state `Midcourse → Acquisition → Terminal`: during `Acquisition` the terminal
-APN weight `handoffWeight` ramps 0 → 1 over the configured
-`handoffBlendTimeSec` (0 = the legacy instant override), blending midcourse PN
-with the gyro-decoupled seeker PN. On lock loss during `Acquisition`/`Terminal`,
+seeker weight `handoffWeight` ramps 0 → 1 over the configured
+`handoffBlendTimeSec` (0 = instant override), weighting the shared PN kernel
+between the aim-track source and the gyro-decoupled seeker source. On lock loss during `Acquisition`/`Terminal`,
 the layer retains the track identity and applies the bounded predicted terminal
 command (the last valid seeker-PN demand, already clamped by `maxAccel`) for up to
 `lockLossRetentionSec` (0 = none); once retention expires it drops to

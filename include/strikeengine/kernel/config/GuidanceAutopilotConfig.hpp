@@ -124,12 +124,7 @@ namespace StrikeEngine::Kernel {
         double trajectoryMinSpeedMps = 30.0;           // own est-speed floor for an intercept prediction
         double trajectoryFeasibilityAccelFactor = 0.95; // feasibility: requiredAccel <= factor * maxAccel (when maxAccel > 0)
 
-        // --- Terminal conditioning + law selection ---------------------------
-        // How the seeker LOS rate is resolved for terminal homing. The
-        // gyro-decoupled rate is the default (the only variant that passes the
-        // clean seeker_intercept regression at both 10 ms and 1 ms); the
-        // legacy body-rate path is kept for regression.
-        SeekerLosRate seekerLosRate = SeekerLosRate::GyroDecoupled;
+        // --- Terminal conditioning -------------------------------------------
         double guidanceCommandLagSec = 0.0;             // first-order demand lag (s); 0 = off
         double guidanceCommandSlewLimitMps3 = 0.0;      // demand slew limit (m/s^3); 0 = off
         bool   guidanceScaleDemandOnInfeasible = false; // scale over-budget demand to the limit

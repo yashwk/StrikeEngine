@@ -212,7 +212,7 @@ int main()
         check(std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12 &&
                   std::abs(guidance.commandedAccelZ[0]) < 1e-12 &&
                   guidance.phase[0] == GuidancePhase::Terminal &&
-                  guidance.law[0] == GuidanceLaw::BodyRatePn &&
+                  guidance.law[0] == GuidanceLaw::Tpn &&
                   std::abs(guidance.handoffWeight[0] - 1.0) < 1e-12,
               "azimuth rate -> +body-Y APN; instant handoff gives Terminal+full weight");
 
@@ -251,8 +251,8 @@ int main()
         // Total commandedAccelY = 7.0 + 7.0 = 14.0
         check(std::abs(guidance.commandedAccelY[0] - 14.0) < 1e-12,
               "true APN: adds 0.5*N*a_T_perp target acceleration feedforward in terminal seeker APN");
-        check(guidance.law[0] == GuidanceLaw::BodyRatePn,
-              "seeker PN reports BodyRatePn guidance law");
+        check(guidance.law[0] == GuidanceLaw::Apn,
+              "seeker source with APN feedforward reports the shared Apn law");
     }
 
     // --- Acquisition blend ramp ----------------------------------------------
@@ -313,7 +313,7 @@ int main()
         seeker.isLocked = {false};
         system.update(status, nav, seeker, tracks, guidance, control, 0.01, env);
         check(guidance.phase[0] == GuidancePhase::Terminal &&
-                  guidance.law[0] == GuidanceLaw::BodyRatePn &&
+                  guidance.law[0] == GuidanceLaw::Tpn &&
                   std::abs(guidance.commandedAccelY[0] - 7.0) < 1e-12,
               "retention window applies the bounded retained terminal command");
         // 18 more unlocked steps reach trackAge 0.19 (inside the 0.2 s window).

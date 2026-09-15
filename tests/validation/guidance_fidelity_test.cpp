@@ -64,7 +64,6 @@ GuidanceBlock makeBlock()
     g.trajectoryFeasible = {false};
     g.trajectoryReason = {TrajectoryReason::None};
     // New conditioning config/state (sized so shaping operates in tests).
-    g.seekerLosRate = {SeekerLosRate::BodyRate};
     g.commandLagSec = {0.0};
     g.commandSlewLimitMps3 = {0.0};
     g.scaleDemandOnInfeasible = {false};
@@ -159,45 +158,31 @@ int main()
     SeekerBlock seeker = makeTerminalSeeker();
     TrackBlock noTracks; // size 0
 
-    // ---- 1. Legacy body-rate PN commands the analytic demand; InertialPn matches it ----
+    // ---- 1. The unified PN kernel commands the analytic demand ----
     {
-        GuidanceBlock legacy = makeBlock();
-        legacy.mode = {GuidanceMode::ProportionalNavigation};
-        runTerminal(nav, seeker, noTracks, legacy, dt);
-        check(legacy.law[0] == GuidanceLaw::BodyRatePn &&
-              near(legacy.commandedAccelY[0], 7.0, 1e-9),
-              "legacy body-rate PN commands N*Vc*dAz (7.0)");
-        check(near(legacy.closingSpeed[0], 100.0, 1e-9) &&
-              near(legacy.losRateMag[0], 0.02, 1e-12),
+        GuidanceBlock g = makeBlock();
+        g.mode = {GuidanceMode::ProportionalNavigation};
+        runTerminal(nav, seeker, noTracks, g, dt);
+        check(g.law[0] == GuidanceLaw::Tpn &&
+              near(g.commandedAccelY[0], 7.0, 1e-9),
+              "seeker source commands the analytic N*Vc*dAz (7.0) via Tpn");
+        check(near(g.closingSpeed[0], 100.0, 1e-9) &&
+              near(g.losRateMag[0], 0.02, 1e-12),
               "Vc and LOS-rate diagnostics are published");
-
-        GuidanceBlock body = makeBlock();
-        body.mode = {GuidanceMode::ProportionalNavigation};
-        body.seekerLosRate = {SeekerLosRate::GyroDecoupled};
-        runTerminal(nav, seeker, noTracks, body, dt);
-        check(body.law[0] == GuidanceLaw::InertialPn,
-              "seekerLosRate=GyroDecoupled selects the InertialPn law");
-        check(std::abs(body.commandedAccelY[0] - 7.0) < 0.1,
-              "InertialPn reproduces body-rate PN with zero body rate");
     }
 
-    // ---- 2. InertialPn removes the parasitic body-rate term ----
+    // ---- 2. The kernel reconstructs the inertial LOS rate (host rate included) ----
     {
         NavigationBlock rotating = nav;
         rotating.estWz = {0.3}; // 0.3 rad/s yaw
-        GuidanceBlock legacy = makeBlock();
-        legacy.mode = {GuidanceMode::ProportionalNavigation};
-        runTerminal(rotating, seeker, noTracks, legacy, dt);
-
-        GuidanceBlock decoupled = makeBlock();
-        decoupled.mode = {GuidanceMode::ProportionalNavigation};
-        decoupled.seekerLosRate = {SeekerLosRate::GyroDecoupled};
-        runTerminal(rotating, seeker, noTracks, decoupled, dt);
-        check(std::abs(decoupled.commandedAccelY[0] - legacy.commandedAccelY[0]) > 1e-6,
-              "InertialPn changes the command under a body rotation");
-        check(std::isfinite(decoupled.commandedAccelY[0]) &&
-              std::abs(decoupled.commandedAccelY[0]) < 1e6,
-              "decoupled command stays finite");
+        GuidanceBlock g = makeBlock();
+        g.mode = {GuidanceMode::ProportionalNavigation};
+        runTerminal(rotating, seeker, noTracks, g, dt);
+        check(near(g.commandedAccelY[0], 3.5 * 100.0 * (0.02 + 0.3), 1e-6),
+              "inertial LOS rate adds the host body rate (analytic 112.0)");
+        check(std::isfinite(g.commandedAccelY[0]) &&
+              std::abs(g.commandedAccelY[0]) < 1e6,
+              "inertial command stays finite");
     }
 
     // ---- 3. Command lag shapes a step demand ----
@@ -341,7 +326,6 @@ int main()
     // ---- 9. Config round-trip of the new guidance keys ----
     {
         VehicleConfig cfg;
-        cfg.guidanceAutopilot.seekerLosRate = SeekerLosRate::GyroDecoupled;
         cfg.guidanceAutopilot.guidanceCommandLagSec = 0.05;
         cfg.guidanceAutopilot.guidanceCommandSlewLimitMps3 = 250.0;
         cfg.guidanceAutopilot.guidanceScaleDemandOnInfeasible = true;
@@ -355,8 +339,7 @@ int main()
         cfg.guidanceAutopilot.guidanceLoftRangeM = 30000.0;
         const VehicleConfig back = deserializeVehicleConfig(serializeVehicleConfig(cfg));
         const auto& g = back.guidanceAutopilot;
-        check(g.seekerLosRate == SeekerLosRate::GyroDecoupled &&
-              g.guidanceCommandLagSec == 0.05 && g.guidanceCommandSlewLimitMps3 == 250.0,
+        check(g.guidanceCommandLagSec == 0.05 && g.guidanceCommandSlewLimitMps3 == 250.0,
               "terminal conditioning keys round-trip");
         check(g.guidanceScaleDemandOnInfeasible && g.guidanceRangeGainShapingEnabled &&
               g.guidanceRangeGainRefM == 8000.0 && g.guidanceTrackAimMinQuality01 == 0.4 &&

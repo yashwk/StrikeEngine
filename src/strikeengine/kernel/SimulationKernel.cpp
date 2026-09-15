@@ -366,7 +366,6 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.retainedAccelZ.push_back(0);
             guidanceBlock.trajectoryMinSpeedMps.push_back(30.0);
             guidanceBlock.trajectoryFeasibilityAccelFactor.push_back(0.95);
-            guidanceBlock.seekerLosRate.push_back(SeekerLosRate::BodyRate);
             guidanceBlock.commandLagSec.push_back(0.0);
             guidanceBlock.commandSlewLimitMps3.push_back(0.0);
             guidanceBlock.scaleDemandOnInfeasible.push_back(false);
@@ -667,7 +666,6 @@ namespace StrikeEngine::Kernel {
         // Trajectory-core config + state/diagnostics reset (fresh and reused).
         guidanceBlock.trajectoryMinSpeedMps[id] = resolved.guidanceAutopilot.trajectoryMinSpeedMps;
         guidanceBlock.trajectoryFeasibilityAccelFactor[id] = resolved.guidanceAutopilot.trajectoryFeasibilityAccelFactor;
-        guidanceBlock.seekerLosRate[id] = resolved.guidanceAutopilot.seekerLosRate;
         guidanceBlock.commandLagSec[id] = resolved.guidanceAutopilot.guidanceCommandLagSec;
         guidanceBlock.commandSlewLimitMps3[id] = resolved.guidanceAutopilot.guidanceCommandSlewLimitMps3;
         guidanceBlock.scaleDemandOnInfeasible[id] = resolved.guidanceAutopilot.guidanceScaleDemandOnInfeasible;

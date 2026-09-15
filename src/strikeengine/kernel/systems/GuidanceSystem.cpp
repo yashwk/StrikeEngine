@@ -633,39 +633,36 @@ namespace StrikeEngine::Kernel {
             glm::dquat estQ(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id]);
             const glm::dvec3 losBody(cEl * std::cos(az), cEl * std::sin(az), -sEl);
 
-            // GyroDecoupled (default) reconstructs the inertial LOS rate with
-            // the gyro; BodyRate keeps the legacy body-frame law for regression.
-            const bool gyroDecoupled = id < guidance.seekerLosRate.size() &&
-                guidance.seekerLosRate[id] == SeekerLosRate::GyroDecoupled;
-
-            glm::dvec3 aWorld;
-            if (!gyroDecoupled) {
-                const double ayBody = N * vc * dAz;
-                const double azBody = -N * vc * dEl;
-                aWorld = estQ * glm::dvec3(0.0, ayBody, azBody);
-            } else {
-                const double ca = std::cos(az), sa = std::sin(az);
-                // du/dt in the body frame from the angular rates.
-                const glm::dvec3 du(
-                    -sEl * ca * dEl - cEl * sa * dAz,
-                    -sEl * sa * dEl + cEl * ca * dAz,
-                    -cEl * dEl);
-                glm::dvec3 omegaIn = glm::cross(losBody, du);
-                if (id < seeker.bodyRateFilteredX.size()) {
-                    // Interval-averaged and filter-matched body rate from the
-                    // seeker (see SeekerSystem): cancels host rotation without
-                    // a half-step/filter residual.
-                    omegaIn += glm::dvec3(seeker.bodyRateFilteredX[id],
-                                          seeker.bodyRateFilteredY[id],
-                                          seeker.bodyRateFilteredZ[id]);
-                } else if (id < nav.estWx.size()) {
-                    omegaIn += glm::dvec3(nav.estWx[id], nav.estWy[id], nav.estWz[id]);
-                }
-                aWorld = estQ * (N * vc * glm::cross(omegaIn, losBody));
+            // Gyro-decoupled inertial LOS rate: reconstruct du/dt from the
+            // seeker's measured angular rates, add the host body rate, then
+            // evaluate the shared PN kernel (see GuidanceModels) in the world
+            // frame — the same demand implementation as the aim-based source.
+            const double ca = std::cos(az), sa = std::sin(az);
+            const glm::dvec3 du(
+                -sEl * ca * dEl - cEl * sa * dAz,
+                -sEl * sa * dEl + cEl * ca * dAz,
+                -cEl * dEl);
+            glm::dvec3 omegaIn = glm::cross(losBody, du);
+            if (id < seeker.bodyRateFilteredX.size()) {
+                // Interval-averaged and filter-matched body rate from the
+                // seeker (see SeekerSystem): cancels host rotation without
+                // a half-step/filter residual.
+                omegaIn += glm::dvec3(seeker.bodyRateFilteredX[id],
+                                      seeker.bodyRateFilteredY[id],
+                                      seeker.bodyRateFilteredZ[id]);
+            } else if (id < nav.estWx.size()) {
+                omegaIn += glm::dvec3(nav.estWx[id], nav.estWy[id], nav.estWz[id]);
             }
+            const glm::dvec3 losWorld = glm::normalize(estQ * losBody);
+            const glm::dvec3 omegaWorld = estQ * omegaIn;
+            const Models::Vec3 demand = Models::pnDemand(
+                {losWorld.x, losWorld.y, losWorld.z},
+                {omegaWorld.x, omegaWorld.y, omegaWorld.z}, vc, N);
+            glm::dvec3 aWorld(demand[0], demand[1], demand[2]);
 
-            // True APN target-acceleration feedforward augmentation:
-            // a_cmd = a_PN + 0.5 * N * a_T_perp
+            // Target-acceleration feed-forward source: the persistent track
+            // when measurement-anchored and available, else the commanded
+            // state (same precedence as the original terminal path).
             bool ffAvailable = false;
             double atx = 0.0, aty = 0.0, atz = 0.0;
             if (tracks && id < tracks->accelAvailable.size() &&
@@ -678,11 +675,13 @@ namespace StrikeEngine::Kernel {
                 atx = guidance.targetAccelX[id]; aty = guidance.targetAccelY[id]; atz = guidance.targetAccelZ[id];
             }
 
+            // True APN target-acceleration feedforward augmentation:
+            // a_cmd = a_PN + 0.5 * N * a_T_perp
             if (guidance.apnFeedforwardEnabled[id] && ffAvailable) {
-                const glm::dvec3 losWorld = glm::normalize(estQ * losBody);
-                const glm::dvec3 aT(atx, aty, atz);
-                const glm::dvec3 aTperp = aT - glm::dot(aT, losWorld) * losWorld;
-                aWorld += 0.5 * N * aTperp;
+                const Models::Vec3 ff = Models::normalAcceleration(
+                    {losWorld.x, losWorld.y, losWorld.z}, {atx, aty, atz});
+                aWorld += 0.5 * N * glm::dvec3(ff[0], ff[1], ff[2]);
+                out.ffUsed = true;
             }
 
             out.ax = aWorld.x;
@@ -775,7 +774,7 @@ namespace StrikeEngine::Kernel {
                     phase != GuidancePhase::Terminal;
                 if (freshLock) {
                     // New lock: either instant handoff (legacy) or start the
-                    // acquisition blend at zero APN weight.
+                    // acquisition blend at zero seeker weight.
                     if (ramp <= 0.0) {
                         guidance.handoffWeight[i] = 1.0;
                         phase = GuidancePhase::Terminal;
@@ -793,64 +792,63 @@ namespace StrikeEngine::Kernel {
                 }
                 if (w >= 1.0) phase = GuidancePhase::Terminal;
 
-                law = (i < guidance.seekerLosRate.size() && guidance.seekerLosRate[i] == SeekerLosRate::GyroDecoupled)
-                    ? GuidanceLaw::InertialPn : GuidanceLaw::BodyRatePn;
-                LawResult apn = computeSeekerPn(i, nav, seeker, &tracks, guidance);
-                LawResult out = apn;
-                if (phase == GuidancePhase::Acquisition) {
-                    // Blend midcourse PN -> terminal APN (deterministic ramp).
-                    const LawResult pn = computeAimPn(i, nav, &tracks, guidance, environment);
-                    if (!apn.valid && pn.valid) {
-                        // Seeker solution unusable: fly pure midcourse rather
-                        // than zeroing a valid demand.
-                        out = pn;
-                    } else {
-                        const double w = guidance.handoffWeight[i];
-                        out.ax = (1.0 - w) * (pn.valid ? pn.ax : 0.0) + w * apn.ax;
-                        out.ay = (1.0 - w) * (pn.valid ? pn.ay : 0.0) + w * apn.ay;
-                        out.az = (1.0 - w) * (pn.valid ? pn.az : 0.0) + w * apn.az;
-                        out.valid = apn.valid || pn.valid;
-                        out.lawInvalid = apn.lawInvalid && pn.lawInvalid;
-                        out.nonClosing = pn.nonClosing || apn.nonClosing;
-                    }
-                }
-                // Gimbal-edge hold: a target sitting at/near the seeker
-                // gimbal edge drives a churny, high-LOS-rate APN command (the
-                // observed instability). Realistically the missile keeps flying
-                // its midcourse collision course (the datalink aim) and lets the
-                // seeker re-centre / scan, rather than steering hard toward an
-                // off-boresight target. Blend the APN toward the midcourse course
-                // as the target's off-boresight angle approaches the cone edge.
-                if (i < seeker.targetAzimuth.size() &&
-                    i < seeker.gimbalAzimuthLimitRad.size() &&
-                    i < seeker.gimbalElevationLimitRad.size())
-                {
-                    const double azAbs = std::abs(seeker.targetAzimuth[i]);
-                    const double elAbs = std::abs(seeker.targetElevation[i]);
-                    const double holdAz = 0.8 * std::max(1e-6, seeker.gimbalAzimuthLimitRad[i]);
-                    const double holdEl = 0.8 * std::max(1e-6, seeker.gimbalElevationLimitRad[i]);
-                    const double targetOff = std::sqrt(azAbs * azAbs + elAbs * elAbs);
-                    const double coneRad = std::sqrt(holdAz * holdAz + holdEl * holdEl);
-                    const double w = (coneRad > 1e-6)
-                        ? std::clamp(1.0 - targetOff / coneRad, 0.0, 1.0) : 0.0;
-                    if (w < 1.0) {
-                        const LawResult mc = computeAimPn(i, nav, &tracks, guidance, environment);
-                        if (mc.valid) {
-                            out.ax = w * out.ax + (1.0 - w) * mc.ax;
-                            out.ay = w * out.ay + (1.0 - w) * mc.ay;
-                            out.az = w * out.az + (1.0 - w) * mc.az;
-                            out.valid = true;
+                // Phase = source + blend: one PN kernel, evaluated through both
+                // sources, weighted. The midcourse source (track/command aim)
+                // is always evaluated; the seeker source ramps in with the
+                // handoff weight and is gated by the gimbal-edge cone.
+                LawResult out = computeAimPn(i, nav, &tracks, guidance, environment);
+                const LawResult seek = computeSeekerPn(i, nav, seeker, &tracks, guidance);
+
+                // Gimbal-edge hold: a target at/near the seeker gimbal edge
+                // drives a churny, high-LOS-rate demand. Weight the seeker
+                // source down as the off-boresight angle approaches the cone
+                // edge so the missile keeps flying its midcourse collision
+                // course and lets the seeker re-centre / scan.
+                double wSeeker = w;
+                if (out.valid) {
+                    if (i < seeker.targetAzimuth.size() &&
+                        i < seeker.gimbalAzimuthLimitRad.size() &&
+                        i < seeker.gimbalElevationLimitRad.size()) {
+                        const double azAbs = std::abs(seeker.targetAzimuth[i]);
+                        const double elAbs = std::abs(seeker.targetElevation[i]);
+                        const double holdAz = 0.8 * std::max(1e-6, seeker.gimbalAzimuthLimitRad[i]);
+                        const double holdEl = 0.8 * std::max(1e-6, seeker.gimbalElevationLimitRad[i]);
+                        const double targetOff = std::sqrt(azAbs * azAbs + elAbs * elAbs);
+                        const double coneRad = std::sqrt(holdAz * holdAz + holdEl * holdEl);
+                        if (coneRad > 1e-6) {
+                            wSeeker *= std::clamp(1.0 - targetOff / coneRad, 0.0, 1.0);
                         }
-                        // NOTE: the phase is deliberately LEFT at Terminal /
-                        // Acquisition here even when fully off-cone (w = 0,
-                        // demand already pure midcourse). Marking LostTrack
-                        // while still locked makes the next step look like a
-                        // fresh lock (handoff weight re-zeroed every step at
-                        // the cone edge) and, worse, a later genuine unlock
-                        // skips the lock-loss counter + retention window
-                        // below (they only run from Acquisition/Terminal).
                     }
+                } else {
+                    // No midcourse fallback: fly the seeker source whole.
+                    wSeeker = 1.0;
                 }
+
+                if (seek.valid) {
+                    if (!out.valid) {
+                        out = seek;
+                    } else {
+                        out.ax = (1.0 - wSeeker) * out.ax + wSeeker * seek.ax;
+                        out.ay = (1.0 - wSeeker) * out.ay + wSeeker * seek.ay;
+                        out.az = (1.0 - wSeeker) * out.az + wSeeker * seek.az;
+                        out.valid = true;
+                        if (wSeeker >= 0.5) out.ffUsed = seek.ffUsed;
+                    }
+                    out.tgoSec = seek.tgoSec;  // measured terminal tgo
+                }
+                // Diagnostics merge regardless of which source produced the
+                // demand: a receding or non-finite source must still be
+                // visible even when the other source commands.
+                out.nonClosing = out.nonClosing || seek.nonClosing;
+                out.lawInvalid = out.lawInvalid || seek.lawInvalid;
+                // A seeker solution that is unusable keeps the midcourse demand
+                // (never zero a valid course).
+                // NOTE: the phase label deliberately stays Terminal/Acquisition
+                // at the cone edge so a re-centre is not treated as a fresh
+                // lock, and a later genuine unlock still runs the lock-loss
+                // counter + retention window below.
+                law = out.ffUsed ? GuidanceLaw::Apn : GuidanceLaw::Tpn;
+
                 applyDemand(i, out, guidance, dt, authorityScale);
                 // Refresh the bounded retained terminal command (post-clamp)
                 // used during a lock-loss retention window.
@@ -883,8 +881,7 @@ namespace StrikeEngine::Kernel {
                     // command (last valid seeker-APN demand, already clamped by
                     // maxAccel) while the track identity/age is retained.
                     phase = GuidancePhase::Terminal;
-                    law = (i < guidance.seekerLosRate.size() && guidance.seekerLosRate[i] == SeekerLosRate::GyroDecoupled)
-                        ? GuidanceLaw::InertialPn : GuidanceLaw::BodyRatePn;
+                    law = GuidanceLaw::Tpn;
                     LawResult retained;
                     retained.ax = guidance.retainedAccelX[i];
                     retained.ay = guidance.retainedAccelY[i];

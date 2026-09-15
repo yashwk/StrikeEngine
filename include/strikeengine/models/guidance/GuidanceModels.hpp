@@ -28,6 +28,32 @@ namespace StrikeEngine::Models {
     }
 
     /**
+     * @brief Core proportional-navigation kernel: a = N * Vc * (omega x u).
+     *
+     * The single demand implementation. Every guidance source (aim track,
+     * command state, seeker) builds the line-of-sight unit vector, the
+     * inertial LOS angular velocity (rad/s, same frame) and a positive
+     * closing speed, then evaluates this kernel — no source owns its own
+     * variant of the TPN/APN math.
+     */
+    inline Vec3 pnDemand(const Vec3& unitLos, const Vec3& losRate,
+                         double closingSpeed, double navigationConstant)
+    {
+        const Vec3 direction = cross(losRate, unitLos);
+        const double scale = navigationConstant * closingSpeed;
+        return {scale * direction[0], scale * direction[1], scale * direction[2]};
+    }
+
+    /** Target acceleration projected normal to the line of sight (APN half). */
+    inline Vec3 normalAcceleration(const Vec3& unitLos, const Vec3& acceleration)
+    {
+        const double along = dot(acceleration, unitLos);
+        return {acceleration[0] - along * unitLos[0],
+                acceleration[1] - along * unitLos[1],
+                acceleration[2] - along * unitLos[2]};
+    }
+
+    /**
      * @brief Classical true proportional navigation in a world frame.
      *
      * Relative vectors use target-minus-interceptor convention. The returned
@@ -59,10 +85,7 @@ namespace StrikeEngine::Models {
             cross(relativePosition, relativeVelocity)[0] / rangeSquared,
             cross(relativePosition, relativeVelocity)[1] / rangeSquared,
             cross(relativePosition, relativeVelocity)[2] / rangeSquared};
-        const Vec3 accelerationDirection = cross(losRate, lineOfSight);
-        return {{navigationConstant * closingSpeed * accelerationDirection[0],
-                 navigationConstant * closingSpeed * accelerationDirection[1],
-                 navigationConstant * closingSpeed * accelerationDirection[2]},
+        return {pnDemand(lineOfSight, losRate, closingSpeed, navigationConstant),
                 closingSpeed, true};
     }
 
@@ -87,11 +110,8 @@ namespace StrikeEngine::Models {
             relativePosition[0] / range,
             relativePosition[1] / range,
             relativePosition[2] / range};
-        const double alongLos = dot(targetAcceleration, lineOfSight);
-        const Vec3 normalTargetAcceleration = {
-            targetAcceleration[0] - alongLos * lineOfSight[0],
-            targetAcceleration[1] - alongLos * lineOfSight[1],
-            targetAcceleration[2] - alongLos * lineOfSight[2]};
+        const Vec3 normalTargetAcceleration =
+            normalAcceleration(lineOfSight, targetAcceleration);
         for (std::size_t axis = 0; axis < 3; ++axis) {
             solution.acceleration[axis] +=
                 0.5 * navigationConstant * normalTargetAcceleration[axis];
