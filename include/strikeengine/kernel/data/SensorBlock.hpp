@@ -73,6 +73,68 @@ namespace StrikeEngine::Kernel {
         std::vector<bool> baroAttitudeCorrectionEnabled;
 
         std::size_t size = 0;
+
+        /**
+         * @brief Grows every vector to @p n entries; see
+         *        PhysicsBlock::ensureSize.
+         */
+        void ensureSize(std::size_t n) {
+            accelX.resize(n, 0.0); accelY.resize(n, 0.0); accelZ.resize(n, 0.0);
+            gyroX.resize(n, 0.0); gyroY.resize(n, 0.0); gyroZ.resize(n, 0.0);
+            gpsUpdated.resize(n, false);
+            gpsPosX.resize(n, 0.0); gpsPosY.resize(n, 0.0); gpsPosZ.resize(n, 0.0);
+            gpsVelX.resize(n, 0.0); gpsVelY.resize(n, 0.0); gpsVelZ.resize(n, 0.0);
+            accelNoiseStdDev.resize(n, 0.1);
+            accelBiasStdDev.resize(n, 0.01);
+            gyroNoiseStdDev.resize(n, 0.01);
+            gyroBiasStdDev.resize(n, 0.001);
+            gpsPosNoiseStdDev.resize(n, 5.0);
+            gpsVelNoiseStdDev.resize(n, 0.5);
+            gpsInnovationGateSigma.resize(n, 5.0);
+            baroInnovationGateSigma.resize(n, -1.0);
+            magInnovationGateSigma.resize(n, -1.0);
+            imuLeverArmX.resize(n, 0.0);
+            imuLeverArmY.resize(n, 0.0);
+            imuLeverArmZ.resize(n, 0.0);
+            imuEnabled.resize(n, true);
+            gpsEnabled.resize(n, true);
+            gpsUpdateRateHz.resize(n, 1.0);
+            baroUpdated.resize(n, false);
+            baroAlt.resize(n, 0.0);
+            magUpdated.resize(n, false);
+            magX.resize(n, 0.0); magY.resize(n, 0.0); magZ.resize(n, 0.0);
+            baroEnabled.resize(n, false);
+            baroNoiseStdDev.resize(n, 1.0);
+            baroBiasStdDev.resize(n, 0.0);
+            baroUpdateRateHz.resize(n, 1.0);
+            magEnabled.resize(n, false);
+            magNoiseStdDev.resize(n, 50e-9);
+            magUpdateRateHz.resize(n, 10.0);
+            magDisturbanceGateRel.resize(n, 0.25);
+            gpsLatencySec.resize(n, 0.0);
+            gpsLeverArmX.resize(n, 0.0);
+            gpsLeverArmY.resize(n, 0.0);
+            gpsLeverArmZ.resize(n, 0.0);
+            gpsFixConsistencyEnabled.resize(n, false);
+            insConingCompensationEnabled.resize(n, false);
+            insAdaptiveQEnabled.resize(n, false);
+            insAdaptiveQGain.resize(n, 1.0);
+            initialAttitudeErrorDeg.resize(n, 0.0);
+            initialPositionErrorM.resize(n, 0.0);
+            initialVelocityErrorMps.resize(n, 0.0);
+            insGravityGradientEnabled.resize(n, false);
+            insEarthRotationCouplingEnabled.resize(n, false);
+            gpsBatchUpdateEnabled.resize(n, false);
+            gpsLeverArmCompensationEnabled.resize(n, false);
+            gpsYawCorrectionDamping.resize(n, 0.1);
+            gpsFixConsistencyThreshold.resize(n, 16.81);
+            gpsFixConsistencyConfidence.resize(n, 0.99);
+            gpsFixConsistencyDof.resize(n, 6);
+            maxAccelBiasEstimate.resize(n, 0.5);
+            maxGyroBiasEstimate.resize(n, 0.02);
+            baroAttitudeCorrectionEnabled.resize(n, false);
+            size = n;
+        }
     };
 
 } // namespace StrikeEngine::Kernel

@@ -189,6 +189,107 @@ namespace StrikeEngine::Kernel {
         std::vector<double> glintElM;
 
         std::size_t size = 0;
+
+        /**
+         * @brief Grows every vector to @p n entries; see
+         *        PhysicsBlock::ensureSize.
+         *
+         * This block is where a missed growth bit: bodyRateFiltered* and
+         * prevBodyRate* were declared but never allocated by the kernel, so
+         * their filters silently no-op'd behind a size guard.
+         */
+        void ensureSize(std::size_t n) {
+            type.resize(n, SeekerType::None);
+            transmitterPowerW.resize(n, 1000.0);
+            antennaGainDb.resize(n, 30.0);
+            wavelengthM.resize(n, 0.03);
+            noiseFloorW.resize(n, 1e-12);
+            snrThresholdDb.resize(n, 13.0);
+            sensitivityW.resize(n, 1e-9);
+            wavelengthBand.resize(n, 0);
+            irExtinctionPerM.resize(n, 1e-4);
+            illuminatorPx.resize(n, 0.0);
+            illuminatorPy.resize(n, 0.0);
+            illuminatorPz.resize(n, 0.0);
+            illuminatorPowerW.resize(n, 5.0e5);
+            illuminatorGainDb.resize(n, 38.0);
+            illuminatorWavelengthM.resize(n, 0.03);
+            fieldOfViewHalfAngleRad.resize(n, 1.0471975512);
+            gimbalAzimuthLimitRad.resize(n, 1.0471975512);
+            gimbalElevationLimitRad.resize(n, 1.0471975512);
+            lockHysteresisDb.resize(n, 3.0);
+            lockDropoutTimeSec.resize(n, 0.10);
+            measurementLatencySec.resize(n, 0.0);
+            measurementNoiseEnabled.resize(n, false);
+            angleNoiseStdDevRad.resize(n, 0.001);
+            angleNoiseRefSnrDb.resize(n, 20.0);
+            rangeNoiseStdDevM.resize(n, 1.0);
+            rangeRateNoiseStdDevMps.resize(n, 0.5);
+            glintSigmaM.resize(n, 0.0);
+            glintCorrelationTauSec.resize(n, 1.0);
+            swerlingEnabled.resize(n, false);
+            gimbalRateLimitRadPerSec.resize(n, 0.0);
+            minRangeGateM.resize(n, 0.0);
+            maxRangeGateM.resize(n, 0.0);
+            terrainMaskingEnabled.resize(n, false);
+            minClosingRateMps.resize(n, 0.0);
+            rateFilterTauSec.resize(n, 0.05);
+            decoyRejectionDb.resize(n, 0.0);
+            passiveRfDutyCycle.resize(n, 1.0);
+            illuminatorEntityId.resize(n, -1);
+            isLocked.resize(n, false);
+            lockedTargetId.resize(n, 0);
+            targetRange.resize(n, 0.0);
+            targetRangeRate.resize(n, 0.0);
+            targetAzimuth.resize(n, 0.0);
+            targetElevation.resize(n, 0.0);
+            targetAzimuthRate.resize(n, 0.0);
+            targetElevationRate.resize(n, 0.0);
+            losRateFilterAz.resize(n, 0.0);
+            losRateFilterEl.resize(n, 0.0);
+            losRateWorldX.resize(n, 0.0);
+            losRateWorldY.resize(n, 0.0);
+            losRateWorldZ.resize(n, 0.0);
+            losRateWorldValid.resize(n, false);
+            losRateWorldStateX.resize(n, 0.0);
+            losRateWorldStateY.resize(n, 0.0);
+            losRateWorldStateZ.resize(n, 0.0);
+            prevLosWorldX.resize(n, 0.0);
+            prevLosWorldY.resize(n, 0.0);
+            prevLosWorldZ.resize(n, 0.0);
+            prevLosWorldTimeSec.resize(n, 0.0);
+            bodyRateFilteredX.resize(n, 0.0);
+            bodyRateFilteredY.resize(n, 0.0);
+            bodyRateFilteredZ.resize(n, 0.0);
+            bodyRateStateX.resize(n, 0.0);
+            bodyRateStateY.resize(n, 0.0);
+            bodyRateStateZ.resize(n, 0.0);
+            prevBodyRateX.resize(n, 0.0);
+            prevBodyRateY.resize(n, 0.0);
+            prevBodyRateZ.resize(n, 0.0);
+            gyroIntX.resize(n, 0.0);
+            gyroIntY.resize(n, 0.0);
+            gyroIntZ.resize(n, 0.0);
+            prevStepGyroX.resize(n, 0.0);
+            prevStepGyroY.resize(n, 0.0);
+            prevStepGyroZ.resize(n, 0.0);
+            previousAzimuth.resize(n, 0.0);
+            previousElevation.resize(n, 0.0);
+            timeSinceCommitSec.resize(n, 0.0);
+            seekerClockSec.resize(n, 0.0);
+            lockLostTimeSec.resize(n, 0.0);
+            hasPreviousLos.resize(n, false);
+            lockActive.resize(n, false);
+            hasPublishedMeasurement.resize(n, false);
+            measurementAgeSec.resize(n, 0.0);
+            gimbalAzimuthRad.resize(n, 0.0);
+            gimbalElevationRad.resize(n, 0.0);
+            lastSignalStrength.resize(n, 0.0);
+            lockRejectReason.resize(n, static_cast<int>(SeekerRejectReason::None));
+            glintAzM.resize(n, 0.0);
+            glintElM.resize(n, 0.0);
+            size = n;
+        }
     };
 
 } // namespace StrikeEngine::Kernel

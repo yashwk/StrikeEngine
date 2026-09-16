@@ -64,4 +64,44 @@ namespace StrikeEngine::Kernel {
         quatRotateToWorld(qw, -qx, -qy, -qz, vx, vy, vz, rx, ry, rz);
     }
 
+    /**
+     * Unit quaternion from a body->world rotation matrix whose COLUMNS are the
+     * body axes expressed in world (i.e. m[row][col], row-major m00 = X_body.x).
+     * Shepperd's trace branches; the largest diagonal term is used to avoid the
+     * near-zero divisor of the naive trace formula.
+     */
+    inline void quatFromRotationMatrix(
+        double m00, double m01, double m02,
+        double m10, double m11, double m12,
+        double m20, double m21, double m22,
+        double& qw, double& qx, double& qy, double& qz)
+    {
+        const double tr = m00 + m11 + m22;
+        if (tr > 0.0) {
+            const double sc = std::sqrt(tr + 1.0) * 2.0;
+            qw = 0.25 * sc;
+            qx = (m21 - m12) / sc;
+            qy = (m02 - m20) / sc;
+            qz = (m10 - m01) / sc;
+        } else if (m00 > m11 && m00 > m22) {
+            const double sc = std::sqrt(1.0 + m00 - m11 - m22) * 2.0;
+            qw = (m21 - m12) / sc;
+            qx = 0.25 * sc;
+            qy = (m01 + m10) / sc;
+            qz = (m02 + m20) / sc;
+        } else if (m11 > m22) {
+            const double sc = std::sqrt(1.0 + m11 - m00 - m22) * 2.0;
+            qw = (m02 - m20) / sc;
+            qx = (m01 + m10) / sc;
+            qy = 0.25 * sc;
+            qz = (m12 + m21) / sc;
+        } else {
+            const double sc = std::sqrt(1.0 + m22 - m00 - m11) * 2.0;
+            qw = (m10 - m01) / sc;
+            qx = (m02 + m20) / sc;
+            qy = (m12 + m21) / sc;
+            qz = 0.25 * sc;
+        }
+    }
+
 } // namespace StrikeEngine::Kernel

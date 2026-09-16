@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 
 namespace StrikeEngine::Kernel {
 
@@ -170,6 +171,85 @@ namespace StrikeEngine::Kernel {
         std::vector<double> losRateMag;           // |seeker LOS rate| used (rad/s)
         std::vector<double> closingSpeed;         // closing speed used (m/s)
         std::vector<bool>   trackLossActive;      // a terminal lock-loss episode is being counted
+
+        std::size_t size = 0;
+
+        /**
+         * @brief Grows every vector to @p n entries; see
+         *        PhysicsBlock::ensureSize.
+         *
+         * Configuration fields carry block defaults here; the kernel
+         * overwrites them from GuidanceAutopilotConfig once the slot exists.
+         */
+        void ensureSize(std::size_t n) {
+            mode.resize(n, GuidanceMode::None);
+            targetX.resize(n, 0.0); targetY.resize(n, 0.0); targetZ.resize(n, 0.0);
+            targetVx.resize(n, 0.0); targetVy.resize(n, 0.0); targetVz.resize(n, 0.0);
+            targetAccelX.resize(n, 0.0); targetAccelY.resize(n, 0.0); targetAccelZ.resize(n, 0.0);
+            targetAccelAvailable.resize(n, false);
+            commandedAccelX.resize(n, 0.0);
+            commandedAccelY.resize(n, 0.0);
+            commandedAccelZ.resize(n, 0.0);
+            maxAccel.resize(n, 0.0);
+            navigationConstant.resize(n, 3.5);
+            scheduledNavN.resize(n, 3.5);
+            navScheduleEnabled.resize(n, false);
+            navConstantTerminal.resize(n, 3.0);
+            navScheduleTgoSec.resize(n, 8.0);
+            waypointGain.resize(n, 20.0);
+            cruiseAltitudeM.resize(n, 0.0);
+            cruiseAltitudeGain.resize(n, 0.05);
+            cruiseAltitudeDamping.resize(n, 0.30);
+            cruiseWaypointGain.resize(n, 0.8);
+            handoffBlendTimeSec.resize(n, 0.0);
+            lockLossRetentionSec.resize(n, 0.0);
+            apnFeedforwardEnabled.resize(n, false);
+            gravityCompensationEnabled.resize(n, false);
+            trajectoryMinSpeedMps.resize(n, 30.0);
+            trajectoryFeasibilityAccelFactor.resize(n, 0.95);
+            commandLagSec.resize(n, 0.0);
+            commandSlewLimitMps3.resize(n, 0.0);
+            scaleDemandOnInfeasible.resize(n, false);
+            rangeGainShapingEnabled.resize(n, false);
+            rangeGainRefM.resize(n, 10000.0);
+            trackAimMinQuality01.resize(n, 0.0);
+            apnFeedforwardMinQuality01.resize(n, 0.0);
+            loftEnabled.resize(n, false);
+            loftAngleDeg.resize(n, 0.0);
+            loftAltitudeM.resize(n, 0.0);
+            loftGain.resize(n, 0.0);
+            loftRangeM.resize(n, 40000.0);
+            authorityAwareLimitEnabled.resize(n, false);
+            datalinkSourceId.resize(n, -1);
+            datalinkTargetId.resize(n, -1);
+            phase.resize(n, GuidancePhase::None);
+            law.resize(n, GuidanceLaw::None);
+            trackId.resize(n, -1);
+            trackAgeSec.resize(n, 0.0);
+            handoffWeight.resize(n, 0.0);
+            lockLossCount.resize(n, 0u);
+            rawAccelX.resize(n, 0.0); rawAccelY.resize(n, 0.0); rawAccelZ.resize(n, 0.0);
+            limitedByMaxAccel.resize(n, false);
+            lawInvalid.resize(n, false);
+            nonClosing.resize(n, false);
+            tgoSec.resize(n, 0.0);
+            retainedAccelX.resize(n, 0.0);
+            retainedAccelY.resize(n, 0.0);
+            retainedAccelZ.resize(n, 0.0);
+            predictedInterceptX.resize(n, 0.0);
+            predictedInterceptY.resize(n, 0.0);
+            predictedInterceptZ.resize(n, 0.0);
+            predictedTgoSec.resize(n, 0.0);
+            trajectoryRequiredAccel.resize(n, 0.0);
+            trajectoryAimSource.resize(n, GuidanceAimSource::None);
+            trajectoryFeasible.resize(n, false);
+            trajectoryReason.resize(n, TrajectoryReason::None);
+            shapedAccelX.resize(n, 0.0); shapedAccelY.resize(n, 0.0); shapedAccelZ.resize(n, 0.0);
+            losRateMag.resize(n, 0.0);
+            closingSpeed.resize(n, 0.0);
+            trackLossActive.resize(n, false);
+            size = n;
+        }
     };
 
 } // namespace StrikeEngine::Kernel

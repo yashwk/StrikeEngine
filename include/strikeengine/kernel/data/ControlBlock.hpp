@@ -81,6 +81,82 @@ struct ControlBlock {
 	std::vector<bool> pitchSaturated;
 	std::vector<bool> yawSaturated;
 	std::vector<bool> rollSaturated;
+
+	std::size_t size = 0;
+
+	/**
+	 * @brief Grows every vector to @p n entries; see PhysicsBlock::ensureSize.
+	 *
+	 * Gains set here are block defaults. The kernel overwrites them from the
+	 * vehicle configuration once the slot exists.
+	 */
+	void ensureSize(std::size_t n) {
+		thrustCommand.resize(n, 0.0);
+		pitchCommand.resize(n, 0.0);
+		yawCommand.resize(n, 0.0);
+		rollCommand.resize(n, 0.0);
+		thrustVectorPitchCommand.resize(n, 0.0);
+		thrustVectorYawCommand.resize(n, 0.0);
+		kAccelP.resize(n, 0.030);
+		kRateP.resize(n, 1.000);
+		kAlphaP.resize(n, 0.200);
+		kRollP.resize(n, 0.10);
+		kRollD.resize(n, 0.05);
+		maxDeflectionRad.resize(n, 0.43);
+		gainSchedulingEnabled.resize(n, false);
+		refDynamicPressurePa.resize(n, 50000.0);
+		minDynamicPressurePa.resize(n, 2000.0);
+		maxDynamicPressurePa.resize(n, 300000.0);
+		kRatePitchP.resize(n, -1.0);
+		kRateYawP.resize(n, -1.0);
+		scheduleAllTerms.resize(n, false);
+		integralEnabled.resize(n, false);
+		kIntegralPitch.resize(n, 0.0);
+		kIntegralYaw.resize(n, 0.0);
+		integralClampRad.resize(n, 0.05);
+		kAccelErrP.resize(n, -1.0);
+		threeLoopEnabled.resize(n, false);
+		controlEffectivenessEnabled.resize(n, false);
+		controlEffBase.resize(n, 1.0);
+		controlEffMachSlope.resize(n, 0.0);
+		controlEffMachQuad.resize(n, 0.0);
+		controlEffMin.resize(n, 0.2);
+		controlEffMax.resize(n, 5.0);
+		yawDeadbandSmoothEnabled.resize(n, false);
+		yawDeadbandWidthMps2.resize(n, 0.5);
+		commandLagSec.resize(n, 0.0);
+		commandRateLimitRadPerSec.resize(n, 0.0);
+		useMeasuredRatesEnabled.resize(n, false);
+		rollSuppressLateralAccelMps2.resize(n, 0.0);
+		useTruthGravityModel.resize(n, false);
+		pitchIntegral.resize(n, 0.0);
+		yawIntegral.resize(n, 0.0);
+		pitchCommandPrev.resize(n, 0.0);
+		yawCommandPrev.resize(n, 0.0);
+		rollCommandPrev.resize(n, 0.0);
+		specificForceDemandY.resize(n, 0.0);
+		specificForceDemandZ.resize(n, 0.0);
+		effectiveKAccel.resize(n, 0.030);
+		controlEffectiveness.resize(n, 1.0);
+		machNumber.resize(n, 0.0);
+		feedForwardPitch.resize(n, 0.0);
+		feedForwardYaw.resize(n, 0.0);
+		rateDampingPitch.resize(n, 0.0);
+		rateDampingYaw.resize(n, 0.0);
+		aoaDampingPitch.resize(n, 0.0);
+		aoaDampingYaw.resize(n, 0.0);
+		accelErrPitch.resize(n, 0.0);
+		accelErrYaw.resize(n, 0.0);
+		rateCommandPitch.resize(n, 0.0);
+		rateCommandYaw.resize(n, 0.0);
+		achievedSpecificForceY.resize(n, 0.0);
+		achievedSpecificForceZ.resize(n, 0.0);
+		authorityMargin01.resize(n, 1.0);
+		pitchSaturated.resize(n, false);
+		yawSaturated.resize(n, false);
+		rollSaturated.resize(n, false);
+		size = n;
+	}
 };
 
 } // namespace StrikeEngine::Kernel

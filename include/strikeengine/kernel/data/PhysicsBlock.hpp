@@ -98,6 +98,65 @@ struct PhysicsBlock {
 	std::vector<bool> actuatorFailed;
 
 	size_t size = 0;
+
+	/**
+	 * @brief Grows every vector to @p n entries.
+	 *
+	 * New slots receive the documented defaults; existing entries are
+	 * preserved. Callers must invoke this whenever an entity slot is added so
+	 * the block stays self-consistent. Every consumer indexes with a
+	 * `i < vector.size()` guard, so a vector that is not grown here silently
+	 * disables its subsystem for the newest entity.
+	 */
+	void ensureSize(std::size_t n) {
+		px.resize(n, 0.0); py.resize(n, 0.0); pz.resize(n, 0.0);
+		vx.resize(n, 0.0); vy.resize(n, 0.0); vz.resize(n, 0.0);
+		ax.resize(n, 0.0); ay.resize(n, 0.0); az.resize(n, 0.0);
+		qw.resize(n, 1.0); qx.resize(n, 0.0); qy.resize(n, 0.0); qz.resize(n, 0.0);
+		wx.resize(n, 0.0); wy.resize(n, 0.0); wz.resize(n, 0.0);
+		alphax.resize(n, 0.0); alphay.resize(n, 0.0); alphaz.resize(n, 0.0);
+		mach.resize(n, 0.0);
+		dynamicPressure.resize(n, 0.0);
+		airDensity.resize(n, 0.0);
+		localSpeedOfSound.resize(n, 0.0);
+		Ixx.resize(n, 1.0); Iyy.resize(n, 10.0); Izz.resize(n, 10.0);
+		Ixy.resize(n, 0.0); Ixz.resize(n, 0.0); Iyz.resize(n, 0.0);
+		mass.resize(n, 1.0);
+		massDry.resize(n, 1.0);
+		referenceArea.resize(n, 0.1);
+		referenceLength.resize(n, 1.0);
+		cd.resize(n, 0.3);
+		clAlpha.resize(n, 0.0);
+		clFin.resize(n, 0.0);
+		clMax.resize(n, 2.0);
+		tailControl.resize(n, false);
+		aeroTables.resize(n, nullptr);
+		fins.resize(n, nullptr);
+		finSets.resize(n);
+		airframe.resize(n, nullptr);
+		propulsionId.resize(n, -1);
+		ignitionTime.resize(n, 0.0);
+		stageIndex.resize(n, -1);
+		stageCount.resize(n, 0);
+		stageMinMass.resize(n, 0.0);
+		gimbalPitch.resize(n, 0.0); gimbalYaw.resize(n, 0.0);
+		maxGimbalPitchRad.resize(n, 0.0); maxGimbalYawRad.resize(n, 0.0);
+		gimbalTimeConstantSec.resize(n, 0.02);
+		maxGimbalRateRadPerSec.resize(n, 0.0);
+		enginePositionX.resize(n, 0.0);
+		enginePositionY.resize(n, 0.0);
+		enginePositionZ.resize(n, 0.0);
+		finPitch.resize(n, 0.0); finYaw.resize(n, 0.0); finRoll.resize(n, 0.0);
+		maxDeflectionRad.resize(n, 0.43);
+		servoTimeConstantSec.resize(n, 0.02);
+		maxServoRateRadPerSec.resize(n, 5.24);
+		active.resize(n, true);
+		motorFailed.resize(n, false);
+		engineFailed.resize(n, false);
+		tankFailed.resize(n, false);
+		actuatorFailed.resize(n, false);
+		size = n;
+	}
 };
 
 } // namespace StrikeEngine::Kernel

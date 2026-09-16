@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <string>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 
@@ -144,7 +146,9 @@ namespace StrikeEngine::Kernel {
         void addPendingLaunch(const ScenarioEntityConfig& entityCfg);
         // True while any rail-launched entity is still gating on its
         // launch conditions (run-end logic treats the opening as pre-launch).
-        [[nodiscard]] bool hasPendingLaunches() const { return !pendingLaunches.empty(); }        void setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad);
+        [[nodiscard]] bool hasPendingLaunches() const { return !pendingLaunches.empty(); }
+
+        void setThrustVectorCommand(PhysicsId id, double pitchRad, double yawRad);
         void step(double dt);
         void runSteps(std::size_t steps, double dt);
 
@@ -203,6 +207,23 @@ namespace StrikeEngine::Kernel {
         std::unique_ptr<PhysicsBackend> backend;
         EnvironmentConfig environment;
 
+        /**
+         * @brief Parsed profile cache, keyed by profile file path.
+         *
+         * Profile files are immutable for the lifetime of the kernel, so
+         * re-parsing them on every createVehicle is redundant. Load failures
+         * are not cached, so correcting a file takes effect on the next spawn.
+         */
+        struct ProfileCache {
+            std::unordered_map<std::string, AeroConfig> aero;
+            std::unordered_map<std::string, PropulsionConfig> motor;
+            std::unordered_map<std::string, SeekerConfig> seeker;
+            std::unordered_map<std::string, SensorConfig> sensor;
+            std::unordered_map<std::string, GuidanceAutopilotConfig> guidance;
+            std::unordered_map<std::string, WarheadConfig> warhead;
+        };
+        ProfileCache profileCache;
+
         // Per-entity staging + warhead state (parallel to physics entities).
         std::vector<StagePlan> stagePlans;
         std::vector<WarheadState> warheads;
@@ -221,17 +242,27 @@ namespace StrikeEngine::Kernel {
         void processStaging();
         void processWarheads();
 
+        /**
+         * @brief Marks an entity dead: deactivates it and zeroes its motion.
+         */
+        void killEntity(PhysicsId id);
+
         // Fixed installations (EntityType::RadarSite) do not fly: they are
         // pinned to the position where they first went active, with zero
         // velocity and rates, so a ground radar behaves like the installation
         // it is while its sensors, tracks and datalink keep running.
         void pinFixedInstallations();
+        /// Grows the fixed-installation anchor buffers to @p n entries.
+        void ensureFixedAnchors(std::size_t n);
         std::vector<double> fixedAnchorPx, fixedAnchorPy, fixedAnchorPz;
 
         // Rail-launch deferred spawns (see ScenarioEntityConfig::LaunchSpec).
         void processPendingLaunches();
         void processActiveFlyouts();
         void processPitchOvers();
+
+        /// Reused pre-step position snapshot for eventSystem.evaluate.
+        std::vector<double> stepPrevPx_, stepPrevPy_, stepPrevPz_;
         // Body->world quaternion with body X on the launch axis (elevationDeg
         // above the horizon toward the target), Y horizontal right, Z = X x Y.
         // False when the geometry has no usable axis.

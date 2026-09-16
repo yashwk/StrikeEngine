@@ -22,6 +22,31 @@
 
 namespace StrikeEngine::Kernel {
 
+    namespace {
+        /**
+         * @brief Parses a profile once and memoises it by path.
+         *
+         * @param cache  Path-keyed cache owned by the kernel.
+         * @param path   Profile file path.
+         * @param dbName Database name used in the error message.
+         * @param extract Selects the sub-config from the loaded database.
+         * @throws std::runtime_error if the profile fails to load.
+         */
+        template <typename Db, typename Cfg, typename Fn>
+        const Cfg& loadCachedProfile(std::unordered_map<std::string, Cfg>& cache,
+                                     const std::string& path, const char* dbName,
+                                     Fn extract) {
+            const auto it = cache.find(path);
+            if (it != cache.end()) return it->second;
+            Db db;
+            if (!db.loadProfile(path)) {
+                throw std::runtime_error(std::string(dbName) +
+                                         " could not load profile '" + path + "'");
+            }
+            return cache.emplace(path, extract(db)).first->second;
+        }
+    }
+
     SimulationKernel::SimulationKernel(BackendType backendType, IntegratorType integratorType) {
         if (backendType == BackendType::Vulkan) {
             auto factory = getPhysicsBackendFactory(static_cast<int>(BackendType::Vulkan));
@@ -105,6 +130,7 @@ namespace StrikeEngine::Kernel {
         warheadRng.seed(randomSeed ^ 0x9E3779B9u);
         fuzeRng.seed(randomSeed ^ 0xF00D5EEDu);
         eventSystem.resetTransientState();
+        commandProcessor.reset();
         if (backend) backend->reset();
         freeList.clear();
         stagePlans.clear();
@@ -126,52 +152,36 @@ namespace StrikeEngine::Kernel {
         // load a referenced profile is fatal (fail fast).
         VehicleConfig resolved = config;
         if (!config.aeroProfileId.empty()) {
-            AeroProfileDatabase aeroDb;
-            if (!aeroDb.loadProfile(config.aeroProfileId)) {
-                throw std::runtime_error("AeroProfileDatabase could not load profile '" +
-                                         config.aeroProfileId + "'");
-            }
-            resolved.aero = aeroDb.aero();
+            resolved.aero = loadCachedProfile<AeroProfileDatabase, AeroConfig>(
+                profileCache.aero, config.aeroProfileId, "AeroProfileDatabase",
+                [](const AeroProfileDatabase& db) { return db.aero(); });
         }
         if (!config.motorProfileId.empty()) {
-            MotorProfileDatabase motorDb;
-            if (!motorDb.loadProfile(config.motorProfileId)) {
-                throw std::runtime_error("MotorProfileDatabase could not load profile '" +
-                                         config.motorProfileId + "'");
-            }
-            resolved.propulsion = motorDb.propulsion();
+            resolved.propulsion = loadCachedProfile<MotorProfileDatabase, PropulsionConfig>(
+                profileCache.motor, config.motorProfileId, "MotorProfileDatabase",
+                [](const MotorProfileDatabase& db) { return db.propulsion(); });
         }
         if (!config.seekerProfileId.empty()) {
-            SeekerProfileDatabase seekerDb;
-            if (!seekerDb.loadProfile(config.seekerProfileId)) {
-                throw std::runtime_error("SeekerProfileDatabase could not load profile '" +
-                                         config.seekerProfileId + "'");
-            }
-            resolved.seeker = seekerDb.seeker();
+            resolved.seeker = loadCachedProfile<SeekerProfileDatabase, SeekerConfig>(
+                profileCache.seeker, config.seekerProfileId, "SeekerProfileDatabase",
+                [](const SeekerProfileDatabase& db) { return db.seeker(); });
         }
         if (!config.sensorProfileId.empty()) {
-            SensorProfileDatabase sensorDb;
-            if (!sensorDb.loadProfile(config.sensorProfileId)) {
-                throw std::runtime_error("SensorProfileDatabase could not load profile '" +
-                                         config.sensorProfileId + "'");
-            }
-            resolved.sensor = sensorDb.sensor();
+            resolved.sensor = loadCachedProfile<SensorProfileDatabase, SensorConfig>(
+                profileCache.sensor, config.sensorProfileId, "SensorProfileDatabase",
+                [](const SensorProfileDatabase& db) { return db.sensor(); });
         }
         if (!config.guidanceProfileId.empty()) {
-            GuidanceProfileDatabase guidanceDb;
-            if (!guidanceDb.loadProfile(config.guidanceProfileId)) {
-                throw std::runtime_error("GuidanceProfileDatabase could not load profile '" +
-                                         config.guidanceProfileId + "'");
-            }
-            resolved.guidanceAutopilot = guidanceDb.guidanceAutopilot();
+            resolved.guidanceAutopilot =
+                loadCachedProfile<GuidanceProfileDatabase, GuidanceAutopilotConfig>(
+                    profileCache.guidance, config.guidanceProfileId,
+                    "GuidanceProfileDatabase",
+                    [](const GuidanceProfileDatabase& db) { return db.guidanceAutopilot(); });
         }
         if (!config.warheadProfileId.empty()) {
-            WarheadProfileDatabase warheadDb;
-            if (!warheadDb.loadProfile(config.warheadProfileId)) {
-                throw std::runtime_error("WarheadProfileDatabase could not load profile '" +
-                                         config.warheadProfileId + "'");
-            }
-            resolved.warhead = warheadDb.warhead();
+            resolved.warhead = loadCachedProfile<WarheadProfileDatabase, WarheadConfig>(
+                profileCache.warhead, config.warheadProfileId, "WarheadProfileDatabase",
+                [](const WarheadProfileDatabase& db) { return db.warhead(); });
         }
 
         std::string propulsionError;
@@ -206,384 +216,22 @@ namespace StrikeEngine::Kernel {
             id = freeList.back();
             freeList.pop_back();
         } else {
-            id = physicsBlock.size++;
-            // Keep the SoA block size fields in sync with the physics entity
-            // count. SeekerSystem reads seeker.size/status.size directly, so
-            // an unsynced size silently disabled kernel-path seekers.
-            statusBlock.size = physicsBlock.size;
-            sensorBlock.size = physicsBlock.size;
-            navigationBlock.size = physicsBlock.size;
-            seekerBlock.size = physicsBlock.size;
-            trackBlock.size = physicsBlock.size;   // the track manager reads tracks.size
-            
-            // Resize arrays
-            physicsBlock.px.push_back(0); physicsBlock.py.push_back(0); physicsBlock.pz.push_back(0);
-            physicsBlock.vx.push_back(0); physicsBlock.vy.push_back(0); physicsBlock.vz.push_back(0);
-            physicsBlock.ax.push_back(0); physicsBlock.ay.push_back(0); physicsBlock.az.push_back(0);
-            physicsBlock.qw.push_back(1); physicsBlock.qx.push_back(0); physicsBlock.qy.push_back(0); physicsBlock.qz.push_back(0);
-            physicsBlock.wx.push_back(0); physicsBlock.wy.push_back(0); physicsBlock.wz.push_back(0);
-            physicsBlock.alphax.push_back(0); physicsBlock.alphay.push_back(0); physicsBlock.alphaz.push_back(0);
-            physicsBlock.Ixx.push_back(1.0); physicsBlock.Iyy.push_back(10.0); physicsBlock.Izz.push_back(10.0);
-            physicsBlock.Ixy.push_back(0.0); physicsBlock.Ixz.push_back(0.0); physicsBlock.Iyz.push_back(0.0);
-            physicsBlock.mass.push_back(1.0);
-            physicsBlock.massDry.push_back(1.0);
-            physicsBlock.referenceArea.push_back(0.1);
-            physicsBlock.referenceLength.push_back(1.0);
-            physicsBlock.cd.push_back(0.3);
-            physicsBlock.clAlpha.push_back(0.0);
-            physicsBlock.clFin.push_back(0.0);
-            physicsBlock.clMax.push_back(2.0);
-            physicsBlock.tailControl.push_back(false);
-            physicsBlock.aeroTables.push_back(nullptr);
-            physicsBlock.fins.push_back(nullptr);
-            physicsBlock.finSets.push_back({});
-            physicsBlock.airframe.push_back(nullptr);
-            physicsBlock.propulsionId.push_back(-1);
-            physicsBlock.ignitionTime.push_back(0.0);
-            physicsBlock.stageIndex.push_back(-1);
-            physicsBlock.stageCount.push_back(0);
-            physicsBlock.finPitch.push_back(0.0); physicsBlock.finYaw.push_back(0.0); physicsBlock.finRoll.push_back(0.0);
-            physicsBlock.maxDeflectionRad.push_back(0.43);
-            physicsBlock.servoTimeConstantSec.push_back(0.02);
-            physicsBlock.maxServoRateRadPerSec.push_back(5.24);
-            physicsBlock.stageMinMass.push_back(0.0);
-            physicsBlock.gimbalPitch.push_back(0.0); physicsBlock.gimbalYaw.push_back(0.0);
-            physicsBlock.maxGimbalPitchRad.push_back(0.0); physicsBlock.maxGimbalYawRad.push_back(0.0);
-            physicsBlock.gimbalTimeConstantSec.push_back(0.02);
-            physicsBlock.maxGimbalRateRadPerSec.push_back(0.0);
-            physicsBlock.enginePositionX.push_back(0.0);
-            physicsBlock.enginePositionY.push_back(0.0);
-            physicsBlock.enginePositionZ.push_back(0.0);
-            physicsBlock.mach.push_back(0.0);
-            physicsBlock.dynamicPressure.push_back(0.0);
-            physicsBlock.airDensity.push_back(0.0);
-            physicsBlock.localSpeedOfSound.push_back(0.0);
-            physicsBlock.active.push_back(true);
-            physicsBlock.motorFailed.push_back(false);
-            physicsBlock.engineFailed.push_back(false);
-            physicsBlock.tankFailed.push_back(false);
-            physicsBlock.actuatorFailed.push_back(false);
-
-            stagePlans.push_back(StagePlan{});
-            warheads.push_back(WarheadState{});
-
-            controlBlock.thrustCommand.push_back(0);
-            controlBlock.pitchCommand.push_back(0);
-            controlBlock.yawCommand.push_back(0);
-            controlBlock.rollCommand.push_back(0);
-            controlBlock.thrustVectorPitchCommand.push_back(0);
-            controlBlock.thrustVectorYawCommand.push_back(0);
-            controlBlock.kAccelP.push_back(0.030);
-            controlBlock.kRateP.push_back(1.000);
-            controlBlock.kAlphaP.push_back(0.200);
-            controlBlock.kRollP.push_back(0.10);
-            controlBlock.kRollD.push_back(0.05);
-            controlBlock.maxDeflectionRad.push_back(0.43);
-            controlBlock.gainSchedulingEnabled.push_back(false);
-            controlBlock.refDynamicPressurePa.push_back(50000.0);
-            controlBlock.minDynamicPressurePa.push_back(2000.0);
-            controlBlock.maxDynamicPressurePa.push_back(300000.0);
-            controlBlock.kRatePitchP.push_back(-1.0);
-            controlBlock.kRateYawP.push_back(-1.0);
-            controlBlock.scheduleAllTerms.push_back(false);
-            controlBlock.integralEnabled.push_back(false);
-            controlBlock.kIntegralPitch.push_back(0.0);
-            controlBlock.kIntegralYaw.push_back(0.0);
-            controlBlock.integralClampRad.push_back(0.05);
-            controlBlock.kAccelErrP.push_back(-1.0);
-            controlBlock.threeLoopEnabled.push_back(false);
-            controlBlock.controlEffectivenessEnabled.push_back(false);
-            controlBlock.controlEffBase.push_back(1.0);
-            controlBlock.controlEffMachSlope.push_back(0.0);
-            controlBlock.controlEffMachQuad.push_back(0.0);
-            controlBlock.controlEffMin.push_back(0.2);
-            controlBlock.controlEffMax.push_back(5.0);
-            controlBlock.yawDeadbandSmoothEnabled.push_back(false);
-            controlBlock.yawDeadbandWidthMps2.push_back(0.5);
-            controlBlock.commandLagSec.push_back(0.0);
-            controlBlock.commandRateLimitRadPerSec.push_back(0.0);
-            controlBlock.useMeasuredRatesEnabled.push_back(false);
-            controlBlock.rollSuppressLateralAccelMps2.push_back(0.0);
-            controlBlock.useTruthGravityModel.push_back(false);
-            controlBlock.pitchIntegral.push_back(0.0);
-            controlBlock.yawIntegral.push_back(0.0);
-            controlBlock.pitchCommandPrev.push_back(0.0);
-            controlBlock.yawCommandPrev.push_back(0.0);
-            controlBlock.rollCommandPrev.push_back(0.0);
-            controlBlock.specificForceDemandY.push_back(0.0);
-            controlBlock.specificForceDemandZ.push_back(0.0);
-            controlBlock.effectiveKAccel.push_back(0.030);
-            controlBlock.controlEffectiveness.push_back(1.0);
-            controlBlock.machNumber.push_back(0.0);
-            controlBlock.feedForwardPitch.push_back(0.0);
-            controlBlock.feedForwardYaw.push_back(0.0);
-            controlBlock.rateDampingPitch.push_back(0.0);
-            controlBlock.rateDampingYaw.push_back(0.0);
-            controlBlock.aoaDampingPitch.push_back(0.0);
-            controlBlock.aoaDampingYaw.push_back(0.0);
-            controlBlock.accelErrPitch.push_back(0.0);
-            controlBlock.accelErrYaw.push_back(0.0);
-            controlBlock.rateCommandPitch.push_back(0.0);
-            controlBlock.rateCommandYaw.push_back(0.0);
-            controlBlock.achievedSpecificForceY.push_back(0.0);
-            controlBlock.achievedSpecificForceZ.push_back(0.0);
-            controlBlock.authorityMargin01.push_back(1.0);
-            controlBlock.pitchSaturated.push_back(false);
-            controlBlock.yawSaturated.push_back(false);
-            controlBlock.rollSaturated.push_back(false);
-
-            guidanceBlock.mode.push_back(GuidanceMode::None);
-            guidanceBlock.targetX.push_back(0); guidanceBlock.targetY.push_back(0); guidanceBlock.targetZ.push_back(0);
-            guidanceBlock.targetVx.push_back(0); guidanceBlock.targetVy.push_back(0); guidanceBlock.targetVz.push_back(0);
-            guidanceBlock.targetAccelX.push_back(0); guidanceBlock.targetAccelY.push_back(0); guidanceBlock.targetAccelZ.push_back(0);
-            guidanceBlock.targetAccelAvailable.push_back(false);
-            guidanceBlock.commandedAccelX.push_back(0); guidanceBlock.commandedAccelY.push_back(0); guidanceBlock.commandedAccelZ.push_back(0);
-            guidanceBlock.maxAccel.push_back(0.0);
-            guidanceBlock.navigationConstant.push_back(3.5);
-            guidanceBlock.scheduledNavN.push_back(3.5);
-            guidanceBlock.navScheduleEnabled.push_back(false);
-            guidanceBlock.navConstantTerminal.push_back(3.0);
-            guidanceBlock.navScheduleTgoSec.push_back(8.0);
-            guidanceBlock.waypointGain.push_back(20.0);
-            guidanceBlock.cruiseAltitudeM.push_back(0.0);
-            guidanceBlock.cruiseAltitudeGain.push_back(0.05);
-            guidanceBlock.cruiseAltitudeDamping.push_back(0.30);
-            guidanceBlock.cruiseWaypointGain.push_back(0.8);
-            guidanceBlock.handoffBlendTimeSec.push_back(0.0);
-            guidanceBlock.lockLossRetentionSec.push_back(0.0);
-            guidanceBlock.apnFeedforwardEnabled.push_back(false);
-            guidanceBlock.gravityCompensationEnabled.push_back(false);
-            guidanceBlock.phase.push_back(GuidancePhase::None);
-            guidanceBlock.law.push_back(GuidanceLaw::None);
-            guidanceBlock.trackId.push_back(-1);
-            guidanceBlock.trackAgeSec.push_back(0.0);
-            guidanceBlock.handoffWeight.push_back(0.0);
-            guidanceBlock.lockLossCount.push_back(0);
-            guidanceBlock.rawAccelX.push_back(0); guidanceBlock.rawAccelY.push_back(0); guidanceBlock.rawAccelZ.push_back(0);
-            guidanceBlock.limitedByMaxAccel.push_back(false);
-            guidanceBlock.lawInvalid.push_back(false);
-            guidanceBlock.nonClosing.push_back(false);
-            guidanceBlock.tgoSec.push_back(0.0);
-            guidanceBlock.retainedAccelX.push_back(0);
-            guidanceBlock.retainedAccelY.push_back(0);
-            guidanceBlock.retainedAccelZ.push_back(0);
-            guidanceBlock.trajectoryMinSpeedMps.push_back(30.0);
-            guidanceBlock.trajectoryFeasibilityAccelFactor.push_back(0.95);
-            guidanceBlock.commandLagSec.push_back(0.0);
-            guidanceBlock.commandSlewLimitMps3.push_back(0.0);
-            guidanceBlock.scaleDemandOnInfeasible.push_back(false);
-            guidanceBlock.rangeGainShapingEnabled.push_back(false);
-            guidanceBlock.rangeGainRefM.push_back(10000.0);
-            guidanceBlock.trackAimMinQuality01.push_back(0.0);
-            guidanceBlock.apnFeedforwardMinQuality01.push_back(0.0);
-            guidanceBlock.loftEnabled.push_back(false);
-            guidanceBlock.loftAngleDeg.push_back(0.0);
-            guidanceBlock.loftAltitudeM.push_back(0.0);
-            guidanceBlock.loftGain.push_back(0.0);
-            guidanceBlock.loftRangeM.push_back(40000.0);
-            guidanceBlock.authorityAwareLimitEnabled.push_back(false);
-            guidanceBlock.shapedAccelX.push_back(0); guidanceBlock.shapedAccelY.push_back(0); guidanceBlock.shapedAccelZ.push_back(0);
-            guidanceBlock.losRateMag.push_back(0.0);
-            guidanceBlock.closingSpeed.push_back(0.0);
-            guidanceBlock.trackLossActive.push_back(false);
-            guidanceBlock.datalinkSourceId.push_back(-1);
-            guidanceBlock.datalinkTargetId.push_back(-1);
-            guidanceBlock.predictedInterceptX.push_back(0);
-            guidanceBlock.predictedInterceptY.push_back(0);
-            guidanceBlock.predictedInterceptZ.push_back(0);
-            guidanceBlock.predictedTgoSec.push_back(0.0);
-            guidanceBlock.trajectoryRequiredAccel.push_back(0.0);
-            guidanceBlock.trajectoryAimSource.push_back(GuidanceAimSource::None);
-            guidanceBlock.trajectoryFeasible.push_back(false);
-            guidanceBlock.trajectoryReason.push_back(TrajectoryReason::None);
-
-            statusBlock.type.push_back(EntityType::Missile);
-            statusBlock.allegiance.push_back(Allegiance::Friendly);
-            statusBlock.health.push_back(100.0);
-            statusBlock.isAlive.push_back(true);
-            statusBlock.motorFailed.push_back(false);
-            statusBlock.engineFailed.push_back(false);
-            statusBlock.tankFailed.push_back(false);
-            statusBlock.actuatorFailed.push_back(false);
-            statusBlock.sensorFailed.push_back(false);
-            statusBlock.commsFailed.push_back(false);
-            statusBlock.name.push_back("");
-            statusBlock.role.push_back("");
-            statusBlock.rcsProfileId.push_back("");
-            statusBlock.irProfileId.push_back("");
-            statusBlock.emitterEirpW.push_back(0.0);
-            statusBlock.jammerEirpW.push_back(0.0);
-
-            sensorBlock.accelNoiseStdDev.push_back(0.1);
-            sensorBlock.accelBiasStdDev.push_back(0.01);
-            sensorBlock.gyroNoiseStdDev.push_back(0.01);
-            sensorBlock.gyroBiasStdDev.push_back(0.001);
-            sensorBlock.gpsPosNoiseStdDev.push_back(5.0);
-            sensorBlock.gpsVelNoiseStdDev.push_back(0.5);
-            sensorBlock.gpsInnovationGateSigma.push_back(5.0);
-            sensorBlock.baroInnovationGateSigma.push_back(-1.0);
-            sensorBlock.magInnovationGateSigma.push_back(-1.0);
-            sensorBlock.imuLeverArmX.push_back(0.0);
-            sensorBlock.imuLeverArmY.push_back(0.0);
-            sensorBlock.imuLeverArmZ.push_back(0.0);
-            sensorBlock.imuEnabled.push_back(true);
-            sensorBlock.gpsEnabled.push_back(true);
-            sensorBlock.gpsUpdateRateHz.push_back(1.0);
-            sensorBlock.baroUpdated.push_back(false);
-            sensorBlock.baroAlt.push_back(0.0);
-            sensorBlock.magUpdated.push_back(false);
-            sensorBlock.magX.push_back(0.0); sensorBlock.magY.push_back(0.0); sensorBlock.magZ.push_back(0.0);
-            sensorBlock.baroEnabled.push_back(false);
-            sensorBlock.baroNoiseStdDev.push_back(1.0);
-            sensorBlock.baroBiasStdDev.push_back(0.0);
-            sensorBlock.baroUpdateRateHz.push_back(1.0);
-            sensorBlock.magEnabled.push_back(false);
-            sensorBlock.magNoiseStdDev.push_back(50e-9);
-            sensorBlock.magUpdateRateHz.push_back(10.0);
-            sensorBlock.magDisturbanceGateRel.push_back(0.25);
-            sensorBlock.gpsLatencySec.push_back(0.0);
-            sensorBlock.gpsLeverArmX.push_back(0.0);
-            sensorBlock.gpsLeverArmY.push_back(0.0);
-            sensorBlock.gpsLeverArmZ.push_back(0.0);
-            sensorBlock.gpsFixConsistencyEnabled.push_back(false);
-            sensorBlock.insConingCompensationEnabled.push_back(false);
-            sensorBlock.insAdaptiveQEnabled.push_back(false);
-            sensorBlock.insAdaptiveQGain.push_back(1.0);
-            sensorBlock.initialAttitudeErrorDeg.push_back(0.0);
-            sensorBlock.initialPositionErrorM.push_back(0.0);
-            sensorBlock.initialVelocityErrorMps.push_back(0.0);
-            sensorBlock.insGravityGradientEnabled.push_back(false);
-            sensorBlock.insEarthRotationCouplingEnabled.push_back(false);
-            sensorBlock.gpsBatchUpdateEnabled.push_back(false);
-            sensorBlock.gpsLeverArmCompensationEnabled.push_back(false);
-            sensorBlock.gpsYawCorrectionDamping.push_back(0.1);
-            sensorBlock.gpsFixConsistencyThreshold.push_back(16.81);
-            sensorBlock.gpsFixConsistencyConfidence.push_back(0.99);
-            sensorBlock.gpsFixConsistencyDof.push_back(6);
-            sensorBlock.maxAccelBiasEstimate.push_back(0.5);
-            sensorBlock.maxGyroBiasEstimate.push_back(0.02);
-            sensorBlock.baroAttitudeCorrectionEnabled.push_back(false);
-
-            seekerBlock.type.push_back(SeekerType::None);
-            seekerBlock.transmitterPowerW.push_back(1000.0);
-            seekerBlock.antennaGainDb.push_back(30.0);
-            seekerBlock.wavelengthM.push_back(0.03); // X-band
-            seekerBlock.noiseFloorW.push_back(1e-12);
-            seekerBlock.snrThresholdDb.push_back(13.0);
-            seekerBlock.sensitivityW.push_back(1e-9);
-            seekerBlock.wavelengthBand.push_back(0);
-            seekerBlock.irExtinctionPerM.push_back(1e-4);
-            seekerBlock.illuminatorPx.push_back(0.0);
-            seekerBlock.illuminatorPy.push_back(0.0);
-            seekerBlock.illuminatorPz.push_back(0.0);
-            seekerBlock.illuminatorPowerW.push_back(5.0e5);
-            seekerBlock.illuminatorGainDb.push_back(38.0);
-            seekerBlock.illuminatorWavelengthM.push_back(0.03);
-            seekerBlock.fieldOfViewHalfAngleRad.push_back(1.0471975512); // 60 deg
-            seekerBlock.gimbalAzimuthLimitRad.push_back(1.0471975512);
-            seekerBlock.gimbalElevationLimitRad.push_back(1.0471975512);
-            seekerBlock.lockHysteresisDb.push_back(3.0);
-            seekerBlock.lockDropoutTimeSec.push_back(0.10);
-            seekerBlock.measurementLatencySec.push_back(0.0);
-            seekerBlock.measurementNoiseEnabled.push_back(false);
-            seekerBlock.angleNoiseStdDevRad.push_back(0.001);
-            seekerBlock.angleNoiseRefSnrDb.push_back(20.0);
-            seekerBlock.rangeNoiseStdDevM.push_back(1.0);
-            seekerBlock.rangeRateNoiseStdDevMps.push_back(0.5);
-            seekerBlock.glintSigmaM.push_back(0.0);
-            seekerBlock.glintCorrelationTauSec.push_back(1.0);
-            seekerBlock.swerlingEnabled.push_back(false);
-            seekerBlock.gimbalRateLimitRadPerSec.push_back(0.0);
-            seekerBlock.minRangeGateM.push_back(0.0);
-            seekerBlock.maxRangeGateM.push_back(0.0);
-            seekerBlock.terrainMaskingEnabled.push_back(false);
-            seekerBlock.minClosingRateMps.push_back(0.0);
-            seekerBlock.rateFilterTauSec.push_back(0.05);
-            seekerBlock.decoyRejectionDb.push_back(0.0);
-            seekerBlock.passiveRfDutyCycle.push_back(1.0);
-            seekerBlock.illuminatorEntityId.push_back(-1);
-            seekerBlock.isLocked.push_back(false);
-            seekerBlock.lockedTargetId.push_back(0);
-            seekerBlock.targetRange.push_back(0);
-            seekerBlock.targetRangeRate.push_back(0);
-            seekerBlock.targetAzimuth.push_back(0);
-            seekerBlock.targetElevation.push_back(0);
-            seekerBlock.targetAzimuthRate.push_back(0);
-            seekerBlock.targetElevationRate.push_back(0);
-            seekerBlock.losRateFilterAz.push_back(0);
-            seekerBlock.losRateFilterEl.push_back(0);
-            seekerBlock.losRateWorldX.push_back(0);
-            seekerBlock.losRateWorldY.push_back(0);
-            seekerBlock.losRateWorldZ.push_back(0);
-            seekerBlock.losRateWorldValid.push_back(false);
-            seekerBlock.losRateWorldStateX.push_back(0);
-            seekerBlock.losRateWorldStateY.push_back(0);
-            seekerBlock.losRateWorldStateZ.push_back(0);
-            seekerBlock.prevLosWorldX.push_back(0);
-            seekerBlock.prevLosWorldY.push_back(0);
-            seekerBlock.prevLosWorldZ.push_back(0);
-            seekerBlock.prevLosWorldTimeSec.push_back(0.0);
-            seekerBlock.bodyRateStateX.push_back(0);
-            seekerBlock.bodyRateStateY.push_back(0);
-            seekerBlock.bodyRateStateZ.push_back(0);
-            seekerBlock.gyroIntX.push_back(0);
-            seekerBlock.gyroIntY.push_back(0);
-            seekerBlock.gyroIntZ.push_back(0);
-            seekerBlock.prevStepGyroX.push_back(0);
-            seekerBlock.prevStepGyroY.push_back(0);
-            seekerBlock.prevStepGyroZ.push_back(0);
-            seekerBlock.previousAzimuth.push_back(0);
-            seekerBlock.previousElevation.push_back(0);
-            seekerBlock.timeSinceCommitSec.push_back(0.0);
-            seekerBlock.seekerClockSec.push_back(0.0);
-            seekerBlock.lockLostTimeSec.push_back(0);
-            seekerBlock.hasPreviousLos.push_back(false);
-            seekerBlock.lockActive.push_back(false);
-            seekerBlock.hasPublishedMeasurement.push_back(false);
-            seekerBlock.measurementAgeSec.push_back(0.0);
-            seekerBlock.gimbalAzimuthRad.push_back(0.0);
-            seekerBlock.gimbalElevationRad.push_back(0.0);
-            seekerBlock.lastSignalStrength.push_back(0.0);
-            seekerBlock.lockRejectReason.push_back(
-                static_cast<int>(SeekerRejectReason::None));
-            seekerBlock.glintAzM.push_back(0.0);
-            seekerBlock.glintElM.push_back(0.0);
-
-            // Persistent track state (config defaults; reset in the common path)
-            trackBlock.confirmations.push_back(3);
-            trackBlock.coastTimeoutSec.push_back(0.5);
-            trackBlock.lossTimeoutSec.push_back(2.0);
-            trackBlock.filterEnabled.push_back(false);
-            trackBlock.processNoiseMps2.push_back(15.0);
-            trackBlock.angleStdRad.push_back(0.003);
-            trackBlock.measNoiseScale.push_back(1.0);
-            trackBlock.residualGateSigma.push_back(0.0);
-            trackBlock.maxAccelMps2.push_back(0.0);
-            trackBlock.retargetConfirmations.push_back(1);
-            trackBlock.seedPolicy.push_back(0);
-            trackBlock.minQuality01.push_back(0.0);
-            trackBlock.qualityTauSec.push_back(1.0);
-            trackBlock.velocityBlend.push_back(0.08);
-            trackBlock.state.push_back(TrackState::None);
-            trackBlock.trackId.push_back(-1);
-            trackBlock.posX.push_back(0); trackBlock.posY.push_back(0); trackBlock.posZ.push_back(0);
-            trackBlock.velX.push_back(0); trackBlock.velY.push_back(0); trackBlock.velZ.push_back(0);
-            trackBlock.accelX.push_back(0); trackBlock.accelY.push_back(0); trackBlock.accelZ.push_back(0);
-            trackBlock.accelAvailable.push_back(false);
-            trackBlock.timestampSec.push_back(0.0);
-            trackBlock.ageSec.push_back(0.0);
-            trackBlock.positionStdM.push_back(5.0);
-            trackBlock.velocityStdMs.push_back(25.0);
-            trackBlock.quality01.push_back(0.0);
-            trackBlock.updateCount.push_back(0);
-            trackBlock.dropoutCount.push_back(0);
-            trackBlock.measPosX.push_back(0); trackBlock.measPosY.push_back(0); trackBlock.measPosZ.push_back(0);
-            trackBlock.measTimeSec.push_back(0.0);
-            trackBlock.kfCov.push_back({});
-            trackBlock.retargetCandidateId.push_back(-1);
-            trackBlock.retargetCount.push_back(0);
-            trackBlock.lastInnovationM.push_back(0.0);
-            trackBlock.residualRejectCount.push_back(0);
+            // Each block owns its slot defaults and grows itself; see
+            // PhysicsBlock::ensureSize.
+            id = physicsBlock.size;
+            const std::size_t newSize = id + 1;
+            physicsBlock.ensureSize(newSize);
+            controlBlock.ensureSize(newSize);
+            guidanceBlock.ensureSize(newSize);
+            statusBlock.ensureSize(newSize);
+            sensorBlock.ensureSize(newSize);
+            seekerBlock.ensureSize(newSize);
+            trackBlock.ensureSize(newSize);
+            // NavigationBlock grows through NavigationSystem, which owns the
+            // covariance seeding; keep its size field in step.
+            navigationBlock.size = newSize;
+            stagePlans.resize(newSize);
+            warheads.resize(newSize);
         }
 
         // Per-entity defaults apply to BOTH fresh and reused slots so a
@@ -822,11 +470,7 @@ namespace StrikeEngine::Kernel {
         // are created, so the first integration step cannot nudge them off
         // their anchor before pinFixedInstallations() runs.
         if (resolved.type == EntityType::RadarSite) {
-            if (fixedAnchorPx.size() < physicsBlock.size) {
-                fixedAnchorPx.resize(physicsBlock.size, std::numeric_limits<double>::quiet_NaN());
-                fixedAnchorPy.resize(physicsBlock.size, std::numeric_limits<double>::quiet_NaN());
-                fixedAnchorPz.resize(physicsBlock.size, std::numeric_limits<double>::quiet_NaN());
-            }
+            ensureFixedAnchors(physicsBlock.size);
             fixedAnchorPx[id] = init.px;
             fixedAnchorPy[id] = init.py;
             fixedAnchorPz[id] = init.pz;
@@ -904,8 +548,21 @@ namespace StrikeEngine::Kernel {
         }
 
         physicsBlock.mass[id] = (config.initialMass >= 0.0) ? config.initialMass : init.mass;
-        const double finalDry = (config.massDry < 0.0) ? physicsBlock.mass[id] : config.massDry;
-        physicsBlock.massDry[id] = finalDry + separableDry;
+        // A declared dry mass is the FINAL dry mass (everything jettisoned), so
+        // the launch dry floor adds the separable stage structure back on top.
+        // Without a declared dry mass the vehicle carries no fuel: dry equals
+        // launch mass, and the stage structure is already inside it.
+        const bool declaredDry = config.massDry >= 0.0;
+        const double finalDry = declaredDry ? config.massDry : physicsBlock.mass[id];
+        const double effectiveDry = declaredDry ? finalDry + separableDry : finalDry;
+        if (!std::isfinite(effectiveDry) || effectiveDry > physicsBlock.mass[id]) {
+            throw std::invalid_argument(
+                "SimulationKernel::createVehicle: dry mass including separable stage "
+                "structure (" + std::to_string(effectiveDry) +
+                " kg) must be finite and <= launch mass (" +
+                std::to_string(physicsBlock.mass[id]) + " kg)");
+        }
+        physicsBlock.massDry[id] = effectiveDry;
         // The stage floor reserves later stages' propellant: the active stage
         // may burn only down to dry mass + reserved fuel.
         physicsBlock.stageMinMass[id] = hasStages ? physicsBlock.massDry[id] + reservedAfter0 : 0.0;
@@ -1170,17 +827,9 @@ namespace StrikeEngine::Kernel {
                 evt.type = EventType::CommunicationFailure;
                 break;
             case FailureMode::StructuralFailure: {
-                // Deactivate exactly like a ground impact: kill the entity,
-                // zero the motion state, and dispatch the event.
-                statusBlock.isAlive[id] = false;
-                statusBlock.health[id] = 0.0;
-                physicsBlock.active[id] = false;
-                physicsBlock.vx[id] = 0.0;
-                physicsBlock.vy[id] = 0.0;
-                physicsBlock.vz[id] = 0.0;
-                physicsBlock.ax[id] = 0.0;
-                physicsBlock.ay[id] = 0.0;
-                physicsBlock.az[id] = 0.0;
+                // Deactivate exactly like a warhead detonation: one shared
+                // definition of "dead" (see killEntity).
+                killEntity(id);
                 evt.type = EventType::StructuralFailure;
                 break;
             }
@@ -1188,6 +837,18 @@ namespace StrikeEngine::Kernel {
                 return;
         }
         eventSystem.dispatch(evt);
+    }
+
+    void SimulationKernel::killEntity(PhysicsId id) {
+        statusBlock.isAlive[id] = false;
+        statusBlock.health[id] = 0.0;
+        physicsBlock.active[id] = false;
+        physicsBlock.vx[id] = 0.0;
+        physicsBlock.vy[id] = 0.0;
+        physicsBlock.vz[id] = 0.0;
+        physicsBlock.ax[id] = 0.0;
+        physicsBlock.ay[id] = 0.0;
+        physicsBlock.az[id] = 0.0;
     }
 
     void SimulationKernel::applyDamage(PhysicsId id, double damage) {
@@ -1301,6 +962,10 @@ namespace StrikeEngine::Kernel {
     }
 
     void SimulationKernel::processWarheads() {
+        // ponytail: O(N^2) - each fusing warhead scans every entity, and the
+        // proximity branch scans twice (selection, then lethality). Acceptable
+        // at current entity counts. Upgrade path: build one proximity
+        // candidate list per step and share it across all fuses.
         // Analytic closest-approach projection of the relative state onto
         // the miss vector. Returns {time-to-CPA (clamped >= 0), CPA range}.
         const auto projectCpa = [](double dx, double dy, double dz,
@@ -1544,15 +1209,7 @@ namespace StrikeEngine::Kernel {
             // detonations find the carrier already dead, so the guard keeps
             // those a no-op.
             if (statusBlock.isAlive[i]) {
-                statusBlock.isAlive[i] = false;
-                statusBlock.health[i] = 0.0;
-                physicsBlock.active[i] = false;
-                physicsBlock.vx[i] = 0.0;
-                physicsBlock.vy[i] = 0.0;
-                physicsBlock.vz[i] = 0.0;
-                physicsBlock.ax[i] = 0.0;
-                physicsBlock.ay[i] = 0.0;
-                physicsBlock.az[i] = 0.0;
+                killEntity(i);
             }
 
             if (primary) {
@@ -1848,37 +1505,11 @@ namespace StrikeEngine::Kernel {
         const double zy = xAz * rx - xAx * rz;
         const double zz = xAx * ry - xAy * rx;
         // Body->world quaternion from the axis matrix (columns are the body
-        // axes). Shepperd's trace branch; the launch attitudes here are well
-        // away from a 180-degree rotation.
-        const double m00 = xAx, m01 = rx, m02 = zx;
-        const double m10 = xAy, m11 = ry, m12 = zy;
-        const double m20 = xAz, m21 = rz, m22 = zz;
-        const double tr = m00 + m11 + m22;
-        if (tr > 0.0) {
-            const double sc = std::sqrt(tr + 1.0) * 2.0;
-            qw = 0.25 * sc;
-            qx = (m21 - m12) / sc;
-            qy = (m02 - m20) / sc;
-            qz = (m10 - m01) / sc;
-        } else if (m00 > m11 && m00 > m22) {
-            const double sc = std::sqrt(1.0 + m00 - m11 - m22) * 2.0;
-            qw = (m21 - m12) / sc;
-            qx = 0.25 * sc;
-            qy = (m01 + m10) / sc;
-            qz = (m02 + m20) / sc;
-        } else if (m11 > m22) {
-            const double sc = std::sqrt(1.0 + m11 - m00 - m22) * 2.0;
-            qw = (m02 - m20) / sc;
-            qx = (m01 + m10) / sc;
-            qy = 0.25 * sc;
-            qz = (m12 + m21) / sc;
-        } else {
-            const double sc = std::sqrt(1.0 + m22 - m00 - m11) * 2.0;
-            qw = (m10 - m01) / sc;
-            qx = (m02 + m20) / sc;
-            qy = (m12 + m21) / sc;
-            qz = 0.25 * sc;
-        }
+        // axes).
+        quatFromRotationMatrix(xAx, rx, zx,
+                               xAy, ry, zy,
+                               xAz, rz, zz,
+                               qw, qx, qy, qz);
         return true;
     }
 
@@ -2030,16 +1661,18 @@ namespace StrikeEngine::Kernel {
         controlBlock.thrustVectorYawCommand[id] = yawRad;
     }
 
+    void SimulationKernel::ensureFixedAnchors(std::size_t n)
+    {
+        if (fixedAnchorPx.size() >= n) return;
+        fixedAnchorPx.resize(n, std::numeric_limits<double>::quiet_NaN());
+        fixedAnchorPy.resize(n, std::numeric_limits<double>::quiet_NaN());
+        fixedAnchorPz.resize(n, std::numeric_limits<double>::quiet_NaN());
+    }
+
     void SimulationKernel::pinFixedInstallations()
     {
         const std::size_t n = physicsBlock.size;
-        if (fixedAnchorPx.size() < n) {
-            const std::size_t oldSize = fixedAnchorPx.size();
-            fixedAnchorPx.resize(n, std::numeric_limits<double>::quiet_NaN());
-            fixedAnchorPy.resize(n, std::numeric_limits<double>::quiet_NaN());
-            fixedAnchorPz.resize(n, std::numeric_limits<double>::quiet_NaN());
-            (void)oldSize;
-        }
+        ensureFixedAnchors(n);
         for (std::size_t i = 0; i < n; ++i) {
             if (i >= statusBlock.type.size() ||
                 statusBlock.type[i] != EntityType::RadarSite) {
@@ -2076,9 +1709,15 @@ namespace StrikeEngine::Kernel {
             throw std::invalid_argument(
                 "SimulationKernel::step requires a positive timestep");
         }
-        const std::vector<double> previousPx = physicsBlock.px;
-        const std::vector<double> previousPy = physicsBlock.py;
-        const std::vector<double> previousPz = physicsBlock.pz;
+        // eventSystem.evaluate needs the pre-step positions to catch impacts
+        // that begin and end within one step. Reused buffers, not per-step
+        // allocations.
+        stepPrevPx_ = physicsBlock.px;
+        stepPrevPy_ = physicsBlock.py;
+        stepPrevPz_ = physicsBlock.pz;
+        const std::vector<double>& previousPx = stepPrevPx_;
+        const std::vector<double>& previousPy = stepPrevPy_;
+        const std::vector<double>& previousPz = stepPrevPz_;
         // Rail launches + flyout switches run BEFORE the clock advances, at
         // the same evaluation point the old app-side directors used. Spawning
         // after time.advance shifted every time-gated event (motor ignition,

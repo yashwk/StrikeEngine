@@ -74,6 +74,11 @@ namespace StrikeEngine::Kernel {
         // vehicle reuses the id.
         void dropCommandsFor(std::size_t entityId);
 
+        // Drop the whole queue. Kernel reset must call this: a command queued
+        // before reset would otherwise be applied after it, against whatever
+        // occupies the entity id in the new run.
+        void reset() { commandQueue.clear(); }
+
     private:
         std::vector<SimulationCommand> commandQueue;
     };
