@@ -152,7 +152,7 @@ awacs_ecef = geodetic_to_ecef(awacs_lat, awacs_lon, AWACS_ALT_M)
 missile_ecef = geodetic_to_ecef(SITE_LAT, SITE_LON, SITE_ALT + 2.0)
 SITE_TO_TARGET_BEARING = AWACS_BEARING  # the battery looks along the track (300 deg)
 LAUNCH_EJECT_DEG = 90.0  # vertical clearance out of the canister
-LAUNCH_ELEV_DEG = 35.0   # loft axis the thrusters pitch to before ignition
+LAUNCH_ELEV_DEG = 20.0   # flattened for the hotter boost-kick motor (was 35)
 LAUNCH_PUSH_MPS = 30.0   # canister ejection velocity (20-50 m/s per public sources)
 m_axes = pitched_axes(SITE_LAT, SITE_LON, AWACS_BEARING, LAUNCH_EJECT_DEG)
 s_axes = heading_axes(SITE_LAT, SITE_LON, SITE_TO_TARGET_BEARING)
@@ -448,31 +448,69 @@ def missile_aero(template_aero):
 
 
 def missile_propulsion():
+    # 40N6 two-stage solid, sized to the public figures (launch mass 1893 kg
+    # fixed below; Almaz-Antey Army-2018 sheet via Defense Express/TASS:
+    # 380 km aero / 15 km ballistic, 10 m-35 km alt, 1190 m/s AVERAGE speed,
+    # 1893 kg launch / 2600 kg in-canister; deagel/globalsecurity: peak
+    # Mach 7-9 class). NOTE on "Mach 14": every primary source lists
+    # 4800 m/s / Mach 14 as the max TARGET velocity, not the round's own
+    # speed -- the design target is a Mach 5-6 peak, Mach 4+ cruise, and
+    # ~1190 m/s (the official average) or better at seeker handover.
+    # Prop loaded 1280 kg = 1893 - 608 - ~5 residual, split 550 / 535 / 195:
+    # the 180 kg warhead (down from the 315 kg placeholder) frees 135 kg of
+    # dry mass for propellant at the same official 1893 kg launch mass, so
+    # the climb AND the late sustain both fit. Mass dry 743 -> 608.
+    # Shape is boost + dual-thrust sustain (one physical second stage with a
+    # boost-sustain grain, modeled as two sim stages). Two cruise shapes were
+    # tried and both failed: 11 kN/145 s sagged to ~640 m/s at T+30 in the
+    # climb and never locked; 25 kN/29 s + 5 kN/200 s wallowed at 12-18 km
+    # (thick-air maneuver drag ate the 5 kN, ground impact T+178). Lesson:
+    # below ~1000 m/s the PN wallow feeds on itself (slow -> AoA -> drag ->
+    # slow), so the climb phase must overmatch resistance outright (55 kN vs
+    # ~20 kN with maneuver drag, margin ~2.5-3x) to get HIGH and FAST, and
+    # the cruise phase only needs to beat thin-air drag: 2.6 kN vs ~0.5 kN
+    # at 30 km (margin ~5x), lit all the way to the T+225 intercept. The
+    # terminal dive (~16 kN resistance) cannot be thrust-held inside the
+    # 1893 kg prop budget -- it coasts on the established energy.
     return {"stages": [
-        # Boost: 5 s of hard thrust to punch out of the dense air.
-        {"propellant_mass_kg": 560.0, "dry_mass_kg": 0.0,
+        # Boost: 4.4 s, 320 kN (flow 125 kg/s = Isp ~261 s) to punch out fast.
+        {"propellant_mass_kg": 550.0, "dry_mass_kg": 0.0,
          "vacuum_isp": 265.0, "sea_level_isp": 250.0,
          "ignition_delay_sec": 0.8, "ignition_ramp_sec": 0.15,  # clear of the canister
          "shutdown_ramp_sec": 0.1, "shutdown_time_sec": -1.0,
          "max_gimbal_pitch_rad": 0.0, "max_gimbal_yaw_rad": 0.0,
          "max_gimbal_rate_rad_per_sec": 0.0, "gimbal_time_constant_sec": 0.02,
          "engine_position_x": 0.0, "engine_position_y": 0.0, "engine_position_z": 0.0,
-         "thrust_curve": [{"time_s": 0.0, "thrust_n": 280000.0},
-                          {"time_s": 4.9, "thrust_n": 280000.0},
-                          {"time_s": 5.0, "thrust_n": 0.0}]},
-        # Sustain: a long low-thrust burn (real 40N6-class rounds cruise for
-        # minutes). This is what buys the record-range leg: the round holds
-        # ~2 km/s in the thin-air loft instead of peaking and coasting.
-        {"propellant_mass_kg": 640.0, "dry_mass_kg": 0.0,
+         "thrust_curve": [{"time_s": 0.0, "thrust_n": 320000.0},
+                          {"time_s": 4.3, "thrust_n": 320000.0},
+                          {"time_s": 4.4, "thrust_n": 0.0}]},
+        # Sustain-high: 55 kN for 25 s (flow ~21.4 kg/s = Isp ~262 s),
+        # lighting right after boost burnout to outclimb drag + gravity
+        # with margin and establish the high/fast arc.
+        {"propellant_mass_kg": 535.0, "dry_mass_kg": 0.0,
          "vacuum_isp": 265.0, "sea_level_isp": 250.0,
          "ignition_delay_sec": 5.9, "ignition_ramp_sec": 0.2,
          "shutdown_ramp_sec": 0.2, "shutdown_time_sec": -1.0,
          "max_gimbal_pitch_rad": 0.0, "max_gimbal_yaw_rad": 0.0,
          "max_gimbal_rate_rad_per_sec": 0.0, "gimbal_time_constant_sec": 0.02,
          "engine_position_x": 0.0, "engine_position_y": 0.0, "engine_position_z": 0.0,
-         "thrust_curve": [{"time_s": 0.0, "thrust_n": 15000.0},
-                          {"time_s": 109.9, "thrust_n": 15000.0},
-                          {"time_s": 110.0, "thrust_n": 0.0}]},
+         "thrust_curve": [{"time_s": 0.0, "thrust_n": 55000.0},
+                          {"time_s": 24.9, "thrust_n": 55000.0},
+                          {"time_s": 25.0, "thrust_n": 0.0}]},
+        # Sustain-low: 2.6 kN for 193 s (flow ~1.0 kg/s = vac Isp 265 s),
+        # lighting as the high phase ends and burning past the T+225
+        # intercept so the round is still powered at handover and beyond --
+        # holds the thin-air cruise energy it was handed.
+        {"propellant_mass_kg": 195.0, "dry_mass_kg": 0.0,
+         "vacuum_isp": 265.0, "sea_level_isp": 250.0,
+         "ignition_delay_sec": 31.0, "ignition_ramp_sec": 0.2,
+         "shutdown_ramp_sec": 0.2, "shutdown_time_sec": -1.0,
+         "max_gimbal_pitch_rad": 0.0, "max_gimbal_yaw_rad": 0.0,
+         "max_gimbal_rate_rad_per_sec": 0.0, "gimbal_time_constant_sec": 0.02,
+         "engine_position_x": 0.0, "engine_position_y": 0.0, "engine_position_z": 0.0,
+         "thrust_curve": [{"time_s": 0.0, "thrust_n": 2600.0},
+                          {"time_s": 194.9, "thrust_n": 2600.0},
+                          {"time_s": 195.0, "thrust_n": 0.0}]},
     ]}
 
 
@@ -480,8 +518,8 @@ def missile_entity(template):
     cfg = dict(template)
     cfg.update({
         "type": "missile",
-        "initial_mass": 1893.0, "mass_dry": 743.0, "structural_hardness": 120.0,
-        "inertia_xx": 65.0, "inertia_yy": 8900.0, "inertia_zz": 8900.0,
+        "initial_mass": 1893.0, "mass_dry": 608.0, "structural_hardness": 120.0,
+        "inertia_xx": 53.0, "inertia_yy": 7300.0, "inertia_zz": 7300.0,
         "inertia_xy": 0.0, "inertia_xz": 0.0, "inertia_yz": 0.0,
         "ir_profile_id": "", "emitter_eirp_w": 0.0, "jammer_eirp_w": 0.0,
         "rcs_profile_id": "data/rcs/target_missile_rcs.json",
@@ -493,14 +531,35 @@ def missile_entity(template):
             "field_of_view_half_angle_rad": 0.5235988,
             "gimbal_azimuth_limit_rad": 1.0471976, "gimbal_elevation_limit_rad": 1.0471976,
             "gimbal_rate_limit_rad_per_sec": 1.2,
-            "min_range_gate_m": 0.0, "max_range_gate_m": 300000.0,
+            # Terminal-range acquisition: a 40N6-class ARH seeker does not
+            # acquire a transport at 250 km; midcourse flies the battery's
+            # datalink track and the seeker takes the endgame only. Locking
+            # at 250 km fed the terminal law a noise-dominated LOS rate for
+            # 150+ s (rate direction 30-100 deg off truth) and bent the
+            # trajectory into a 10.5 km miss the endgame could not fly out.
+            # 25 km keeps the terminal tgo (~18 s) long enough to run down a
+            # few-km arrival offset, while the LOS-rate signal (growing as
+            # 1/R^2) dominates the estimator's attitude-step noise.
+            "min_range_gate_m": 0.0, "max_range_gate_m": 25000.0,
             "terrain_masking_enabled": True, "min_closing_rate_mps": 0.0,
             "lock_hysteresis_db": 3.0, "lock_dropout_time_sec": 0.2,
+            # Slow LOS-rate filter: the terminal law consumes the seeker's
+            # world-frame rate, differenced across 0.05 s commits where the
+            # nav-attitude jitter dwarfs the true rotation for most of the
+            # flyout. The template's 0.02 s (a short-range dogfight value)
+            # passes that jitter straight into the PN loop and pumps a
+            # growing endgame oscillation. 1.0 s still answers well inside
+            # the ~25-40 s terminal tgo.
+            "rate_filter_tau_sec": 1.0,
             "measurement_latency_sec": 0.05, "measurement_noise_enabled": False,
             "swerling_enabled": False,
         }),
         "warhead": {
-            "mass_kg": 315.0, "fusing": "proximity", "fuse_enabled": True,
+            # 180 kg HE-frag class (48N6-family standard 143-180 kg; airpra est
+            # 150 kg; sk-atrium 145-180 kg). Some compilations list 315 kg
+            # (globalsecurity, spiritoftime) -- kept the tuned 60 m lethal
+            # band either way; mass_kg feeds damage, not flight dynamics.
+            "mass_kg": 180.0, "fusing": "proximity", "fuse_enabled": True,
             "fuse_detection_probability": 1.0, "damage": 100.0,
             "lethal_radius_m": 60.0, "proximity_trigger_m": 60.0,
             "falloff_radius_m": 150.0, "arming_delay_sec": 2.0,
@@ -510,12 +569,27 @@ def missile_entity(template):
             "tail_on_lethality_factor": 1.0,
         },
         "guidance_autopilot": dict(template["guidance_autopilot"], **{
-            "navigationConstant": 3.0, "navConstantTerminal": 3.8,
+            "navigationConstant": 2.0, "navConstantTerminal": 2.0,
             "navScheduleEnabled": True, "navScheduleTgoSec": 12.0,
-            "guidanceLoftEnabled": True, "guidanceLoftAngleDeg": 20.0,
-            "guidanceLoftAltitudeM": 40000.0,
-            "guidanceLoftRangeM": 300000.0, "guidanceLoftGain": 0.8,
-            "handoffBlendTimeSec": 3.0,
+            # Loft OFF: the 35 deg launch axis already flies the energy arc
+            # (33 km apogee) this motor needs to reach 265+ km. Any active
+            # loft law fights that arc from t=4 s: 6-8 deg biases porpoise on
+            # a 20 km ceiling (24->17->25 km, energy bled, 44 km short) or
+            # flatten boost ballistically (25 km apex, 49 km short). Even
+            # angle 0 still pulls onto the sightline while enabled, so the
+            # law is disabled outright for a pure-PN midcourse. The 20 km
+            # ceiling stays recorded (inert while disabled); revisit after
+            # motor upsizing buys a lower cruise. See CPA report 2026-09-16.
+            "guidanceLoftEnabled": False, "guidanceLoftAngleDeg": 0.0,
+            "guidanceLoftAltitudeM": 20000.0,
+            "guidanceLoftRangeM": 300000.0, "guidanceLoftGain": 0.5,
+            "handoffBlendTimeSec": 15.0,
+            # Command slew shaping: the terminal demand carries 1-2 s bursts
+            # (nav-attitude correction steps punching through the seeker rate
+            # filter) that bang the fins stop-to-stop and bend the trajectory.
+            # 20 m/s^3 follows the true endgame ramp (~7/s) while capping a
+            # 0.5 s 50-spike near its starting value. Template 3500 = off.
+            "guidanceCommandSlewLimitMps3": 20.0,
             "apnFeedforwardEnabled": True, "guidanceApnFeedforwardMinQuality01": 0.2,
             "kAccelP": 0.0032, "kAlphaP": 0.06,
             "kRateP": 0.6, "kRatePitchP": 0.6, "kRateYawP": 0.6,

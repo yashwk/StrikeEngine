@@ -400,9 +400,18 @@ namespace StrikeEngine::Kernel {
         // Midcourse PN / APN on the commanded target track (world frame).
         // Aim source: a measurement-anchored persistent target track
         // wins over the raw external command state; see update().
+        // When the seeker is locked, the round's OWN position fix (fresh,
+        // short-range, fire-control grade) wins over the remote datalink
+        // track: a long-range offboard picture carries the source platform's
+        // nav-attitude error projected over the range (kilometres of bias).
+        // The lead still comes from the launcher's fire-control solution
+        // when it provided one -- no differentiated angle velocity (remote
+        // or own) is lead-grade. Before lock (midcourse) the datalink
+        // picture is the only aim and keeps precedence.
         LawResult computeAimPn(
             std::size_t id, const NavigationBlock& nav,
-            const TrackBlock* tracks, GuidanceBlock& guidance)
+            const TrackBlock* tracks, GuidanceBlock& guidance,
+            bool seekerLocked)
         {
             LawResult out;
             const double baseN = effNavN(id, guidance);
@@ -412,33 +421,69 @@ namespace StrikeEngine::Kernel {
                 return out;
             }
 
-            // Select the aim state: datalink source track (cooperative
-            // engagement) > own persistent track (measurement-anchored) >
-            // the external command state (legacy). A configured track-quality
-            // floor can disqualify a track (default 0 = no gate).
+            // Select the aim state (precedence below): a configured
+            // track-quality floor can disqualify a track (default 0 = no
+            // gate), and a track-built lead additionally needs a trusted
+            // velocity.
+            auto commandHasSpeed = [&]() -> bool {
+                return id < guidance.targetVx.size() &&
+                    (guidance.targetVx[id] * guidance.targetVx[id] +
+                     guidance.targetVy[id] * guidance.targetVy[id] +
+                     guidance.targetVz[id] * guidance.targetVz[id]) > 1.0;
+            };
+            auto ownTrackUsable = [&]() -> bool {
+                return tracks && id < tracks->size && tracks->active(id) &&
+                    tracks->updateCount[id] > 0 &&
+                    qualityAbove(tracks, id, guidance.trackAimMinQuality01) &&
+                    aimVelocityTrusted(*tracks, id);
+            };
+            // Position-only usability: the onboard position fix stays
+            // fire-control grade long after the velocity state stops being
+            // lead-grade (differentiated from coarse angles). The lead then
+            // comes from the command solution (see below).
+            auto ownPosUsable = [&]() -> bool {
+                return tracks && id < tracks->size && tracks->active(id) &&
+                    tracks->updateCount[id] > 0 &&
+                    qualityAbove(tracks, id, guidance.trackAimMinQuality01);
+            };
+            auto datalinkUsable = [&](std::size_t& src) -> bool {
+                const int dl = (id < guidance.datalinkSourceId.size())
+                    ? guidance.datalinkSourceId[id] : -1;
+                if (dl < 0 || !tracks) return false;
+                src = static_cast<std::size_t>(dl);
+                return src < tracks->size && tracks->active(src) &&
+                    tracks->updateCount[src] > 0 &&
+                    qualityAbove(tracks, src, guidance.trackAimMinQuality01);
+            };
             double tx, ty, tz, tvx, tvy, tvz;
             bool trackAim = false;
             bool datalinkAim = false;
             std::size_t datalinkSrc = 0;
-            const int dlSrc = (id < guidance.datalinkSourceId.size())
-                ? guidance.datalinkSourceId[id] : -1;
-            if (dlSrc >= 0 && tracks) {
-                const std::size_t src = static_cast<std::size_t>(dlSrc);
-                if (src < tracks->size && tracks->active(src) &&
-                    tracks->updateCount[src] > 0 &&
-                    qualityAbove(tracks, src, guidance.trackAimMinQuality01))
-                {
-                    datalinkAim = true;
-                    datalinkSrc = src;
-                    tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
-                    remoteAimVelocity(guidance, *tracks, id, src, tvx, tvy, tvz);
+            const bool ownFirst = seekerLocked && ownPosUsable() &&
+                (commandHasSpeed() || ownTrackUsable());
+            if (ownFirst) {
+                // Locked: the onboard position fix (short-range, anchored at
+                // the current geometry) with the fire-control lead. A track
+                // velocity differentiated from coarse angle measurements is
+                // not lead-grade even when it is the round's own, so the
+                // command solution leads whenever the launcher provided one.
+                trackAim = true;
+                tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
+                if (commandHasSpeed()) {
+                    tvx = guidance.targetVx[id];
+                    tvy = guidance.targetVy[id];
+                    tvz = guidance.targetVz[id];
+                } else {
+                    tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
                 }
             }
-            if (!datalinkAim && tracks && id < tracks->size && tracks->active(id) &&
-                tracks->updateCount[id] > 0 &&
-                qualityAbove(tracks, id, guidance.trackAimMinQuality01) &&
-                aimVelocityTrusted(*tracks, id))
-            {
+            if (!trackAim && datalinkUsable(datalinkSrc)) {
+                datalinkAim = true;
+                const std::size_t src = datalinkSrc;
+                tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
+                remoteAimVelocity(guidance, *tracks, id, src, tvx, tvy, tvz);
+            }
+            if (!datalinkAim && !trackAim && ownTrackUsable()) {
                 trackAim = true;
                 tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
                 tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
@@ -703,7 +748,8 @@ namespace StrikeEngine::Kernel {
             // Infeasible / unpredicable: bounded best-effort PN toward the raw
             // aim (same shape as legacy midcourse) while the trajectory
             // diagnostics keep the infeasibility explicit and the demand finite.
-            LawResult fallback = computeAimPn(id, nav, tracks, g);
+            // Midcourse context: the datalink picture keeps aim precedence.
+            LawResult fallback = computeAimPn(id, nav, tracks, g, false);
             if (id < g.scaleDemandOnInfeasible.size() && g.scaleDemandOnInfeasible[id] &&
                 lim > 0.0 && fallback.valid) {
                 const double mag = std::sqrt(fallback.ax * fallback.ax +
@@ -963,8 +1009,10 @@ namespace StrikeEngine::Kernel {
                 // Phase = source + blend: one PN kernel, evaluated through both
                 // sources, weighted. The midcourse source (track/command aim)
                 // is always evaluated; the seeker source ramps in with the
-                // handoff weight and is gated by the gimbal-edge cone.
-                LawResult out = computeAimPn(i, nav, &tracks, guidance);
+                // handoff weight and is gated by the gimbal-edge cone. While
+                // locked, the midcourse source itself prefers the round's own
+                // (seeker) track over the remote datalink picture.
+                LawResult out = computeAimPn(i, nav, &tracks, guidance, true);
                 // Midcourse energy shaping (opt-in loft) applies to whichever
                 // branch the law took: feed-forward, aim/track, or the
                 // infeasible-trajectory fallback. Applying it inside one
@@ -1082,7 +1130,7 @@ namespace StrikeEngine::Kernel {
 
             if (mode == GuidanceMode::ProportionalNavigation) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
-                LawResult mc = computeAimPn(i, nav, &tracks, guidance);
+                LawResult mc = computeAimPn(i, nav, &tracks, guidance, false);
                 // Midcourse energy shaping (opt-in loft) applies here too: this
                 // is the no-seeker / not-yet-locked path, and it must fly the
                 // same lofted profile as the locked midcourse.

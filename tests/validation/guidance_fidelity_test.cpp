@@ -421,6 +421,63 @@ int main()
               "closing-speed diagnostic is signed (negative when opening)");
     }
 
+    // ---- 11. Locked aim prefers the own (seeker) track over datalink ----
+    // A long-range offboard picture carries the source platform's
+    // nav-attitude error projected over the range; the onboard track is
+    // anchored at the current (short) range. The seeker is set receding so
+    // its own solution is invalid and the demand is the pure aim source.
+    {
+        TrackBlock tracks;
+        tracks.size = 2;
+        tracks.state = {TrackState::Maintain, TrackState::Maintain};
+        tracks.updateCount = {1, 1};
+        tracks.quality01 = {1.0, 1.0};
+        tracks.posX = {1000.0, 1000.0}; tracks.posY = {0.0, 5000.0}; tracks.posZ = {0.0, 0.0};
+        tracks.velX = {0.0, 0.0}; tracks.velY = {0.0, 0.0}; tracks.velZ = {0.0, 0.0};
+        tracks.velocityStdMs = {10.0, 10.0};
+        tracks.accelAvailable = {false, false};
+        SeekerBlock opening = seeker;
+        opening.targetRangeRate = {50.0}; // receding: seeker solution invalid
+        GuidanceBlock g = makeBlock();
+        g.mode = {GuidanceMode::ProportionalNavigation};
+        g.datalinkSourceId = {1};
+        runTerminal(nav, opening, tracks, g, dt);
+        const double lockedMag = std::sqrt(g.commandedAccelX[0] * g.commandedAccelX[0] +
+                                           g.commandedAccelY[0] * g.commandedAccelY[0] +
+                                           g.commandedAccelZ[0] * g.commandedAccelZ[0]);
+        check(lockedMag < 1e-6,
+              "locked aim uses the dead-ahead own track (zero demand), not the 5 km-off datalink");
+        // Same setup, but the launcher provided a fire-control lead and the
+        // own fix sits slightly off-axis: the locked aim keeps the own
+        // position with the command lead (|demand| ~0.86), not the own
+        // velocity (|demand| ~3.45).
+        {
+            TrackBlock offAxis = tracks;
+            offAxis.posY = {100.0, 5000.0};
+            GuidanceBlock g = makeBlock();
+            g.mode = {GuidanceMode::ProportionalNavigation};
+            g.datalinkSourceId = {1};
+            g.targetVx = {50.0}; g.targetVy = {0.0}; g.targetVz = {0.0};
+            runTerminal(nav, opening, offAxis, g, dt);
+            const double leadMag = std::sqrt(g.commandedAccelX[0] * g.commandedAccelX[0] +
+                                             g.commandedAccelY[0] * g.commandedAccelY[0] +
+                                             g.commandedAccelZ[0] * g.commandedAccelZ[0]);
+            check(leadMag > 0.5 && leadMag < 1.5,
+                  "locked aim leads with the command solution, not the own velocity");
+        }
+        GuidanceBlock g2 = makeBlock();
+        g2.mode = {GuidanceMode::ProportionalNavigation};
+        g2.datalinkSourceId = {1};
+        SeekerBlock nolock = opening;
+        nolock.isLocked = {false};
+        runTerminal(nav, nolock, tracks, g2, dt);
+        const double openMag = std::sqrt(g2.commandedAccelX[0] * g2.commandedAccelX[0] +
+                                         g2.commandedAccelY[0] * g2.commandedAccelY[0] +
+                                         g2.commandedAccelZ[0] * g2.commandedAccelZ[0]);
+        check(openMag > 0.5,
+              "unlocked aim keeps the datalink picture (midcourse precedence unchanged)");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }
