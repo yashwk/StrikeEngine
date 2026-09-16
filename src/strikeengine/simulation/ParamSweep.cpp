@@ -56,14 +56,8 @@ namespace StrikeEngine::Simulation {
 
             const auto& physics = kernel.getPhysics();
 
-            if (config.entities.empty()) {
-                throw std::invalid_argument("ParamSweep scenario must contain an entity");
-            }
-            if (config.primaryEntityIndex >= config.entities.size()) {
-                throw std::invalid_argument(
-                    "ParamSweep primaryEntityIndex is outside the scenario entity list");
-            }
-            const std::size_t targetId = config.primaryEntityIndex;
+            const std::size_t targetId =
+                resolvePrimaryEntityId(config, physics.size);
 
             double maxAlt = -std::numeric_limits<double>::infinity();
             double maxVel = 0.0;

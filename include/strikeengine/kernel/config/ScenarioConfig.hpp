@@ -128,12 +128,40 @@ namespace StrikeEngine::Kernel {
 
         // Serialize/deserialize this scenario to/from a JSON file.
         // save() returns false if the file cannot be opened; load() throws
-        // std::runtime_error if the file is missing or the JSON is malformed.
+        // std::runtime_error if the file is missing, the JSON is malformed, or
+        // the document fails validateScenarioConfig.
         bool save(const std::string& path) const;
         static ScenarioConfig load(const std::string& path);
 
         // Apply this scenario to the given kernel
         void loadInto(SimulationKernel& kernel) const;
     };
+
+    /**
+     * @brief Validates the structural invariants every consumer relies on.
+     *
+     * Checks that the scenario declares at least one entity and that
+     * primaryEntityIndex addresses one of them. Called on the deserialization
+     * path so a malformed document fails at load rather than at first use.
+     *
+     * @throws std::runtime_error on violation, with the offending value.
+     */
+    void validateScenarioConfig(const ScenarioConfig& scenario);
+
+    /**
+     * @brief Resolves primaryEntityIndex to a kernel entity id.
+     *
+     * primaryEntityIndex is written as an index into the scenario's entity
+     * list, but it is consumed as an index into the kernel's physics block.
+     * Those differ whenever a scenario contains rail-launched entities, which
+     * are not created until they spawn: for such a scenario the list index is
+     * larger than the t=0 entity count. Validating against the list alone (as
+     * the study wrappers used to) therefore let an out-of-range id through.
+     *
+     * @param kernelEntityCount entities actually created at t=0.
+     * @throws std::invalid_argument when the index addresses no live entity.
+     */
+    std::size_t resolvePrimaryEntityId(const ScenarioConfig& scenario,
+                                       std::size_t kernelEntityCount);
 
 } // namespace StrikeEngine::Kernel

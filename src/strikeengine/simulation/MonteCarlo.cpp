@@ -57,14 +57,8 @@ namespace StrikeEngine::Simulation {
             kernel.setRandomSeed(kernelSeed);
 
             const auto& physics = kernel.getPhysics();
-            if (config.entities.empty()) {
-                throw std::invalid_argument("MonteCarlo scenario must contain an entity");
-            }
-            if (config.primaryEntityIndex >= config.entities.size()) {
-                throw std::invalid_argument(
-                    "MonteCarlo primaryEntityIndex is outside the scenario entity list");
-            }
-            const std::size_t targetId = config.primaryEntityIndex;
+            const std::size_t targetId =
+                resolvePrimaryEntityId(config, physics.size);
 
             while (kernel.getSimulationTime() <= maxTime) {
                 if (!physics.active[targetId]) break;

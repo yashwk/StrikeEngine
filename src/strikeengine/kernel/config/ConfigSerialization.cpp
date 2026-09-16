@@ -1,6 +1,7 @@
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/SeekerTypeStrings.hpp>
+#include <strikeengine/kernel/config/AeroSchema.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -242,24 +243,7 @@ static json finConfigToJson(const FinsConfig& fin) {
 }
 
 static FinsConfig finConfigFromJson(const json& f) {
-    FinsConfig fin;
-    const std::string shape = f.value("shape", std::string("trapezoidal"));
-    if (shape == "trapezoidal") fin.shape = Models::FinShape::Trapezoidal;
-    else if (shape == "elliptical") fin.shape = Models::FinShape::Elliptical;
-    else if (shape == "freeform") fin.shape = Models::FinShape::FreeForm;
-    else throw std::runtime_error("AeroConfig fins: unknown shape '" + shape + "'");
-    fin.count = f.at("count").get<int>();
-    fin.positionM = f.value("position_m", 0.0);
-    fin.cantAngleDeg = f.value("cant_angle_deg", 0.0);
-    fin.rootChordM = f.value("root_chord_m", 0.0);
-    fin.spanM = f.value("span_m", 0.0);
-    fin.tipChordM = f.value("tip_chord_m", 0.0);
-    fin.sweepLengthM = f.value("sweep_length_m", -1.0);
-    fin.steerable = f.value("steerable", true);
-    if (f.contains("shape_points")) {
-        fin.shapePoints = f.at("shape_points").get<std::vector<std::array<double, 2>>>();
-    }
-    return fin;
+    return AeroSchema::finsFromJson(f, "AeroConfig fins");
 }
 
 void to_json(json& j, const AeroConfig& a) {
@@ -337,24 +321,7 @@ void from_json(const json& j, AeroConfig& a) {
         a.fins = finConfigFromJson(j.at("fins"));
     }
     if (j.contains("airframe")) {
-        const auto& af = j.at("airframe");
-        a.airframe.wingSpanM       = af.at("wing_span_m").get<double>();
-        a.airframe.wingRootChordM  = af.at("wing_root_chord_m").get<double>();
-        a.airframe.wingTipChordM   = af.at("wing_tip_chord_m").get<double>();
-        a.airframe.wingSweepDeg    = af.at("wing_sweep_deg").get<double>();
-        a.airframe.wingPositionM   = af.at("wing_position_m").get<double>();
-        a.airframe.wingDihedralDeg = af.at("wing_dihedral_deg").get<double>();
-        a.airframe.htailSpanM      = af.at("htail_span_m").get<double>();
-        a.airframe.htailChordM     = af.at("htail_chord_m").get<double>();
-        a.airframe.htailPositionM  = af.at("htail_position_m").get<double>();
-        a.airframe.vtailSpanM      = af.at("vtail_span_m").get<double>();
-        a.airframe.vtailChordM     = af.at("vtail_chord_m").get<double>();
-        a.airframe.vtailPositionM  = af.at("vtail_position_m").get<double>();
-        a.airframe.fuselageDiameterM = af.at("fuselage_diameter_m").get<double>();
-        a.airframe.fuselageLengthM   = af.at("fuselage_length_m").get<double>();
-        a.airframe.cd0              = af.at("cd0").get<double>();
-        a.airframe.oswaldEfficiency = af.at("oswald_efficiency").get<double>();
-        a.airframe.clMax            = af.at("cl_max").get<double>();
+        AeroSchema::airframeFromJson(j.at("airframe"), a.airframe);
     }
 }
 
@@ -1091,6 +1058,39 @@ void from_json(const json& j, ScenarioConfig& s) {
     s.primaryEntityIndex = j.at("primary_entity_index").get<std::size_t>();
     s.randomSeed = j.value("random_seed", 0xDEADBEEFu);
     s.entities = j.at("entities").get<std::vector<ScenarioEntityConfig>>();
+    validateScenarioConfig(s);
+}
+
+void validateScenarioConfig(const ScenarioConfig& scenario) {
+    if (scenario.entities.empty()) {
+        throw std::runtime_error(
+            "ConfigSerialization: scenario '" + scenario.name +
+            "' declares no entities");
+    }
+    if (scenario.primaryEntityIndex >= scenario.entities.size()) {
+        throw std::runtime_error(
+            "ConfigSerialization: scenario '" + scenario.name +
+            "' primary_entity_index " + std::to_string(scenario.primaryEntityIndex) +
+            " is outside the entity list (size " +
+            std::to_string(scenario.entities.size()) + ")");
+    }
+}
+
+std::size_t resolvePrimaryEntityId(const ScenarioConfig& scenario,
+                                   std::size_t kernelEntityCount) {
+    validateScenarioConfig(scenario);
+    const std::size_t index = scenario.primaryEntityIndex;
+    if (index >= kernelEntityCount) {
+        // The usual cause is an index that addresses a rail-launched entity:
+        // it exists in the file but not in the kernel until it spawns.
+        throw std::invalid_argument(
+            "scenario '" + scenario.name + "' primary_entity_index " +
+            std::to_string(index) + " addresses no entity at t=0 (kernel has " +
+            std::to_string(kernelEntityCount) +
+            "); a rail-launched entity is created in flight, so point "
+            "primary_entity_index at an entity that exists from the start");
+    }
+    return index;
 }
 
 void ScenarioConfig::loadInto(SimulationKernel& kernel) const {
@@ -1204,12 +1204,29 @@ VehicleConfig loadDesignPhysics(const std::string& filePath) {
 // --- ScenarioConfig::save / load --------------------------------------------
 
 bool ScenarioConfig::save(const std::string& path) const {
-    std::ofstream f(path);
-    if (!f.is_open()) {
+    // Write to a sibling temporary and rename over the destination, so a
+    // failure mid-write (full disk, crash) cannot destroy the previously
+    // saved scenario. std::filesystem::rename is atomic on the same volume.
+    const std::string tempPath = path + ".tmp";
+    {
+        std::ofstream f(tempPath, std::ios::trunc);
+        if (!f.is_open()) {
+            return false;
+        }
+        f << serializeScenario(*this);
+        if (!f) {
+            std::error_code ec;
+            std::filesystem::remove(tempPath, ec);
+            return false;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tempPath, path, ec);
+    if (ec) {
+        std::filesystem::remove(tempPath, ec);
         return false;
     }
-    f << serializeScenario(*this);
-    return static_cast<bool>(f);
+    return true;
 }
 
 ScenarioConfig ScenarioConfig::load(const std::string& path) {

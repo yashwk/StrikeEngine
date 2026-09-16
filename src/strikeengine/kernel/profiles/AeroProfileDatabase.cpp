@@ -1,4 +1,5 @@
 #include <strikeengine/kernel/profiles/AeroProfileDatabase.hpp>
+#include <strikeengine/kernel/config/AeroSchema.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <stdexcept>
@@ -7,50 +8,11 @@
 namespace StrikeEngine::Kernel {
 
     namespace {
-        // Shared with the `fins` legacy block and each `fin_sets` entry so
-        // both paths accept the same snake_case schema as
-        // ConfigSerialization::finConfigFromJson. Throws on unknown shape or
+        // Fin sets and the airframe block share one schema with the inline
+        // VehicleConfig path; see AeroSchema.hpp. Throws on an unknown shape or
         // a missing required key (translated to a load failure below).
         FinsConfig finsConfigFromJson(const nlohmann::json& f) {
-            FinsConfig fin;
-            const std::string shape = f.value("shape", std::string("trapezoidal"));
-            if (shape == "trapezoidal") fin.shape = Models::FinShape::Trapezoidal;
-            else if (shape == "elliptical") fin.shape = Models::FinShape::Elliptical;
-            else if (shape == "freeform") fin.shape = Models::FinShape::FreeForm;
-            else throw std::runtime_error("AeroProfileDatabase: unknown fins shape '" + shape + "'");
-            fin.count = f.at("count").get<int>();
-            fin.positionM = f.value("position_m", 0.0);
-            fin.cantAngleDeg = f.value("cant_angle_deg", 0.0);
-            fin.rootChordM = f.value("root_chord_m", 0.0);
-            fin.spanM = f.value("span_m", 0.0);
-            fin.tipChordM = f.value("tip_chord_m", 0.0);
-            fin.sweepLengthM = f.value("sweep_length_m", -1.0);
-            fin.steerable = f.value("steerable", true);
-            if (f.contains("shape_points")) {
-                fin.shapePoints = f.at("shape_points").get<std::vector<std::array<double, 2>>>();
-            }
-            return fin;
-        }
-
-        void airframeConfigFromJson(const nlohmann::json& af, AeroConfig& cfg) {
-            // Same required-key schema as the inline ConfigSerialization path.
-            cfg.airframe.wingSpanM       = af.at("wing_span_m").get<double>();
-            cfg.airframe.wingRootChordM  = af.at("wing_root_chord_m").get<double>();
-            cfg.airframe.wingTipChordM   = af.at("wing_tip_chord_m").get<double>();
-            cfg.airframe.wingSweepDeg    = af.at("wing_sweep_deg").get<double>();
-            cfg.airframe.wingPositionM   = af.at("wing_position_m").get<double>();
-            cfg.airframe.wingDihedralDeg = af.at("wing_dihedral_deg").get<double>();
-            cfg.airframe.htailSpanM      = af.at("htail_span_m").get<double>();
-            cfg.airframe.htailChordM     = af.at("htail_chord_m").get<double>();
-            cfg.airframe.htailPositionM  = af.at("htail_position_m").get<double>();
-            cfg.airframe.vtailSpanM      = af.at("vtail_span_m").get<double>();
-            cfg.airframe.vtailChordM     = af.at("vtail_chord_m").get<double>();
-            cfg.airframe.vtailPositionM  = af.at("vtail_position_m").get<double>();
-            cfg.airframe.fuselageDiameterM = af.at("fuselage_diameter_m").get<double>();
-            cfg.airframe.fuselageLengthM   = af.at("fuselage_length_m").get<double>();
-            cfg.airframe.cd0              = af.at("cd0").get<double>();
-            cfg.airframe.oswaldEfficiency = af.at("oswald_efficiency").get<double>();
-            cfg.airframe.clMax            = af.at("cl_max").get<double>();
+            return AeroSchema::finsFromJson(f, "AeroProfileDatabase");
         }
     }
 
@@ -118,7 +80,7 @@ namespace StrikeEngine::Kernel {
                 cfg.fins = finsConfigFromJson(data.at("fins"));
             }
             if (data.contains("airframe")) {
-                airframeConfigFromJson(data.at("airframe"), cfg);
+                AeroSchema::airframeFromJson(data.at("airframe"), cfg.airframe);
             }
             _aero = cfg;
         } catch (const std::exception&) {

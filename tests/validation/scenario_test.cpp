@@ -1,9 +1,12 @@
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/config/ScenarioConfig.hpp>
+#include <strikeengine/kernel/config/ConfigSerialization.hpp>
 #include <strikeengine/simulation/BatchRunner.hpp>
 
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
+#include <string>
 
 using namespace StrikeEngine::Kernel;
 
@@ -67,6 +70,63 @@ int main()
     check(results[0].entityCount == 1 && results[0].endTime >= 0.05 &&
               results[0].maxSpeed > 0.0,
           "batch runner reports structured execution metrics");
+
+    // primaryEntityIndex is written as a scenario-list index but consumed as a
+    // kernel entity id. Those differ when a scenario has rail-launched
+    // entities, which do not exist until they spawn: resolving against the list
+    // size alone let an id past the end of the physics block through.
+    {
+        ScenarioConfig rail;
+        rail.name = "rail-launch-primary";
+        for (int k = 0; k < 3; ++k) {
+            ScenarioEntityConfig e = makeScenario(0.0).entities[0];
+            e.name = "e" + std::to_string(k);
+            e.launch.enabled = (k == 2);
+            rail.entities.push_back(e);
+        }
+        rail.primaryEntityIndex = 2;
+
+        SimulationKernel railKernel;
+        rail.loadInto(railKernel);
+        check(railKernel.getPhysics().size == 2,
+              "rail-launched entity is not created at t=0");
+
+        bool threw = false;
+        try {
+            (void)resolvePrimaryEntityId(rail, railKernel.getPhysics().size);
+        } catch (const std::invalid_argument&) {
+            threw = true;
+        }
+        check(threw,
+              "primaryEntityIndex past the t=0 entity count is rejected, not indexed");
+
+        rail.primaryEntityIndex = 0;
+        check(resolvePrimaryEntityId(rail, railKernel.getPhysics().size) == 0,
+              "a t=0 primary entity still resolves");
+
+        // A primary index outside the entity list must fail at load.
+        ScenarioConfig bad;
+        bad.name = "bad-primary";
+        bad.entities.push_back(makeScenario(0.0).entities[0]);
+        bad.primaryEntityIndex = 7;
+        bool loadThrew = false;
+        try {
+            (void)deserializeScenario(serializeScenario(bad));
+        } catch (const std::runtime_error&) {
+            loadThrew = true;
+        }
+        check(loadThrew, "out-of-range primary_entity_index fails at load");
+
+        ScenarioConfig empty;
+        empty.name = "no-entities";
+        bool emptyThrew = false;
+        try {
+            (void)deserializeScenario(serializeScenario(empty));
+        } catch (const std::runtime_error&) {
+            emptyThrew = true;
+        }
+        check(emptyThrew, "a scenario with no entities fails at load");
+    }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

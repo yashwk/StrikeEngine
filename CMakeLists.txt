@@ -54,6 +54,12 @@ target_include_directories(strikeengine PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+# Private, build-only headers shared between library translation units (for
+# example the aero schema parser used by both the inline config and the profile
+# loader). Kept out of include/ so their dependencies are not installed.
+target_include_directories(strikeengine PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+)
 
 target_compile_features(strikeengine PUBLIC cxx_std_23)
 

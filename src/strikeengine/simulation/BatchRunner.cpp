@@ -35,12 +35,8 @@ namespace StrikeEngine::Simulation {
             result.frame = reportingFrameName(reportingFrame(
                 scenarios[scenarioIndex].environment));
 
-            if (result.entityCount > 0 &&
-                scenarios[scenarioIndex].primaryEntityIndex >= result.entityCount) {
-                throw std::invalid_argument(
-                    "BatchRunner primaryEntityIndex is outside the scenario entity list");
-            }
-            result.primaryEntityId = scenarios[scenarioIndex].primaryEntityIndex;
+            result.primaryEntityId = resolvePrimaryEntityId(
+                scenarios[scenarioIndex], result.entityCount);
 
             const auto& physics = kernel.getPhysics();
 
