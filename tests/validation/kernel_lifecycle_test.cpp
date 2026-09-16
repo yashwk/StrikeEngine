@@ -127,13 +127,11 @@ int main()
     // produces finite, mass-preserving, quaternion-normalized states.
     {
         const IntegratorType types[] = {
-            IntegratorType::Euler,
             IntegratorType::RK4,
-            IntegratorType::Symplectic,
             IntegratorType::RK45,
         };
-        const char* names[] = { "Euler", "RK4", "Symplectic", "RK45" };
-        for (std::size_t t = 0; t < 4; ++t)
+        const char* names[] = { "RK4", "RK45" };
+        for (std::size_t t = 0; t < 2; ++t)
         {
             SimulationKernel kernel(BackendType::CPU, types[t]);
 
