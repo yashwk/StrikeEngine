@@ -18,7 +18,9 @@ namespace StrikeEngine::Kernel
 	 * advanced here:
 	 *   px,py,pz , vx,vy,vz , qw,qx,qy,qz , wx,wy,wz , mass , finPitch/finYaw/finRoll,
 	 *   gimbalPitch/gimbalYaw
-	 * The quaternion is renormalized and mass is floored at massDry.
+	 * The attitude is advanced by the exponential map of the body rate rather
+	 * than the linear quaternion derivative; mass is floored at the stage-aware
+	 * floor and the servo deflections are clamped to their limits.
 	 */
 	inline void applyStateUpdate(PhysicsBlock& state, const PhysicsBlock& d, double scale)
 	{
@@ -40,12 +42,44 @@ namespace StrikeEngine::Kernel
 			state.wy[i] += scale * d.wy[i];
 			state.wz[i] += scale * d.wz[i];
 
-			state.qw[i] += scale * d.qw[i];
-			state.qx[i] += scale * d.qx[i];
-			state.qy[i] += scale * d.qy[i];
-			state.qz[i] += scale * d.qz[i];
+			// Attitude: integrate the body rate with the exponential map rather
+			// than forming q_dot = 0.5 q (x) (0, w) and adding it. Over an
+			// interval at rate w the exact solution is
+			//     q(scale) = q (x) exp(w * scale / 2),
+			// which stays on the unit sphere by construction. Adding a linear
+			// form to q and renormalizing afterwards introduces a truncation
+			// error and then projects it back onto the sphere, which bounds the
+			// attitude order no matter how accurately the stages are evaluated.
+			// exp(w a) = (cos a, sin(a) * w_hat) with a = |w| scale / 2.
+			{
+				const double wx = state.wx[i];
+				const double wy = state.wy[i];
+				const double wz = state.wz[i];
+				const double wmag = std::sqrt(wx * wx + wy * wy + wz * wz);
+				const double half = 0.5 * wmag * scale;
+				double iw, ix, iy, iz;
+				if (half > 1e-12) {
+					// sin(half)/wmag is the sin(angle/2) over the axis length;
+					// well conditioned for any wmag above the threshold.
+					const double s = std::sin(half) / wmag;
+					iw = std::cos(half); ix = s * wx; iy = s * wy; iz = s * wz;
+				} else {
+					// Second-order limit as the interval's angle vanishes.
+					iw = 1.0;
+					ix = 0.5 * scale * wx;
+					iy = 0.5 * scale * wy;
+					iz = 0.5 * scale * wz;
+				}
+				const double qw = state.qw[i], qx = state.qx[i];
+				const double qy = state.qy[i], qz = state.qz[i];
+				state.qw[i] = qw * iw - qx * ix - qy * iy - qz * iz;
+				state.qx[i] = qw * ix + qx * iw + qy * iz - qz * iy;
+				state.qy[i] = qw * iy - qx * iz + qy * iw + qz * ix;
+				state.qz[i] = qw * iz + qx * iy - qy * ix + qz * iw;
+			}
 
-			// Renormalize quaternion (exact unit norm)
+			// Renormalize: the product of two unit quaternions is unit, so this
+			// now corrects floating-point round-off only.
 			const double qn = std::sqrt(state.qw[i] * state.qw[i] + state.qx[i] * state.qx[i] +
 			                            state.qy[i] * state.qy[i] + state.qz[i] * state.qz[i]);
 			const double qinv = (qn > 1e-12) ? 1.0 / qn : 0.0;

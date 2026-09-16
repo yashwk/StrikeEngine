@@ -35,6 +35,24 @@ void exponentialDerivative(const PhysicsBlock& state, double, PhysicsBlock& d)
     d.px[0] = state.px[0];
 }
 
+// Pure rotation about body Y at a constant rate: after time h the exact
+// attitude is a rotation of |w| * h about that axis. Mirrors what the physics
+// backend supplies: q_dot = 0.5 * q (x) (0, w), w_dot = 0.
+double gRate = 1.0;
+void constantRateDerivative(const PhysicsBlock& state, double, PhysicsBlock& d)
+{
+    d.px[0] = 0.0; d.py[0] = 0.0; d.pz[0] = 0.0;
+    d.vx[0] = 0.0; d.vy[0] = 0.0; d.vz[0] = 0.0;
+    d.wx[0] = 0.0; d.wy[0] = 0.0; d.wz[0] = 0.0;
+    // w = (0, gRate, 0)  =>  0.5 * q (x) (0, w)
+    d.qw[0] = -0.5 * state.qy[0] * gRate;
+    d.qx[0] = -0.5 * state.qz[0] * gRate;
+    d.qy[0] =  0.5 * state.qw[0] * gRate;
+    d.qz[0] =  0.5 * state.qx[0] * gRate;
+    d.mass[0] = 0.0;
+    d.finPitch[0] = 0.0; d.finYaw[0] = 0.0; d.finRoll[0] = 0.0;
+}
+
 }
 
 int main()
@@ -60,6 +78,40 @@ int main()
           "RK45 accepted solution meets requested tolerance");
     check(rk45.rejectedSteps() > 0 && rk45.acceptedSteps() > 1,
           "RK45 rejects an oversized step and adapts its substeps");
+
+    // Pure rotation must be integrated by the exponential map, which is exact
+    // for a constant body rate: after 1 s at 1 rad/s about Y the attitude is a
+    // 1 rad rotation. The linear update (q += 0.5*h*q(x)(0,w), then renormalize)
+    // lands ~1e-4 away instead, so this pins the change.
+    {
+        auto s = makeState();
+        s.wy[0] = gRate;
+        RK4Integrator rk;
+        rk.integrate(s, constantRateDerivative, 0.0, 1.0);
+        const double expected = std::sin(0.5);
+        const double expectedW = std::cos(0.5);
+        std::printf("  [info] rotation: q=(%.6f,%.6f,%.6f,%.6f)\n",
+                    s.qw[0], s.qx[0], s.qy[0], s.qz[0]);
+        check(std::abs(s.qy[0] - expected) < 1e-12 &&
+                  std::abs(s.qw[0] - expectedW) < 1e-12 &&
+                  std::abs(s.qx[0]) < 1e-12 && std::abs(s.qz[0]) < 1e-12,
+              "exponential attitude update is exact for a constant body rate");
+        const double norm = std::sqrt(s.qw[0]*s.qw[0] + s.qx[0]*s.qx[0] +
+                                      s.qy[0]*s.qy[0] + s.qz[0]*s.qz[0]);
+        check(std::abs(norm - 1.0) < 1e-14, "attitude stays unit-norm");
+
+        // Many small steps must not drift: the map composes exactly.
+        auto many = makeState();
+        many.wy[0] = gRate;
+        for (int k = 0; k < 1000; ++k) {
+            rk.integrate(many, constantRateDerivative, k * 1e-3, 1e-3);
+        }
+        const double normMany = std::sqrt(many.qw[0]*many.qw[0] + many.qx[0]*many.qx[0] +
+                                          many.qy[0]*many.qy[0] + many.qz[0]*many.qz[0]);
+        check(std::abs(normMany - 1.0) < 1e-12 &&
+                  std::abs(many.qy[0] - expected) < 1e-9,
+              "1000 composed rotation steps keep the exact attitude and unit norm");
+    }
 
     // Observed order of convergence. Integrating dx/dt = x to T with n equal
     // steps and halving h must reduce the error by ~2^p. This pins the scheme
