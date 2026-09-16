@@ -1,5 +1,6 @@
 #include <strikeengine/kernel/SimulationKernel.hpp>
 #include <strikeengine/kernel/backend/BackendFactory.hpp>
+#include <strikeengine/kernel/math/Quaternion.hpp>
 #include <strikeengine/models/physics/earth/EarthModel.hpp>
 #include <strikeengine/kernel/backend/CPUBackend.hpp>
 #include <strikeengine/kernel/profiles/AeroProfileDatabase.hpp>
@@ -109,6 +110,7 @@ namespace StrikeEngine::Kernel {
         stagePlans.clear();
         warheads.clear();
         pendingLaunches.clear();
+        pendingPitchOvers.clear();
         activeFlyouts.clear();
         time.reset();
     }
@@ -375,6 +377,7 @@ namespace StrikeEngine::Kernel {
             guidanceBlock.trackAimMinQuality01.push_back(0.0);
             guidanceBlock.apnFeedforwardMinQuality01.push_back(0.0);
             guidanceBlock.loftEnabled.push_back(false);
+            guidanceBlock.loftAngleDeg.push_back(0.0);
             guidanceBlock.loftAltitudeM.push_back(0.0);
             guidanceBlock.loftGain.push_back(0.0);
             guidanceBlock.loftRangeM.push_back(40000.0);
@@ -507,8 +510,32 @@ namespace StrikeEngine::Kernel {
             seekerBlock.targetElevation.push_back(0);
             seekerBlock.targetAzimuthRate.push_back(0);
             seekerBlock.targetElevationRate.push_back(0);
+            seekerBlock.losRateFilterAz.push_back(0);
+            seekerBlock.losRateFilterEl.push_back(0);
+            seekerBlock.losRateWorldX.push_back(0);
+            seekerBlock.losRateWorldY.push_back(0);
+            seekerBlock.losRateWorldZ.push_back(0);
+            seekerBlock.losRateWorldValid.push_back(false);
+            seekerBlock.losRateWorldStateX.push_back(0);
+            seekerBlock.losRateWorldStateY.push_back(0);
+            seekerBlock.losRateWorldStateZ.push_back(0);
+            seekerBlock.prevLosWorldX.push_back(0);
+            seekerBlock.prevLosWorldY.push_back(0);
+            seekerBlock.prevLosWorldZ.push_back(0);
+            seekerBlock.prevLosWorldTimeSec.push_back(0.0);
+            seekerBlock.bodyRateStateX.push_back(0);
+            seekerBlock.bodyRateStateY.push_back(0);
+            seekerBlock.bodyRateStateZ.push_back(0);
+            seekerBlock.gyroIntX.push_back(0);
+            seekerBlock.gyroIntY.push_back(0);
+            seekerBlock.gyroIntZ.push_back(0);
+            seekerBlock.prevStepGyroX.push_back(0);
+            seekerBlock.prevStepGyroY.push_back(0);
+            seekerBlock.prevStepGyroZ.push_back(0);
             seekerBlock.previousAzimuth.push_back(0);
             seekerBlock.previousElevation.push_back(0);
+            seekerBlock.timeSinceCommitSec.push_back(0.0);
+            seekerBlock.seekerClockSec.push_back(0.0);
             seekerBlock.lockLostTimeSec.push_back(0);
             seekerBlock.hasPreviousLos.push_back(false);
             seekerBlock.lockActive.push_back(false);
@@ -675,6 +702,7 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.trackAimMinQuality01[id] = resolved.guidanceAutopilot.guidanceTrackAimMinQuality01;
         guidanceBlock.apnFeedforwardMinQuality01[id] = resolved.guidanceAutopilot.guidanceApnFeedforwardMinQuality01;
         guidanceBlock.loftEnabled[id] = resolved.guidanceAutopilot.guidanceLoftEnabled;
+        guidanceBlock.loftAngleDeg[id] = resolved.guidanceAutopilot.guidanceLoftAngleDeg;
         guidanceBlock.loftAltitudeM[id] = resolved.guidanceAutopilot.guidanceLoftAltitudeM;
         guidanceBlock.loftGain[id] = resolved.guidanceAutopilot.guidanceLoftGain;
         guidanceBlock.loftRangeM[id] = resolved.guidanceAutopilot.guidanceLoftRangeM;
@@ -790,6 +818,19 @@ namespace StrikeEngine::Kernel {
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
+        // Fixed installations (radar sites) are pinned from the moment they
+        // are created, so the first integration step cannot nudge them off
+        // their anchor before pinFixedInstallations() runs.
+        if (resolved.type == EntityType::RadarSite) {
+            if (fixedAnchorPx.size() < physicsBlock.size) {
+                fixedAnchorPx.resize(physicsBlock.size, std::numeric_limits<double>::quiet_NaN());
+                fixedAnchorPy.resize(physicsBlock.size, std::numeric_limits<double>::quiet_NaN());
+                fixedAnchorPz.resize(physicsBlock.size, std::numeric_limits<double>::quiet_NaN());
+            }
+            fixedAnchorPx[id] = init.px;
+            fixedAnchorPy[id] = init.py;
+            fixedAnchorPz[id] = init.pz;
+        }
         physicsBlock.qw[id] = init.qw; physicsBlock.qx[id] = init.qx; physicsBlock.qy[id] = init.qy; physicsBlock.qz[id] = init.qz;
         physicsBlock.wx[id] = init.wx; physicsBlock.wy[id] = init.wy; physicsBlock.wz[id] = init.wz;
         physicsBlock.alphax[id] = 0.0; physicsBlock.alphay[id] = 0.0; physicsBlock.alphaz[id] = 0.0;
@@ -1555,13 +1596,38 @@ namespace StrikeEngine::Kernel {
             cmd.targetX = trackBlock.posX[src];
             cmd.targetY = trackBlock.posY[src];
             cmd.targetZ = trackBlock.posZ[src];
-            cmd.targetVx = trackBlock.velX[src];
-            cmd.targetVy = trackBlock.velY[src];
-            cmd.targetVz = trackBlock.velZ[src];
-            cmd.targetAccelX = trackBlock.accelX[src];
-            cmd.targetAccelY = trackBlock.accelY[src];
-            cmd.targetAccelZ = trackBlock.accelZ[src];
-            cmd.targetAccelAvailable = trackBlock.accelAvailable[src];
+            // Lead: the scenario's own fire-control solution when it provides
+            // one (the launching platform knows the target before the shot),
+            // otherwise the live track's velocity. A remote track's velocity
+            // state is only as good as its angular geometry: at long range it
+            // is dominated by the nav-attitude term and reads km/s -- the S-400
+            // battery's track of a 175 m/s transport peaked at 2.4 km/s, and
+            // that lead threw the midcourse off by tens of kilometres.
+            const double cfgSpeedSq =
+                cfg.initialTargetVx * cfg.initialTargetVx +
+                cfg.initialTargetVy * cfg.initialTargetVy +
+                cfg.initialTargetVz * cfg.initialTargetVz;
+            if (cfgSpeedSq > 1.0) {
+                cmd.targetVx = cfg.initialTargetVx;
+                cmd.targetVy = cfg.initialTargetVy;
+                cmd.targetVz = cfg.initialTargetVz;
+            } else {
+                cmd.targetVx = trackBlock.velX[src];
+                cmd.targetVy = trackBlock.velY[src];
+                cmd.targetVz = trackBlock.velZ[src];
+            }
+            // Position and velocity only. A launch-time acceleration snapshot
+            // is not guidance-grade and, taken from a remote radar track, it
+            // rails at the track filter's acceleration bound: on the S-400
+            // shot the seed carried (-30,-30,-30) m/s^2, whose APN
+            // feed-forward (~0.5*N*|a| = 45-80 m/s^2) dwarfed the real 3 m/s^2
+            // demand and threw the whole midcourse off. The seeker's own track
+            // publishes a trustworthy acceleration later; the command state
+            // must not fake one.
+            cmd.targetAccelX = 0.0;
+            cmd.targetAccelY = 0.0;
+            cmd.targetAccelZ = 0.0;
+            cmd.targetAccelAvailable = false;
             seeded = true;
         }
         if (!seeded) {
@@ -1612,6 +1678,27 @@ namespace StrikeEngine::Kernel {
         init.qw = physicsBlock.qw[parent]; init.qx = physicsBlock.qx[parent];
         init.qy = physicsBlock.qy[parent]; init.qz = physicsBlock.qz[parent];
         init.wx = 0.0; init.wy = 0.0; init.wz = 0.0;
+        // Cold-launch attitude (ground batteries): pitch the round up toward
+        // the target instead of inheriting the launcher's attitude, and push
+        // it along that axis. The midcourse loft law carries it from there.
+        const bool hasEject = spec.ejectElevationDeg > 0.0 && spec.ejectElevationDeg <= 90.0;
+        const bool hasLaunch = spec.launchElevationDeg > 0.0 && spec.launchElevationDeg <= 90.0;
+        if (hasLaunch || hasEject) {
+            // Ejection happens on the clearance axis; with no separate launch
+            // axis the round flies the clearance axis directly (legacy).
+            const double ejectDeg = hasEject ? spec.ejectElevationDeg : spec.launchElevationDeg;
+            double qw = 0.0, qx = 0.0, qy = 0.0, qz = 0.0;
+            if (launchAxisQuaternion(parent, spec, ux, uy, uz, ejectDeg,
+                                     qw, qx, qy, qz)) {
+                init.qw = qw; init.qx = qx; init.qy = qy; init.qz = qz;
+                // Ejection push along the clearance axis.
+                quatRotateToWorld(qw, qx, qy, qz, 1.0, 0.0, 0.0,
+                                  init.vx, init.vy, init.vz);
+                init.vx = physicsBlock.vx[parent] + init.vx * spec.pushMps;
+                init.vy = physicsBlock.vy[parent] + init.vy * spec.pushMps;
+                init.vz = physicsBlock.vz[parent] + init.vz * spec.pushMps;
+            }
+        }
         init.mass = (pl.cfg.initState.mass > 0.0)
             ? pl.cfg.initState.mass : pl.cfg.vehicleConfig.initialMass;
         init.allegiance = pl.cfg.initState.allegiance;
@@ -1619,6 +1706,21 @@ namespace StrikeEngine::Kernel {
         init.role = !pl.cfg.role.empty() ? pl.cfg.role : pl.cfg.initState.role;
 
         const PhysicsId id = createVehicle(init, pl.cfg.vehicleConfig);
+
+        // Cold-launch pitch-over: the clearance axis is only the ejection leg.
+        // The thrusters reorient the round to the loft axis before the main
+        // motor lights, so the burn pushes along the flyout axis rather than
+        // straight up. Applied at the first stage's ignition delay.
+        if (hasEject && hasLaunch &&
+            std::abs(spec.launchElevationDeg - spec.ejectElevationDeg) > 1e-6) {
+            PendingPitchOver po;
+            po.entityId = id;
+            po.deltaDeg = spec.launchElevationDeg - spec.ejectElevationDeg;
+            const auto& stages = pl.cfg.vehicleConfig.propulsion.stages;
+            po.atTime = time.currentTime() +
+                (stages.empty() ? 0.0 : stages.front().ignitionDelaySec);
+            pendingPitchOvers.push_back(po);
+        }
 
         // Separation flyout: hold a straight-ahead Waypoint for flyoutSec
         // (the vehicle's own gentle waypointGain shapes the demand), then
@@ -1651,6 +1753,36 @@ namespace StrikeEngine::Kernel {
             queueInitialGuidance(id, pl.cfg);
         }
 
+        // The launch warns its target: a level run on the reciprocal bearing,
+        // as far as the scenario says. Queued as the target's own cruise mode
+        // so the altitude hold stays in charge of the vertical.
+        if (spec.targetEvadeDistanceM > 0.0 && spec.targetIndex >= 0 &&
+            static_cast<std::size_t>(spec.targetIndex) < physicsBlock.size &&
+            physicsBlock.active[static_cast<std::size_t>(spec.targetIndex)]) {
+            const std::size_t tgt = static_cast<std::size_t>(spec.targetIndex);
+            double ax = physicsBlock.px[tgt] - physicsBlock.px[parent];
+            double ay = physicsBlock.py[tgt] - physicsBlock.py[parent];
+            double az = physicsBlock.pz[tgt] - physicsBlock.pz[parent];
+            const double an = std::sqrt(ax * ax + ay * ay + az * az);
+            if (an > 1.0) {
+                ax /= an; ay /= an; az /= an;
+                SimulationCommand evade;
+                evade.entityId = tgt;
+                evade.mode = GuidanceMode::Cruise;
+                evade.targetX = physicsBlock.px[tgt] + ax * spec.targetEvadeDistanceM;
+                evade.targetY = physicsBlock.py[tgt] + ay * spec.targetEvadeDistanceM;
+                evade.targetZ = physicsBlock.pz[tgt] + az * spec.targetEvadeDistanceM;
+                // Preserve the target's own demand limit. A command's maxAccel
+                // REPLACES the entity's, and 0 means unlimited in the engine:
+                // handing an airliner the round's 300 m/s^2 pitch authority is
+                // a departure, not an escape.
+                evade.maxAccel = (tgt < guidanceBlock.maxAccel.size())
+                    ? guidanceBlock.maxAccel[tgt] : 0.0;
+                evade.targetId = -1;
+                queueCommand(evade);
+            }
+        }
+
         SimulationEvent evt;
         evt.timestamp = time.currentTime();
         evt.entityId = id;
@@ -1658,6 +1790,166 @@ namespace StrikeEngine::Kernel {
         evt.customCode = 1;  // scenario rail launch (see app-side labeling)
         eventSystem.dispatch(evt);
         return id;
+    }
+
+    bool SimulationKernel::launchAxisQuaternion(
+        std::size_t parent, const ScenarioEntityConfig::LaunchSpec& spec,
+        double ux, double uy, double uz, double elevationDeg,
+        double& qw, double& qx, double& qy, double& qz) const
+    {
+        // Horizontal direction to the target (fall back to the parent's
+        // heading, then straight up when the target is overhead).
+        double hx = 0.0, hy = 0.0, hz = 0.0;
+        const std::size_t tgt = (spec.targetIndex >= 0)
+            ? static_cast<std::size_t>(spec.targetIndex) : physicsBlock.size;
+        if (tgt < physicsBlock.size && physicsBlock.active[tgt]) {
+            hx = physicsBlock.px[tgt] - physicsBlock.px[parent];
+            hy = physicsBlock.py[tgt] - physicsBlock.py[parent];
+            hz = physicsBlock.pz[tgt] - physicsBlock.pz[parent];
+        } else {
+            // Parent heading = body X = first column of the body->world
+            // rotation matrix recovered from its quaternion.
+            const double pw = physicsBlock.qw[parent], px = physicsBlock.qx[parent];
+            const double py = physicsBlock.qy[parent], pz = physicsBlock.qz[parent];
+            hx = 1.0 - 2.0 * (py * py + pz * pz);
+            hy = 2.0 * (px * py + pw * pz);
+            hz = 2.0 * (px * pz - pw * py);
+        }
+        // Remove the up component, then normalise.
+        const double hUp = hx * ux + hy * uy + hz * uz;
+        hx -= hUp * ux; hy -= hUp * uy; hz -= hUp * uz;
+        double hn = std::sqrt(hx * hx + hy * hy + hz * hz);
+        if (hn < 1e-6) {  // target overhead: launch straight up
+            hx = 0.0; hy = 0.0; hz = 0.0; hn = 1.0;
+        }
+        hx /= hn; hy /= hn; hz /= hn;
+        const double e = elevationDeg * 3.14159265358979323846 / 180.0;
+        const double ce = std::cos(e), se = std::sin(e);
+        const double xAx = ce * hx + se * ux;
+        const double xAy = ce * hy + se * uy;
+        const double xAz = ce * hz + se * uz;
+        // right = h x up; a vertical launch (h == 0) needs a perpendicular
+        // built from an arbitrary reference instead.
+        double rx = hy * uz - hz * uy;
+        double ry = hz * ux - hx * uz;
+        double rz = hx * uy - hy * ux;
+        double rn = std::sqrt(rx * rx + ry * ry + rz * rz);
+        if (rn < 1e-6) {
+            // Pick a reference axis not parallel to up, then orthogonalise.
+            double refx = 1.0, refy = 0.0, refz = 0.0;
+            if (std::abs(ux) > 0.9) { refx = 0.0; refy = 1.0; refz = 0.0; }
+            const double d = refx * ux + refy * uy + refz * uz;
+            rx = refx - d * ux; ry = refy - d * uy; rz = refz - d * uz;
+            rn = std::sqrt(rx * rx + ry * ry + rz * rz);
+        }
+        if (rn < 1e-9) return false;
+        rx /= rn; ry /= rn; rz /= rn;
+        const double zx = xAy * rz - xAz * ry;
+        const double zy = xAz * rx - xAx * rz;
+        const double zz = xAx * ry - xAy * rx;
+        // Body->world quaternion from the axis matrix (columns are the body
+        // axes). Shepperd's trace branch; the launch attitudes here are well
+        // away from a 180-degree rotation.
+        const double m00 = xAx, m01 = rx, m02 = zx;
+        const double m10 = xAy, m11 = ry, m12 = zy;
+        const double m20 = xAz, m21 = rz, m22 = zz;
+        const double tr = m00 + m11 + m22;
+        if (tr > 0.0) {
+            const double sc = std::sqrt(tr + 1.0) * 2.0;
+            qw = 0.25 * sc;
+            qx = (m21 - m12) / sc;
+            qy = (m02 - m20) / sc;
+            qz = (m10 - m01) / sc;
+        } else if (m00 > m11 && m00 > m22) {
+            const double sc = std::sqrt(1.0 + m00 - m11 - m22) * 2.0;
+            qw = (m21 - m12) / sc;
+            qx = 0.25 * sc;
+            qy = (m01 + m10) / sc;
+            qz = (m02 + m20) / sc;
+        } else if (m11 > m22) {
+            const double sc = std::sqrt(1.0 + m11 - m00 - m22) * 2.0;
+            qw = (m02 - m20) / sc;
+            qx = (m01 + m10) / sc;
+            qy = 0.25 * sc;
+            qz = (m12 + m21) / sc;
+        } else {
+            const double sc = std::sqrt(1.0 + m22 - m00 - m11) * 2.0;
+            qw = (m10 - m01) / sc;
+            qx = (m02 + m20) / sc;
+            qy = (m12 + m21) / sc;
+            qz = 0.25 * sc;
+        }
+        return true;
+    }
+
+    // Cold-launch pitch-over: rotate the body and the ejection velocity about
+    // the body Y (right) axis. Both launch frames share that axis -- the
+    // vertical plane holding the launcher and the target -- so a nose-up
+    // rotation moves body X from the clearance axis onto the loft axis.
+    void SimulationKernel::processPitchOvers() {
+        if (pendingPitchOvers.empty()) return;
+        const double t = time.currentTime();
+        for (std::size_t i = 0; i < pendingPitchOvers.size();) {
+            const auto& po = pendingPitchOvers[i];
+            const std::size_t id = po.entityId;
+            if (id >= physicsBlock.size || !physicsBlock.active[id]) {
+                pendingPitchOvers.erase(pendingPitchOvers.begin() +
+                                        static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            if (t < po.atTime) { ++i; continue; }
+
+            double axX = 0.0, axY = 0.0, axZ = 1.0;
+            quatRotateToWorld(physicsBlock.qw[id], physicsBlock.qx[id],
+                              physicsBlock.qy[id], physicsBlock.qz[id],
+                              0.0, 1.0, 0.0, axX, axY, axZ);
+            double dw = 1.0, dx = 0.0, dy = 0.0, dz = 0.0;
+            quatFromAxisAngle(axX, axY, axZ,
+                              po.deltaDeg * 3.14159265358979323846 / 180.0,
+                              dw, dx, dy, dz);
+            double nw = 1.0, nx = 0.0, ny = 0.0, nz = 0.0;
+            quatMultiply(dw, dx, dy, dz,
+                         physicsBlock.qw[id], physicsBlock.qx[id],
+                         physicsBlock.qy[id], physicsBlock.qz[id],
+                         nw, nx, ny, nz);
+            physicsBlock.qw[id] = nw; physicsBlock.qx[id] = nx;
+            physicsBlock.qy[id] = ny; physicsBlock.qz[id] = nz;
+            double vx = 0.0, vy = 0.0, vz = 0.0;
+            quatRotateToWorld(dw, dx, dy, dz,
+                              physicsBlock.vx[id], physicsBlock.vy[id],
+                              physicsBlock.vz[id], vx, vy, vz);
+            physicsBlock.vx[id] = vx;
+            physicsBlock.vy[id] = vy;
+            physicsBlock.vz[id] = vz;
+            // The INS must turn with the airframe: the thrusters reorient the
+            // round at an angular rate the gyro would have measured, so the
+            // navigation estimate (attitude and velocity) has to follow. Left
+            // behind, the estimate sat at the ejection attitude and the roll
+            // channel chased the difference at full deflection -- a 2.8 rad/s
+            // spin-up in mid-flight and a badly wrong terminal geometry.
+            if (id < navigationBlock.estQw.size()) {
+                double ew = 1.0, ex = 0.0, ey = 0.0, ez = 0.0;
+                quatMultiply(dw, dx, dy, dz,
+                             navigationBlock.estQw[id], navigationBlock.estQx[id],
+                             navigationBlock.estQy[id], navigationBlock.estQz[id],
+                             ew, ex, ey, ez);
+                navigationBlock.estQw[id] = ew;
+                navigationBlock.estQx[id] = ex;
+                navigationBlock.estQy[id] = ey;
+                navigationBlock.estQz[id] = ez;
+                if (id < navigationBlock.estVx.size()) {
+                    double evx = 0.0, evy = 0.0, evz = 0.0;
+                    quatRotateToWorld(dw, dx, dy, dz,
+                                      navigationBlock.estVx[id], navigationBlock.estVy[id],
+                                      navigationBlock.estVz[id], evx, evy, evz);
+                    navigationBlock.estVx[id] = evx;
+                    navigationBlock.estVy[id] = evy;
+                    navigationBlock.estVz[id] = evz;
+                }
+            }
+            pendingPitchOvers.erase(pendingPitchOvers.begin() +
+                                    static_cast<std::ptrdiff_t>(i));
+        }
     }
 
     // Evaluate pending rail launches: lock-hold on the parent's seeker plus
@@ -1738,6 +2030,47 @@ namespace StrikeEngine::Kernel {
         controlBlock.thrustVectorYawCommand[id] = yawRad;
     }
 
+    void SimulationKernel::pinFixedInstallations()
+    {
+        const std::size_t n = physicsBlock.size;
+        if (fixedAnchorPx.size() < n) {
+            const std::size_t oldSize = fixedAnchorPx.size();
+            fixedAnchorPx.resize(n, std::numeric_limits<double>::quiet_NaN());
+            fixedAnchorPy.resize(n, std::numeric_limits<double>::quiet_NaN());
+            fixedAnchorPz.resize(n, std::numeric_limits<double>::quiet_NaN());
+            (void)oldSize;
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            if (i >= statusBlock.type.size() ||
+                statusBlock.type[i] != EntityType::RadarSite) {
+                continue;
+            }
+            if (i >= physicsBlock.active.size() || !physicsBlock.active[i]) {
+                continue;
+            }
+            if (std::isnan(fixedAnchorPx[i])) {
+                fixedAnchorPx[i] = physicsBlock.px[i];
+                fixedAnchorPy[i] = physicsBlock.py[i];
+                fixedAnchorPz[i] = physicsBlock.pz[i];
+            }
+            physicsBlock.px[i] = fixedAnchorPx[i];
+            physicsBlock.py[i] = fixedAnchorPy[i];
+            physicsBlock.pz[i] = fixedAnchorPz[i];
+            physicsBlock.vx[i] = 0.0;
+            physicsBlock.vy[i] = 0.0;
+            physicsBlock.vz[i] = 0.0;
+            physicsBlock.wx[i] = 0.0;
+            physicsBlock.wy[i] = 0.0;
+            physicsBlock.wz[i] = 0.0;
+            physicsBlock.ax[i] = 0.0;
+            physicsBlock.ay[i] = 0.0;
+            physicsBlock.az[i] = 0.0;
+            if (i < physicsBlock.alphax.size()) physicsBlock.alphax[i] = 0.0;
+            if (i < physicsBlock.alphay.size()) physicsBlock.alphay[i] = 0.0;
+            if (i < physicsBlock.alphaz.size()) physicsBlock.alphaz[i] = 0.0;
+        }
+    }
+
     void SimulationKernel::step(double dt) {
         if (dt <= 0.0) {
             throw std::invalid_argument(
@@ -1752,12 +2085,17 @@ namespace StrikeEngine::Kernel {
         // pulse timing) by one tick, which the marginal terminal fight
         // amplifies into a materially different engagement.
         processPendingLaunches();
+        processPitchOvers();
         processActiveFlyouts();
         time.advance(dt);
         commandProcessor.process(guidanceBlock, trackBlock, time.currentTime());
         
         // 1. Advance true physics
         backend->step(physicsBlock, controlBlock, time.currentTime(), dt);
+
+        // 1.05 Fixed installations (radar sites) are pinned in place; their
+        // sensors and tracks below keep running.
+        pinFixedInstallations();
 
         // 1.5 Stage separation (multi-stage propulsion)
         processStaging();

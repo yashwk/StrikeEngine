@@ -133,9 +133,10 @@ namespace StrikeEngine::Kernel {
         double guidanceTrackAimMinQuality01 = 0.0;      // min track quality to use as aim
         double guidanceApnFeedforwardMinQuality01 = 0.0;// min track quality to trust APN ff
         bool   guidanceLoftEnabled = false;             // midcourse loft shaping
-        double guidanceLoftAltitudeM = 0.0;             // loft apex above launch altitude (m)
-        double guidanceLoftGain = 0.0;                  // vertical accel per m of loft error
-        double guidanceLoftRangeM = 40000.0;            // range beyond which loft applies
+        double guidanceLoftAngleDeg = 0.0;              // climb bias over the sightline (deg)
+        double guidanceLoftAltitudeM = 0.0;             // apex ceiling; 0 = no ceiling (m)
+        double guidanceLoftGain = 0.0;                  // angle-hold gain (1/s)
+        double guidanceLoftRangeM = 40000.0;            // range where the bias is full (m)
 
         // Dynamic pressure (q) gain scheduling: scales feed-forward fin command
         // by sqrt(q_ref / q) to prevent max-Q control flutter and high-altitude sluggishness.

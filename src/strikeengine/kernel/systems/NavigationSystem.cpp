@@ -1049,7 +1049,7 @@ namespace StrikeEngine::Kernel {
         nav.estAccelBiasZ[id] += correction[11] + magCorrection[11];
         nav.estGyroBiasX[id] += correction[12] + magCorrection[12];
         nav.estGyroBiasY[id] += correction[13] + magCorrection[13];
-        nav.estGyroBiasZ[id] += correction[14] + magCorrection[14];
+        nav.estGyroBiasZ[id] += yawDamping * correction[14] + magCorrection[14];
 
         // The yaw (and hence the yaw gyro-bias) is only weakly observable from
         // GPS position/velocity, so the bias estimate can otherwise run away and

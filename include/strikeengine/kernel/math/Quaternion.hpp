@@ -24,6 +24,35 @@ namespace StrikeEngine::Kernel {
     }
 
     /**
+     * Unit quaternion for a rotation of `angle` about a unit axis.
+     */
+    inline void quatFromAxisAngle(
+        double ax, double ay, double az, double angle,
+        double& qw, double& qx, double& qy, double& qz)
+    {
+        const double half = 0.5 * angle;
+        const double s = std::sin(half);
+        qw = std::cos(half);
+        qx = ax * s;
+        qy = ay * s;
+        qz = az * s;
+    }
+
+    /**
+     * Composes two body->world rotations: q = a * b (a applied last).
+     */
+    inline void quatMultiply(
+        double aw, double ax, double ay, double az,
+        double bw, double bx, double by, double bz,
+        double& qw, double& qx, double& qy, double& qz)
+    {
+        qw = aw * bw - ax * bx - ay * by - az * bz;
+        qx = aw * bx + ax * bw + ay * bz - az * by;
+        qy = aw * by - ax * bz + ay * bw + az * bx;
+        qz = aw * bz + ax * by - ay * bx + az * bw;
+    }
+
+    /**
      * Rotates a vector from world to body frame: v' = q^-1 * v * q.
      * For unit q, q^-1 = (qw, -qx, -qy, -qz).
      */

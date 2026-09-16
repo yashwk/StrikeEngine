@@ -72,6 +72,7 @@ GuidanceBlock makeBlock()
     g.trackAimMinQuality01 = {0.0};
     g.apnFeedforwardMinQuality01 = {0.0};
     g.loftEnabled = {false};
+    g.loftAngleDeg = {0.0};
     g.loftAltitudeM = {0.0};
     g.loftGain = {0.0};
     g.loftRangeM = {40000.0};
@@ -297,30 +298,84 @@ int main()
         check(std::abs(aim(0.5)) < 1e-9, "a quality floor rejects the track for the command aim");
     }
 
-    // ---- 8. Midcourse loft adds a vertical demand ----
+    // ---- 8. Midcourse loft shapes the climb angle ----
     {
         GuidanceBlock g = makeBlock();
         g.mode = {GuidanceMode::ProportionalNavigation};
         g.loftEnabled = {true};
-        g.loftAltitudeM = {1000.0};
-        g.loftGain = {1.0};
-        g.loftRangeM = {40000.0};
+        g.loftAngleDeg = {20.0};
+        g.loftAltitudeM = {0.0};        // no ceiling
+        g.loftGain = {0.8};
+        g.loftRangeM = {300000.0};
+        g.targetX = {100000.0}; g.targetY = {0.0}; g.targetZ = {0.0};
+        g.targetVx = {0.0}; g.targetVy = {0.0}; g.targetVz = {0.0};
+        g.targetAccelAvailable = {false};
         TrackBlock tracks;
         tracks.size = 1;
         tracks.confirmations = {3};
         tracks.coastTimeoutSec = {0.5}; tracks.lossTimeoutSec = {2.0};
         tracks.state = {TrackState::Maintain};
         tracks.trackId = {3}; tracks.updateCount = {5};
-        tracks.posX = {1000.0}; tracks.posY = {0.0}; tracks.posZ = {0.0};
-        tracks.velX = {-100.0}; tracks.velY = {0.0}; tracks.velZ = {0.0};
+        tracks.posX = {100000.0}; tracks.posY = {0.0}; tracks.posZ = {0.0};
+        tracks.velX = {0.0}; tracks.velY = {0.0}; tracks.velZ = {0.0};
         tracks.accelAvailable = {false};
         EntityStatusBlock status = makeStatus();
         ControlBlock control;
         GuidanceSystem system;
         EnvironmentConfig env;
         SeekerBlock ns = makeNoSeeker();
+        // Level flight with the sightline level: the loft bias must lift the
+        // nose (the round cannot reach a 265 km target on a straight line).
         system.update(status, nav, ns, tracks, g, control, dt, env);
-        check(g.commandedAccelZ[0] > 0.0, "loft adds an upward (world +Z local) demand");
+        check(g.commandedAccelZ[0] > 0.0,
+              "loft lifts a level round onto the biased climb angle");
+
+        // Above the apex ceiling the climb bias is off: a round already past
+        // its design apex must not be driven higher.
+        NavigationBlock highNav = makeNav();
+        highNav.estPz = {100.0};
+        TrackBlock tracksCeil;
+        tracksCeil.size = 1;
+        tracksCeil.confirmations = {3};
+        tracksCeil.coastTimeoutSec = {0.5}; tracksCeil.lossTimeoutSec = {2.0};
+        tracksCeil.state = {TrackState::Maintain};
+        tracksCeil.trackId = {3}; tracksCeil.updateCount = {5};
+        tracksCeil.posX = {100000.0}; tracksCeil.posY = {0.0}; tracksCeil.posZ = {100.0};
+        tracksCeil.velX = {0.0}; tracksCeil.velY = {0.0}; tracksCeil.velZ = {0.0};
+        tracksCeil.accelAvailable = {false};
+        GuidanceBlock gCeil = makeBlock();
+        gCeil.mode = {GuidanceMode::ProportionalNavigation};
+        gCeil.loftEnabled = {true};
+        gCeil.loftAngleDeg = {20.0};
+        gCeil.loftAltitudeM = {100.0};
+        gCeil.loftGain = {0.8};
+        gCeil.loftRangeM = {300000.0};
+        gCeil.targetX = {100000.0}; gCeil.targetY = {0.0}; gCeil.targetZ = {100.0};
+        gCeil.targetVx = {0.0}; gCeil.targetVy = {0.0}; gCeil.targetVz = {0.0};
+        gCeil.targetAccelAvailable = {false};
+        GuidanceSystem systemCeil;
+        systemCeil.update(status, highNav, ns, tracksCeil, gCeil, control, dt, env);
+        check(std::abs(gCeil.commandedAccelZ[0]) < 1e-6,
+              "loft ceiling suppresses the climb bias");
+
+        // Climbing far above the sightline: the bias must push back down, or
+        // the round flies a vacuum arc no fin can correct.
+        GuidanceBlock gDown = makeBlock();
+        gDown.mode = {GuidanceMode::ProportionalNavigation};
+        gDown.loftEnabled = {true};
+        gDown.loftAngleDeg = {20.0};
+        gDown.loftAltitudeM = {0.0};
+        gDown.loftGain = {0.8};
+        gDown.loftRangeM = {300000.0};
+        gDown.targetX = {100000.0}; gDown.targetY = {0.0}; gDown.targetZ = {0.0};
+        gDown.targetVx = {0.0}; gDown.targetVy = {0.0}; gDown.targetVz = {0.0};
+        gDown.targetAccelAvailable = {false};
+        NavigationBlock climbNav = makeNav();
+        climbNav.estVx = {70.0}; climbNav.estVy = {0.0}; climbNav.estVz = {70.0};
+        GuidanceSystem systemDown;
+        systemDown.update(status, climbNav, ns, tracks, gDown, control, dt, env);
+        check(gDown.commandedAccelZ[0] < 0.0,
+              "loft pushes a ballooning round back down onto the profile");
     }
 
     // ---- 9. Config round-trip of the new guidance keys ----
@@ -334,6 +389,7 @@ int main()
         cfg.guidanceAutopilot.guidanceTrackAimMinQuality01 = 0.4;
         cfg.guidanceAutopilot.guidanceApnFeedforwardMinQuality01 = 0.6;
         cfg.guidanceAutopilot.guidanceLoftEnabled = true;
+        cfg.guidanceAutopilot.guidanceLoftAngleDeg = 18.0;
         cfg.guidanceAutopilot.guidanceLoftAltitudeM = 1500.0;
         cfg.guidanceAutopilot.guidanceLoftGain = 0.5;
         cfg.guidanceAutopilot.guidanceLoftRangeM = 30000.0;
@@ -345,7 +401,8 @@ int main()
               g.guidanceRangeGainRefM == 8000.0 && g.guidanceTrackAimMinQuality01 == 0.4 &&
               g.guidanceApnFeedforwardMinQuality01 == 0.6,
               "demand/gain/quality keys round-trip");
-        check(g.guidanceLoftEnabled && g.guidanceLoftAltitudeM == 1500.0 &&
+        check(g.guidanceLoftEnabled && g.guidanceLoftAngleDeg == 18.0 &&
+              g.guidanceLoftAltitudeM == 1500.0 &&
               g.guidanceLoftGain == 0.5 && g.guidanceLoftRangeM == 30000.0,
               "loft keys round-trip");
     }

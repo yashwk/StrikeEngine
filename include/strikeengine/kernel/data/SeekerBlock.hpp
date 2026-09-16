@@ -100,20 +100,72 @@ namespace StrikeEngine::Kernel {
         std::vector<double> targetRangeRate;
         std::vector<double> targetAzimuth;
         std::vector<double> targetElevation;
+        // Published (latency-delayed) LOS rates. These are OUTPUTS: they are
+        // overwritten from the latency queue every publish, so they must never
+        // double as filter state.
         std::vector<double> targetAzimuthRate;
         std::vector<double> targetElevationRate;
+        // Internal rate-filter state, kept separate from the published values.
+        // Aliasing the two made the first-order filter restart from a stale
+        // delayed sample each step whenever measurementLatencySec > 0, so the
+        // published rate came out several times too small -- a wrong terminal
+        // demand, worst exactly in the long-range dive.
+        std::vector<double> losRateFilterAz;
+        std::vector<double> losRateFilterEl;
+        // Inertial (world-frame) LOS rate, reconstructed geometrically from
+        // consecutive world-frame LOS vectors. Published for the guidance,
+        // which prefers it over the body-frame rate + gyro pairing: that
+        // pairing subtracts two large near-equal terms and any latency, filter
+        // or skipped-measurement mismatch leaves a residual bigger than the
+        // LOS rate itself.
+        std::vector<double> losRateWorldX;
+        std::vector<double> losRateWorldY;
+        std::vector<double> losRateWorldZ;
+        std::vector<bool> losRateWorldValid;
+        std::vector<double> losRateWorldStateX;   // filter state (internal)
+        std::vector<double> losRateWorldStateY;
+        std::vector<double> losRateWorldStateZ;
+        std::vector<double> prevLosWorldX;        // last published world LOS
+        std::vector<double> prevLosWorldY;
+        std::vector<double> prevLosWorldZ;
+        std::vector<double> prevLosWorldTimeSec;
         // Body rate paired with the az/el backward difference: averaged over
         // the same step and filtered with the same blend, so the gyro
         // decoupling does not leave a half-step/filter residual during host
-        // oscillation. Internal state + published to guidance.
+        // oscillation. These are the PUBLISHED (latency-delayed) values the
+        // guidance reads; bodyRateState* below is the live filter state.
         std::vector<double> bodyRateFilteredX;
         std::vector<double> bodyRateFilteredY;
         std::vector<double> bodyRateFilteredZ;
+        std::vector<double> bodyRateStateX;
+        std::vector<double> bodyRateStateY;
+        std::vector<double> bodyRateStateZ;
         std::vector<double> prevBodyRateX;
         std::vector<double> prevBodyRateY;
         std::vector<double> prevBodyRateZ;
+        // Integrated body angle over the interval since the last committed
+        // measurement (trapezoidal, accumulated every step). The gyro term of
+        // the LOS-rate decoupling must be the integral over the SAME interval
+        // as the angle difference: an endpoint average of two samples is off
+        // by the change in rate across a latency-length gap, which is larger
+        // than the LOS rate itself.
+        std::vector<double> gyroIntX;
+        std::vector<double> gyroIntY;
+        std::vector<double> gyroIntZ;
+        std::vector<double> prevStepGyroX;
+        std::vector<double> prevStepGyroY;
+        std::vector<double> prevStepGyroZ;
         std::vector<double> previousAzimuth;
         std::vector<double> previousElevation;
+        // Time since the previous COMMITTED measurement. The backward
+        // difference that feeds the rate filter must divide by the real
+        // elapsed time: when a maintenance check is skipped (SNR at the
+        // threshold, exactly the long-range terminal case) the nominal step
+        // made the rate several times too large.
+        std::vector<double> timeSinceCommitSec;
+        // Free-running per-seeker clock (s): stamps latency-queue entries so
+        // the inertial LOS rate divides by the exact measurement interval.
+        std::vector<double> seekerClockSec;
         std::vector<double> lockLostTimeSec;
         std::vector<bool> hasPreviousLos;
 

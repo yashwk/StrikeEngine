@@ -176,14 +176,34 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                 seeker.measurementAgeSec[i] = 0.0;
                 seeker.lockLostTimeSec[i] = 0.0;
                 seeker.hasPreviousLos[i] = false;
+                if (i < seeker.losRateWorldValid.size()) {
+                    seeker.losRateWorldValid[i] = false;
+                }
+                if (i < seeker.losRateWorldStateX.size()) {
+                    seeker.losRateWorldStateX[i] = 0.0;
+                    seeker.losRateWorldStateY[i] = 0.0;
+                    seeker.losRateWorldStateZ[i] = 0.0;
+                }
+                if (i < seeker.timeSinceCommitSec.size()) {
+                    seeker.timeSinceCommitSec[i] = 0.0;
+                }
                 seeker.targetAzimuthRate[i] = 0.0;
                 seeker.targetElevationRate[i] = 0.0;
+                if (i < seeker.losRateFilterAz.size()) {
+                    seeker.losRateFilterAz[i] = 0.0;
+                    seeker.losRateFilterEl[i] = 0.0;
+                }
                 seeker.glintAzM[i] = 0.0;
                 seeker.glintElM[i] = 0.0;
                 if (i < seeker.bodyRateFilteredX.size()) {
                     seeker.bodyRateFilteredX[i] = 0.0;
                     seeker.bodyRateFilteredY[i] = 0.0;
                     seeker.bodyRateFilteredZ[i] = 0.0;
+                }
+                if (i < seeker.bodyRateStateX.size()) {
+                    seeker.bodyRateStateX[i] = 0.0;
+                    seeker.bodyRateStateY[i] = 0.0;
+                    seeker.bodyRateStateZ[i] = 0.0;
                 }
             };
 
@@ -197,6 +217,19 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
             glm::dvec3 seekerPos(physics.px[i], physics.py[i], physics.pz[i]);
             glm::dvec3 seekerVel(physics.vx[i], physics.vy[i], physics.vz[i]);
             seeker.measurementAgeSec[i] += stepDt;
+            if (i < seeker.seekerClockSec.size()) seeker.seekerClockSec[i] += stepDt;
+            // Trapezoidal body-angle integral over the measurement interval.
+            if (i < seeker.gyroIntX.size() && i < nav.estWx.size()) {
+                seeker.gyroIntX[i] += 0.5 * (nav.estWx[i] + seeker.prevStepGyroX[i]) * stepDt;
+                seeker.gyroIntY[i] += 0.5 * (nav.estWy[i] + seeker.prevStepGyroY[i]) * stepDt;
+                seeker.gyroIntZ[i] += 0.5 * (nav.estWz[i] + seeker.prevStepGyroZ[i]) * stepDt;
+                seeker.prevStepGyroX[i] = nav.estWx[i];
+                seeker.prevStepGyroY[i] = nav.estWy[i];
+                seeker.prevStepGyroZ[i] = nav.estWz[i];
+            }
+            if (i < seeker.timeSinceCommitSec.size()) {
+                seeker.timeSinceCommitSec[i] += stepDt;
+            }
             for (auto& measurement : measurementHistory[i]) measurement.age += stepDt;
 
             auto publishAvailable = [&]() {
@@ -212,6 +245,52 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     seeker.targetElevation[i] = measurement.elevation;
                     seeker.targetAzimuthRate[i] = measurement.azimuthRate;
                     seeker.targetElevationRate[i] = measurement.elevationRate;
+                    if (i < seeker.bodyRateFilteredX.size()) {
+                        seeker.bodyRateFilteredX[i] = measurement.bodyRateX;
+                        seeker.bodyRateFilteredY[i] = measurement.bodyRateY;
+                        seeker.bodyRateFilteredZ[i] = measurement.bodyRateZ;
+                    }
+                    // Inertial LOS rate from the measured world-frame vectors
+                    // captured at each commit. The old body-frame difference
+                    // plus gyro pairing is sensitive to roll/Jacobian
+                    // reconstruction and to using the wrong attitude across a
+                    // latency interval. The result is filtered below.
+                    if (i < seeker.losRateWorldX.size() &&
+                        i < seeker.losRateWorldStateX.size() &&
+                        i < seeker.prevLosWorldX.size() &&
+                        i < seeker.prevLosWorldTimeSec.size()) {
+                        const double dtMeas = measurement.timeSec -
+                            seeker.prevLosWorldTimeSec[i];
+                        if (seeker.prevLosWorldTimeSec[i] > 0.0 && dtMeas > 1e-9) {
+                            const double ux = seeker.prevLosWorldX[i];
+                            const double uy = seeker.prevLosWorldY[i];
+                            const double uz = seeker.prevLosWorldZ[i];
+                            const double dux = measurement.losWorldX - ux;
+                            const double duy = measurement.losWorldY - uy;
+                            const double duz = measurement.losWorldZ - uz;
+                            const glm::dvec3 ow(
+                                (uy * duz - uz * duy) / dtMeas,
+                                (uz * dux - ux * duz) / dtMeas,
+                                (ux * duy - uy * dux) / dtMeas);
+                            const double tau = std::max(
+                                valAt(seeker.rateFilterTauSec, i, 0.05), 1e-9);
+                            const double blend = 1.0 - std::exp(-dtMeas / tau);
+                            seeker.losRateWorldStateX[i] += blend *
+                                (ow.x - seeker.losRateWorldStateX[i]);
+                            seeker.losRateWorldStateY[i] += blend *
+                                (ow.y - seeker.losRateWorldStateY[i]);
+                            seeker.losRateWorldStateZ[i] += blend *
+                                (ow.z - seeker.losRateWorldStateZ[i]);
+                            seeker.losRateWorldX[i] = seeker.losRateWorldStateX[i];
+                            seeker.losRateWorldY[i] = seeker.losRateWorldStateY[i];
+                            seeker.losRateWorldZ[i] = seeker.losRateWorldStateZ[i];
+                            seeker.losRateWorldValid[i] = true;
+                        }
+                        seeker.prevLosWorldX[i] = measurement.losWorldX;
+                        seeker.prevLosWorldY[i] = measurement.losWorldY;
+                        seeker.prevLosWorldZ[i] = measurement.losWorldZ;
+                        seeker.prevLosWorldTimeSec[i] = measurement.timeSec;
+                    }
                     seeker.hasPublishedMeasurement[i] = true;
                     seeker.measurementAgeSec[i] = 0.0;
                 }
@@ -545,38 +624,92 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     }
                 }
 
-                if (sameTrack && stepDt > 0.0) {
+                double filteredAzRate = seeker.targetAzimuthRate[i];
+                double filteredElRate = seeker.targetElevationRate[i];
+                double pairedBodyX = 0.0, pairedBodyY = 0.0, pairedBodyZ = 0.0;
+                // The difference spans the time since the last COMMITTED
+                // measurement, which is not always one step: a skipped
+                // maintenance check must stretch the denominator, not the rate.
+                const double elapsed =
+                    (i < seeker.timeSinceCommitSec.size() &&
+                     seeker.timeSinceCommitSec[i] > 1e-9)
+                        ? seeker.timeSinceCommitSec[i]
+                        : stepDt;
+                if (sameTrack && elapsed > 0.0) {
                     const double tau = std::max(valAt(seeker.rateFilterTauSec, i, 0.05), 1e-9);
                     const double rawAzRate =
                         std::remainder(mAzimuth - seeker.previousAzimuth[i],
-                                       2.0 * std::numbers::pi) / stepDt;
+                                       2.0 * std::numbers::pi) / elapsed;
                     const double rawElRate =
-                        (mElevation - seeker.previousElevation[i]) / stepDt;
-                    const double blend = 1.0 - std::exp(-stepDt / tau);
-                    seeker.targetAzimuthRate[i] += blend *
-                        (rawAzRate - seeker.targetAzimuthRate[i]);
-                    seeker.targetElevationRate[i] += blend *
-                        (rawElRate - seeker.targetElevationRate[i]);
+                        (mElevation - seeker.previousElevation[i]) / elapsed;
+                    // Filter into DEDICATED state: the published rates are
+                    // overwritten from the latency queue below, and using them
+                    // as the filter state made the filter restart from a stale
+                    // delayed sample every step. Hand-built blocks without the
+                    // state vectors keep the legacy in-place filter.
+                    const double blend = 1.0 - std::exp(-elapsed / tau);
+                    if (i < seeker.losRateFilterAz.size()) {
+                        seeker.losRateFilterAz[i] += blend *
+                            (rawAzRate - seeker.losRateFilterAz[i]);
+                        seeker.losRateFilterEl[i] += blend *
+                            (rawElRate - seeker.losRateFilterEl[i]);
+                        filteredAzRate = seeker.losRateFilterAz[i];
+                        filteredElRate = seeker.losRateFilterEl[i];
+                    } else {
+                        seeker.targetAzimuthRate[i] += blend *
+                            (rawAzRate - seeker.targetAzimuthRate[i]);
+                        seeker.targetElevationRate[i] += blend *
+                            (rawElRate - seeker.targetElevationRate[i]);
+                        filteredAzRate = seeker.targetAzimuthRate[i];
+                        filteredElRate = seeker.targetElevationRate[i];
+                    }
                     // Pair the backward-differenced LOS rate with the body rate
                     // averaged over the SAME interval and filtered with the SAME
                     // blend. The endpoint gyro rate leaves a residual of order
                     // dt*omega_dot plus the filter lag, which the law mistakes
                     // for target motion while the host oscillates.
-                    if (i < seeker.bodyRateFilteredX.size() && i < nav.estWx.size()) {
+                    // Gyro term for the pairing: the INTERVAL AVERAGE from the
+                    // trapezoidal integral, not an endpoint sample. Filtered
+                    // copy kept for the legacy body-rate output.
+                    if (i < seeker.gyroIntX.size() && elapsed > 1e-9) {
+                        const double wx = seeker.gyroIntX[i] / elapsed;
+                        const double wy = seeker.gyroIntY[i] / elapsed;
+                        const double wz = seeker.gyroIntZ[i] / elapsed;
+                        if (i < seeker.bodyRateStateX.size()) {
+                            seeker.bodyRateStateX[i] += blend * (wx - seeker.bodyRateStateX[i]);
+                            seeker.bodyRateStateY[i] += blend * (wy - seeker.bodyRateStateY[i]);
+                            seeker.bodyRateStateZ[i] += blend * (wz - seeker.bodyRateStateZ[i]);
+                        }
+                        pairedBodyX = wx;
+                        pairedBodyY = wy;
+                        pairedBodyZ = wz;
+                        seeker.gyroIntX[i] = 0.0;
+                        seeker.gyroIntY[i] = 0.0;
+                        seeker.gyroIntZ[i] = 0.0;
+                    } else if (i < seeker.bodyRateStateX.size() && i < nav.estWx.size()) {
                         const double wx = 0.5 * (nav.estWx[i] + seeker.prevBodyRateX[i]);
                         const double wy = 0.5 * (nav.estWy[i] + seeker.prevBodyRateY[i]);
                         const double wz = 0.5 * (nav.estWz[i] + seeker.prevBodyRateZ[i]);
-                        seeker.bodyRateFilteredX[i] += blend * (wx - seeker.bodyRateFilteredX[i]);
-                        seeker.bodyRateFilteredY[i] += blend * (wy - seeker.bodyRateFilteredY[i]);
-                        seeker.bodyRateFilteredZ[i] += blend * (wz - seeker.bodyRateFilteredZ[i]);
+                        seeker.bodyRateStateX[i] += blend * (wx - seeker.bodyRateStateX[i]);
+                        seeker.bodyRateStateY[i] += blend * (wy - seeker.bodyRateStateY[i]);
+                        seeker.bodyRateStateZ[i] += blend * (wz - seeker.bodyRateStateZ[i]);
+                        pairedBodyX = wx;
+                        pairedBodyY = wy;
+                        pairedBodyZ = wz;
                     }
                 } else {
                     seeker.targetAzimuthRate[i] = 0.0;
                     seeker.targetElevationRate[i] = 0.0;
-                    if (i < seeker.bodyRateFilteredX.size()) {
-                        seeker.bodyRateFilteredX[i] = 0.0;
-                        seeker.bodyRateFilteredY[i] = 0.0;
-                        seeker.bodyRateFilteredZ[i] = 0.0;
+                    if (i < seeker.losRateFilterAz.size()) {
+                        seeker.losRateFilterAz[i] = 0.0;
+                        seeker.losRateFilterEl[i] = 0.0;
+                    }
+                    filteredAzRate = 0.0;
+                    filteredElRate = 0.0;
+                    if (i < seeker.bodyRateStateX.size()) {
+                        seeker.bodyRateStateX[i] = 0.0;
+                        seeker.bodyRateStateY[i] = 0.0;
+                        seeker.bodyRateStateZ[i] = 0.0;
                     }
                 }
                 // Endpoint body rate for the next interval average.
@@ -594,12 +727,28 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                 seeker.lockedTargetId[i] = target;
                 seeker.previousAzimuth[i] = mAzimuth;
                 seeker.previousElevation[i] = mElevation;
+                if (i < seeker.timeSinceCommitSec.size()) {
+                    seeker.timeSinceCommitSec[i] = 0.0;
+                }
                 seeker.hasPreviousLos[i] = true;
                 seeker.lockLostTimeSec[i] = 0.0;
                 seeker.lastSignalStrength[i] = candidate.signalStrength;
+                const glm::dvec3 losBodyMeas(
+                    std::cos(mElevation) * std::cos(mAzimuth),
+                    std::cos(mElevation) * std::sin(mAzimuth),
+                    -std::sin(mElevation));
+                const glm::dquat navQ = (i < nav.estQw.size())
+                    ? glm::dquat(nav.estQw[i], nav.estQx[i],
+                                 nav.estQy[i], nav.estQz[i])
+                    : glm::dquat(1.0, 0.0, 0.0, 0.0);
+                const glm::dvec3 losWorldMeas = glm::normalize(navQ * losBodyMeas);
                 measurementHistory[i].push_back({
                     target, 0.0, mRange, mRangeRate, mAzimuth, mElevation,
-                    seeker.targetAzimuthRate[i], seeker.targetElevationRate[i]});
+                    filteredAzRate, filteredElRate,
+                    pairedBodyX, pairedBodyY, pairedBodyZ,
+                    losBodyMeas.x, losBodyMeas.y, losBodyMeas.z,
+                    losWorldMeas.x, losWorldMeas.y, losWorldMeas.z,
+                    (i < seeker.seekerClockSec.size()) ? seeker.seekerClockSec[i] : 0.0});
                 setReason(SeekerRejectReason::None);
             };
 

@@ -69,6 +69,15 @@ namespace StrikeEngine::Kernel {
         ScenarioEntityConfig cfg;
     };
 
+    // A cold-launched round still on its clearance axis: at atTime (the first
+    // stage's ignition delay) the body and the ejection velocity rotate by
+    // deltaDeg about the body Y axis, onto the loft axis.
+    struct PendingPitchOver {
+        PhysicsId entityId = 0;
+        double atTime = 0.0;
+        double deltaDeg = 0.0;
+    };
+
     // Per-entity warhead state (see SimulationKernel::processWarheads).
     struct WarheadState {
         double lethalRadiusM = 0.0;
@@ -212,15 +221,31 @@ namespace StrikeEngine::Kernel {
         void processStaging();
         void processWarheads();
 
+        // Fixed installations (EntityType::RadarSite) do not fly: they are
+        // pinned to the position where they first went active, with zero
+        // velocity and rates, so a ground radar behaves like the installation
+        // it is while its sensors, tracks and datalink keep running.
+        void pinFixedInstallations();
+        std::vector<double> fixedAnchorPx, fixedAnchorPy, fixedAnchorPz;
+
         // Rail-launch deferred spawns (see ScenarioEntityConfig::LaunchSpec).
         void processPendingLaunches();
         void processActiveFlyouts();
+        void processPitchOvers();
+        // Body->world quaternion with body X on the launch axis (elevationDeg
+        // above the horizon toward the target), Y horizontal right, Z = X x Y.
+        // False when the geometry has no usable axis.
+        [[nodiscard]] bool launchAxisQuaternion(
+            std::size_t parent, const ScenarioEntityConfig::LaunchSpec& spec,
+            double ux, double uy, double uz, double elevationDeg,
+            double& qw, double& qx, double& qy, double& qz) const;
         PhysicsId spawnPendingLaunch(PendingLaunch& pl);
         // Queue the entity's initial guidance command, seeded from the
         // parent's relayed datalink track when one exists.
         void queueInitialGuidance(PhysicsId id, const ScenarioEntityConfig& cfg);
         std::vector<PendingLaunch> pendingLaunches;
         std::vector<ActiveFlyout> activeFlyouts;
+        std::vector<PendingPitchOver> pendingPitchOvers;
     };
 
 } // namespace StrikeEngine::Kernel

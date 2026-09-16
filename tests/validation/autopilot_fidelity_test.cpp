@@ -386,6 +386,25 @@ int main()
               "actuator/roll/authority keys round-trip");
     }
 
+    // ---- Stability-augmentation sign conventions ----
+    // The two static-moment conventions are opposite: a stable airframe has
+    // cmAlpha < 0 (nose-down for +alpha) but cnBeta > 0 (nose-right for +beta:
+    // the nose weathercocks toward the velocity). A positive fin is nose-up in
+    // pitch and nose-right in yaw, so the restoring assist is -k*alpha in pitch
+    // and +k*beta in yaw. Sharing the pitch sign in yaw is destabilising: the
+    // sideslip grows, the dihedral rolls the aircraft and it spirals (found on
+    // the AWACS station-track case).
+    {
+        NavigationBlock nav = makeNav();
+        nav.estVx = {100.0}; nav.estVy = {10.0}; nav.estVz = {5.0};
+        ControlBlock c = makeControl();
+        run(nav, makeSensor(), makeGuidance(0.0), c, dt);
+        check(c.aoaDampingPitch[0] < 0.0,
+              "pitch AoA damping opposes +alpha (assists the airframe)");
+        check(c.aoaDampingYaw[0] > 0.0,
+              "yaw AoA damping assists +beta (weathercock direction)");
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

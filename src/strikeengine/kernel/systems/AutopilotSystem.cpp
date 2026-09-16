@@ -238,14 +238,24 @@ namespace StrikeEngine::Kernel {
         const double yawFeedForward = std::clamp(yawFeedForwardRaw, -kTrimLimit, kTrimLimit);
         const double pitchAoaDamping = std::clamp(
             -control.kAlphaP[id] * alpha * dampScale, -0.15, 0.15);
-        const double yawAoaDamping = std::clamp(
-            -control.kAlphaP[id] * beta * dampScale, -0.15, 0.15);
+        // Stability augmentation must ASSIST the airframe, and the two axes
+        // have opposite sign conventions: the static pitch moment coefficient
+        // is negative for a stable airframe (nose-down for +alpha) while the
+        // directional one is positive (nose-right for +beta, i.e. the nose
+        // weathercocks toward the velocity). A positive fin deflection is
+        // nose-up in pitch and nose-right in yaw, so the restoring assist is
+        // -k*alpha in pitch and +k*beta in yaw. Sharing the pitch sign in yaw
+        // made the term destabilising: a sideslipped aircraft grew the slip,
+        // the dihedral rolled it, and it spiralled into the ground (the
+        // AWACS station-track case).
         // Rate damping uses the (optionally split) pitch/yaw gains; both
         // default to the legacy kRateP when unset.
         const double pitchRateDampingOut = std::clamp(
             -kRatePitch * wy * dampScale, -0.20, 0.20);
         const double yawRateDampingOut = std::clamp(
             -kRateYaw * wz * dampScale, -0.20, 0.20);
+        const double yawAoaDamping = std::clamp(
+            control.kAlphaP[id] * beta * dampScale, -0.15, 0.15);
 
         // Do not create a lateral steering demand from sensor noise when guidance
         // is asking for a straight-plane flight path; keep rate and AoA damping

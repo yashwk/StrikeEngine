@@ -6,6 +6,9 @@
 #include <strikeengine/kernel/config/EnvironmentConfig.hpp>
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -88,6 +91,30 @@ void makeBlocks(PhysicsBlock& physics, EntityStatusBlock& status, SeekerBlock& s
     seeker.targetElevationRate.assign(nEntities, 0.0);
     seeker.previousAzimuth.assign(nEntities, 0.0);
     seeker.previousElevation.assign(nEntities, 0.0);
+    seeker.timeSinceCommitSec.assign(nEntities, 0.0);
+    seeker.seekerClockSec.assign(nEntities, 0.0);
+    seeker.losRateWorldX.assign(nEntities, 0.0);
+    seeker.losRateWorldY.assign(nEntities, 0.0);
+    seeker.losRateWorldZ.assign(nEntities, 0.0);
+    seeker.losRateWorldValid.assign(nEntities, false);
+    seeker.losRateWorldStateX.assign(nEntities, 0.0);
+    seeker.losRateWorldStateY.assign(nEntities, 0.0);
+    seeker.losRateWorldStateZ.assign(nEntities, 0.0);
+    seeker.prevLosWorldX.assign(nEntities, 0.0);
+    seeker.prevLosWorldY.assign(nEntities, 0.0);
+    seeker.prevLosWorldZ.assign(nEntities, 0.0);
+    seeker.prevLosWorldTimeSec.assign(nEntities, 0.0);
+    seeker.losRateFilterAz.assign(nEntities, 0.0);
+    seeker.losRateFilterEl.assign(nEntities, 0.0);
+    seeker.bodyRateFilteredX.assign(nEntities, 0.0);
+    seeker.bodyRateFilteredY.assign(nEntities, 0.0);
+    seeker.bodyRateFilteredZ.assign(nEntities, 0.0);
+    seeker.bodyRateStateX.assign(nEntities, 0.0);
+    seeker.bodyRateStateY.assign(nEntities, 0.0);
+    seeker.bodyRateStateZ.assign(nEntities, 0.0);
+    seeker.prevBodyRateX.assign(nEntities, 0.0);
+    seeker.prevBodyRateY.assign(nEntities, 0.0);
+    seeker.prevBodyRateZ.assign(nEntities, 0.0);
     seeker.lockLostTimeSec.assign(nEntities, 0.0);
     seeker.hasPreviousLos.assign(nEntities, false);
 }
@@ -328,6 +355,183 @@ int main()
         check(s.rateFilterTauSec == 0.08 && s.decoyRejectionDb == 6.0 &&
               s.passiveRfDutyCycle == 0.5 && s.illuminatorEntityId == 3 && back.jammerEirpW == 5000.0,
               "seeker estimator/decoy/emitter keys round-trip");
+    }
+
+    // ---- Measurement latency: the published LOS rate must survive it ----
+    // The published rates are outputs: they are copied out of the latency
+    // queue. Using them as the rate filter's own state made the filter restart
+    // from a stale delayed sample every step, so the published rate came out
+    // 3-6x too small whenever latency > 0 -- and the long-range terminal dive
+    // steered wrong because of it.
+    {
+        const double dt = 0.01;
+        PhysicsBlock physics;
+        EntityStatusBlock status;
+        SeekerBlock seeker;
+        makeBlocks(physics, status, seeker);
+        seeker.measurementLatencySec[0] = 0.05;
+        seeker.rateFilterTauSec.assign(2, 0.05);
+        NavigationBlock nav;
+        nav.size = 2;
+        nav.estWx.assign(2, 0.0);
+        nav.estWy.assign(2, 0.0);
+        nav.estWz.assign(2, 0.0);
+        EnvironmentConfig env;
+        SeekerSystem system;
+
+        // Target crossing at 20 m/s, 1 km ahead: a constant 0.02 rad/s azimuth
+        // rate, no host rotation.
+        physics.px[1] = 1000.0;
+        physics.vy[1] = 20.0;
+        for (int k = 0; k < 200; ++k) {
+            physics.py[1] += physics.vy[1] * dt;
+            system.update(physics, status, seeker, nav, dt, env);
+        }
+        check(seeker.isLocked[0], "latency seeker holds the lock");
+        check(std::abs(seeker.targetAzimuthRate[0] - 0.02) < 0.002,
+              "published azimuth rate survives measurement latency (0.02 rad/s)");
+        check(seeker.losRateWorldValid[0] &&
+              std::abs(std::sqrt(seeker.losRateWorldX[0] * seeker.losRateWorldX[0] +
+                                 seeker.losRateWorldY[0] * seeker.losRateWorldY[0] +
+                                 seeker.losRateWorldZ[0] * seeker.losRateWorldZ[0]) - 0.02) < 0.004,
+              "geometric inertial LOS rate is published (0.02 rad/s)");
+
+        // Host pitching at 0.05 rad/s with the target fixed in the world: the
+        // frame rate must cancel the published body rate exactly as the gyro
+        // decoupling expects (they are paired over the same interval).
+        PhysicsBlock rotP;
+        EntityStatusBlock rotS;
+        SeekerBlock rotK;
+        makeBlocks(rotP, rotS, rotK);
+        rotK.measurementLatencySec[0] = 0.05;
+        rotK.rateFilterTauSec.assign(2, 0.05);
+        rotP.px[1] = 1000.0;
+        const double q = 0.05;
+        NavigationBlock rotNav;
+        rotNav.size = 2;
+        rotNav.estQw.assign(2, 1.0);
+        rotNav.estQx.assign(2, 0.0);
+        rotNav.estQy.assign(2, 0.0);
+        rotNav.estQz.assign(2, 0.0);
+        rotNav.estWx.assign(2, 0.0);
+        rotNav.estWy.assign(2, q);
+        rotNav.estWz.assign(2, 0.0);
+        SeekerSystem rotSystem;
+        for (int k = 0; k < 200; ++k) {
+            const double half = 0.5 * q * dt;
+            const double cw = std::cos(half), sw = std::sin(half);
+            const double pw = rotP.qw[0], px = rotP.qx[0];
+            const double pyq = rotP.qy[0], pz = rotP.qz[0];
+            rotP.qw[0] = cw * pw - sw * pyq;
+            rotP.qx[0] = cw * px + sw * pz;
+            rotP.qy[0] = cw * pyq + sw * pw;
+            rotP.qz[0] = cw * pz - sw * px;
+            rotNav.estQw[0] = rotP.qw[0]; rotNav.estQx[0] = rotP.qx[0];
+            rotNav.estQy[0] = rotP.qy[0]; rotNav.estQz[0] = rotP.qz[0];
+            rotSystem.update(rotP, rotS, rotK, rotNav, dt, env);
+        }
+        check(rotK.isLocked[0], "rotating seeker holds the lock");
+        // Frame rate and body rate are near-opposite: the paired sum (the
+        // inertial LOS rate of a world-fixed target) must stay small.
+        const double inertialEl = rotK.targetElevationRate[0] + rotK.bodyRateFilteredY[0];
+        check(std::abs(rotK.targetElevationRate[0]) > 0.02,
+              "rotating host still publishes the frame rate");
+        check(std::abs(inertialEl) < 0.01,
+              "paired frame + body rate cancels to the inertial LOS rate");
+
+        // Same cancellation from a NON-identity, rolled attitude: a body-frame
+        // pairing must not care how the body is oriented in the world.
+        PhysicsBlock skP;
+        EntityStatusBlock skS;
+        SeekerBlock skK;
+        makeBlocks(skP, skS, skK);
+        skK.rateFilterTauSec.assign(2, 0.02);
+        skP.px[1] = 1000.0; skP.py[1] = 200.0; skP.pz[1] = 100.0;  // world-fixed
+        skP.vx[1] = 0.0; skP.vy[1] = 0.0; skP.vz[1] = 0.0;
+        const double roll = 1.0471975512;                        // 60 deg
+        skP.qw[0] = std::cos(0.5 * roll); skP.qx[0] = std::sin(0.5 * roll);
+        NavigationBlock skNav;
+        skNav.size = 2;
+        skNav.estQw.assign(2, skP.qw[0]); skNav.estQx.assign(2, skP.qx[0]);
+        skNav.estQy.assign(2, 0.0); skNav.estQz.assign(2, 0.0);
+        skNav.estWx.assign(2, 0.0);
+        skNav.estWy.assign(2, q);
+        skNav.estWz.assign(2, 0.0);
+        SeekerSystem skSystem;
+        for (int k = 0; k < 200; ++k) {
+            const double half = 0.5 * q * dt;
+            const double cw = std::cos(half), sw = std::sin(half);
+            const double pw = skP.qw[0], px = skP.qx[0];
+            const double pyq = skP.qy[0], pz = skP.qz[0];
+            skP.qw[0] = cw * pw - sw * pyq;
+            skP.qx[0] = cw * px + sw * pz;
+            skP.qy[0] = cw * pyq + sw * pw;
+            skP.qz[0] = cw * pz - sw * px;
+            skNav.estQw[0] = skP.qw[0]; skNav.estQx[0] = skP.qx[0];
+            skNav.estQy[0] = skP.qy[0]; skNav.estQz[0] = skP.qz[0];
+            skSystem.update(skP, skS, skK, skNav, dt, env);
+        }
+        check(skK.isLocked[0], "rolled seeker holds the lock");
+        // Only the component perpendicular to the LOS drives the demand; the
+        // along-LOS part is the body rotation about the sightline and is
+        // removed by the cross product in pnDemand.
+        {
+            const glm::dvec3 wW(skK.losRateWorldX[0], skK.losRateWorldY[0],
+                                skK.losRateWorldZ[0]);
+            const glm::dvec3 uW(1000.0 - skP.px[0], 200.0 - skP.py[0], 100.0 - skP.pz[0]);
+            const glm::dvec3 perp = glm::cross(wW, glm::normalize(uW));
+            const glm::dquat qT(skP.qw[0], skP.qx[0], skP.qy[0], skP.qz[0]);
+            const glm::dvec3 lbN2 = glm::normalize(glm::inverse(qT) * uW);
+            // Diagnostic kept for the open bug: the measured angles match the
+            // truth, so the fault is in the (az, el, dAz, dEl) -> rate
+            // reconstruction for out-of-plane geometries.
+            std::printf("      [rolled] az=%.4f/%.4f el=%.4f/%.4f | azR=%.4f elR=%.4f "
+                        "br=(%.4f,%.4f,%.4f) | wW=(%.4f,%.4f,%.4f) perp=%.4f\n",
+                        skK.targetAzimuth[0], std::atan2(lbN2.y, lbN2.x),
+                        skK.targetElevation[0], std::asin(std::clamp(-lbN2.z, -1.0, 1.0)),
+                        skK.targetAzimuthRate[0], skK.targetElevationRate[0],
+                        skK.bodyRateFilteredX[0], skK.bodyRateFilteredY[0],
+                        skK.bodyRateFilteredZ[0], wW.x, wW.y, wW.z, glm::length(perp));
+            check(skK.losRateWorldValid[0] && glm::length(perp) < 0.01,
+                  "rolled attitude: perpendicular world rate ~0 for a fixed LOS");
+        }
+
+        check(rotK.losRateWorldValid[0] &&
+              glm::length(glm::dvec3(rotK.losRateWorldX[0], rotK.losRateWorldY[0],
+                                     rotK.losRateWorldZ[0])) < 0.01,
+              "world-frame rate stays ~0 while the host pitches (no residual)");
+
+        // Skipped maintenance steps: the target is hidden every other step
+        // (geometry rejection, lock kept by the dropout window). The rate must
+        // divide by the elapsed time, not by the nominal step.
+        PhysicsBlock gapP;
+        EntityStatusBlock gapS;
+        SeekerBlock gapK;
+        makeBlocks(gapP, gapS, gapK);
+        gapK.rateFilterTauSec.assign(2, 0.02);
+        // Hidden = beyond the range gate for one step: the lock is retained by
+        // the dropout window but the measurement is not committed.
+        gapK.maxRangeGateM.assign(2, 1500.0);
+        NavigationBlock gapNav;
+        gapNav.size = 2;
+        gapNav.estWx.assign(2, 0.0);
+        gapNav.estWy.assign(2, 0.0);
+        gapNav.estWz.assign(2, 0.0);
+        SeekerSystem gapSystem;
+        // Committed azimuths step by +0.02 rad every TWO steps: a steady
+        // 1.0 rad/s LOS rate whose backward difference spans the skipped step.
+        for (int k = 0; k < 60; ++k) {
+            const bool hidden = (k % 2) == 1;
+            const double az = 0.10 + 0.02 * (k / 2);
+            const double r = hidden ? 3000.0 : 1000.0;
+            gapP.px[1] = r * std::cos(az);
+            gapP.py[1] = r * std::sin(az);
+            gapP.pz[1] = 1000.0;
+            gapSystem.update(gapP, gapS, gapK, gapNav, dt, env);
+        }
+        check(gapK.isLocked[0], "lock survives intermittent geometry rejection");
+        check(std::abs(gapK.targetAzimuthRate[0] - 1.0) < 0.2,
+              "skipped-step rate divides by elapsed time (1.0 rad/s over 2 steps)");
     }
 
     if (g_failures == 0) std::printf("ALL SEEKER FIDELITY TESTS PASSED\n");

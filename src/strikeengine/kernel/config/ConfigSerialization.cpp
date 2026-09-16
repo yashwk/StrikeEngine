@@ -503,6 +503,7 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["guidanceTrackAimMinQuality01"] = g.guidanceTrackAimMinQuality01;
     j["guidanceApnFeedforwardMinQuality01"] = g.guidanceApnFeedforwardMinQuality01;
     j["guidanceLoftEnabled"] = g.guidanceLoftEnabled;
+    j["guidanceLoftAngleDeg"] = g.guidanceLoftAngleDeg;
     j["guidanceLoftAltitudeM"] = g.guidanceLoftAltitudeM;
     j["guidanceLoftGain"] = g.guidanceLoftGain;
     j["guidanceLoftRangeM"] = g.guidanceLoftRangeM;
@@ -588,6 +589,7 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.guidanceTrackAimMinQuality01 = j.value("guidanceTrackAimMinQuality01", 0.0);
     g.guidanceApnFeedforwardMinQuality01 = j.value("guidanceApnFeedforwardMinQuality01", 0.0);
     g.guidanceLoftEnabled = j.value("guidanceLoftEnabled", false);
+    g.guidanceLoftAngleDeg = j.value("guidanceLoftAngleDeg", 0.0);
     g.guidanceLoftAltitudeM = j.value("guidanceLoftAltitudeM", 0.0);
     g.guidanceLoftGain = j.value("guidanceLoftGain", 0.0);
     g.guidanceLoftRangeM = j.value("guidanceLoftRangeM", 40000.0);
@@ -1017,6 +1019,9 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
             {"flyoutSec", e.launch.flyoutSec},
             {"flyoutAheadM", e.launch.flyoutAheadM},
             {"flyoutClimbM", e.launch.flyoutClimbM},
+            {"launchElevationDeg", e.launch.launchElevationDeg},
+            {"ejectElevationDeg", e.launch.ejectElevationDeg},
+            {"targetEvadeDistanceM", e.launch.targetEvadeDistanceM},
         };
     }
 }
@@ -1057,6 +1062,9 @@ void from_json(const json& j, ScenarioEntityConfig& e) {
         e.launch.flyoutSec = jl.value("flyoutSec", 0.0);
         e.launch.flyoutAheadM = jl.value("flyoutAheadM", 6000.0);
         e.launch.flyoutClimbM = jl.value("flyoutClimbM", 0.0);
+        e.launch.launchElevationDeg = jl.value("launchElevationDeg", 0.0);
+        e.launch.ejectElevationDeg = jl.value("ejectElevationDeg", 0.0);
+        e.launch.targetEvadeDistanceM = jl.value("targetEvadeDistanceM", 0.0);
     }
     if (!e.designRef.empty()) {
         // A design file overrides any inline vehicle config.

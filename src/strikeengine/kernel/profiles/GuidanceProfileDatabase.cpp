@@ -75,6 +75,7 @@ namespace StrikeEngine::Kernel {
             cfg.guidanceTrackAimMinQuality01 = getDoubleKey(data, "guidance_track_aim_min_quality01", "guidanceTrackAimMinQuality01", cfg.guidanceTrackAimMinQuality01);
             cfg.guidanceApnFeedforwardMinQuality01 = getDoubleKey(data, "guidance_apn_feedforward_min_quality01", "guidanceApnFeedforwardMinQuality01", cfg.guidanceApnFeedforwardMinQuality01);
             cfg.guidanceLoftEnabled = getBoolKey(data, "guidance_loft_enabled", "guidanceLoftEnabled", cfg.guidanceLoftEnabled);
+            cfg.guidanceLoftAngleDeg = getDoubleKey(data, "guidance_loft_angle_deg", "guidanceLoftAngleDeg", cfg.guidanceLoftAngleDeg);
             cfg.guidanceLoftAltitudeM = getDoubleKey(data, "guidance_loft_altitude_m", "guidanceLoftAltitudeM", cfg.guidanceLoftAltitudeM);
             cfg.guidanceLoftGain = getDoubleKey(data, "guidance_loft_gain", "guidanceLoftGain", cfg.guidanceLoftGain);
             cfg.guidanceLoftRangeM = getDoubleKey(data, "guidance_loft_range_m", "guidanceLoftRangeM", cfg.guidanceLoftRangeM);

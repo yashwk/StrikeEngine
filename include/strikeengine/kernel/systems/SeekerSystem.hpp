@@ -47,6 +47,25 @@ namespace StrikeEngine::Kernel {
             double elevation = 0.0;
             double azimuthRate = 0.0;
             double elevationRate = 0.0;
+            // Body rate averaged over the SAME interval as the angle rates.
+            // The gyro decoupling adds it to the frame rate, so publishing the
+            // rates without it left a jerk-sized residual (the body rate moved
+            // during the measurement latency) -- larger than the LOS rate
+            // itself on a maneuvering long-range round.
+            double bodyRateX = 0.0;
+            double bodyRateY = 0.0;
+            double bodyRateZ = 0.0;
+            // Measured LOS unit vectors at capture time. Keeping both frames
+            // lets the legacy body-rate fallback remain available while the
+            // preferred inertial rate differentiates the measurement in the
+            // frame it was actually captured in.
+            double losBodyX = 0.0;
+            double losBodyY = 0.0;
+            double losBodyZ = 0.0;
+            double losWorldX = 0.0;
+            double losWorldY = 0.0;
+            double losWorldZ = 0.0;
+            double timeSec = 0.0;
         };
 
         std::unordered_map<std::string, std::unique_ptr<Models::RCSDatabase>> rcsCache;

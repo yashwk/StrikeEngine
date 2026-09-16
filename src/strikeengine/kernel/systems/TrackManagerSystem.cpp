@@ -1,4 +1,6 @@
 #include <strikeengine/kernel/systems/TrackManagerSystem.hpp>
+#include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <algorithm>
 #include <array>
@@ -68,8 +70,15 @@ namespace StrikeEngine::Kernel {
         }
 
         // Scalar position update. Returns false if the residual gate rejects.
+        // `freezeDynamics` zeroes the velocity and acceleration gains: the
+        // position measurement is usable but its error is dominated by a
+        // slowly-varying term (the nav attitude projected over range), which
+        // the filter would otherwise read as target velocity -- on the S-400
+        // shot a straight-flying 175 m/s transport produced a 2.4 km/s
+        // estimate whose lead was hundreds of km of phantom.
         bool kfUpdateAxis(double& p, double& v, double& a, double* P,
-                          double z, double r, double gateSigma, double& innovation) {
+                          double z, double r, double gateSigma, double& innovation,
+                          bool freezeDynamics = false) {
             const double s = P[0] + r;
             if (!(s > 1e-12)) return false;
             const double y = z - p;
@@ -77,7 +86,9 @@ namespace StrikeEngine::Kernel {
             if (gateSigma > 0.0 && std::abs(y) > gateSigma * std::sqrt(s)) {
                 return false;
             }
-            const double K0 = P[0] / s, K1 = P[3] / s, K2 = P[6] / s;
+            const double K0 = P[0] / s;
+            const double K1 = freezeDynamics ? 0.0 : P[3] / s;
+            const double K2 = freezeDynamics ? 0.0 : P[6] / s;
             p += K0 * y;
             v += K1 * y;
             a += K2 * y;
@@ -150,6 +161,7 @@ namespace StrikeEngine::Kernel {
             glm::dvec3 measPos(0.0);
             std::int64_t newId = -1;
             double measVar = 0.0;
+            bool attitudeDominated = false;
             if (rawMeasurement) {
                 const double rng = seeker.targetRange[i];
                 const double az  = seeker.targetAzimuth[i];
@@ -189,6 +201,15 @@ namespace StrikeEngine::Kernel {
                     }
                     measVar = valAt(tracks.measNoiseScale, i, 1.0) *
                               std::max(posVar, 1e-6);
+                    // Is the measurement error dominated by the nav ATTITUDE
+                    // uncertainty projected over the range?
+                    const double angleTerm = (rng * angleStd) * (rng * angleStd);
+                    const double attTerm = (i < nav.covarianceDiag.size())
+                        ? (rng * rng) * std::max(0.0, std::max(
+                              {nav.covarianceDiag[i][6], nav.covarianceDiag[i][7],
+                               nav.covarianceDiag[i][8]}))
+                        : 0.0;
+                    attitudeDominated = attTerm > 4.0 * (angleTerm + 1e-6);
                     measValid = true;
                 }
             }
@@ -306,10 +327,13 @@ namespace StrikeEngine::Kernel {
                     double cX[9], cY[9], cZ[9];
                     for (int k = 0; k < 9; ++k) { cX[k] = Px[k]; cY[k] = Px[9 + k]; cZ[k] = Px[18 + k]; }
                     double innov = 0.0;
-                    const bool okX = kfUpdateAxis(sX[0], sX[1], sX[2], cX, measPos.x, measVar, gate, innov);
+                    const bool okX = kfUpdateAxis(sX[0], sX[1], sX[2], cX, measPos.x,
+                                                  measVar, gate, innov, attitudeDominated);
                     tracks.lastInnovationM[i] = innov;
-                    const bool okY = kfUpdateAxis(sY[0], sY[1], sY[2], cY, measPos.y, measVar, gate, innov);
-                    const bool okZ = kfUpdateAxis(sZ[0], sZ[1], sZ[2], cZ, measPos.z, measVar, gate, innov);
+                    const bool okY = kfUpdateAxis(sY[0], sY[1], sY[2], cY, measPos.y,
+                                                  measVar, gate, innov, attitudeDominated);
+                    const bool okZ = kfUpdateAxis(sZ[0], sZ[1], sZ[2], cZ, measPos.z,
+                                                  measVar, gate, innov, attitudeDominated);
                     if (!okX || !okY || !okZ) {
                         tracks.residualRejectCount[i] += 1;
                         dropoutStep(true);   // already predicted this step
@@ -353,6 +377,22 @@ namespace StrikeEngine::Kernel {
             }
             const double tau = std::max(1e-9, valAt(tracks.qualityTauSec, i, kQualityTauSec));
             tracks.quality01[i] = std::exp(-tracks.ageSec[i] / tau);
+            if (std::getenv("STRIKE_TRACK_TRACE") != nullptr && i == 0) {
+                static int tick = 0;
+                if ((tick++ % 400) == 0) {
+                    const double vx = tracks.velX[i], vy = tracks.velY[i], vz = tracks.velZ[i];
+                    std::fprintf(stderr,
+                                 "[trk] upd=%d pos=(%.0f,%.0f,%.0f) vel=(%.0f,%.0f,%.0f) "
+                                 "|v|=%.0f acc=(%.1f,%.1f,%.1f) kf=%d meas=(%.0f,%.0f,%.0f) "
+                                 "innov=%.1f\n",
+                                 static_cast<int>(tracks.updateCount[i]),
+                                 tracks.posX[i], tracks.posY[i], tracks.posZ[i], vx, vy, vz,
+                                 std::sqrt(vx * vx + vy * vy + vz * vz),
+                                 tracks.accelX[i], tracks.accelY[i], tracks.accelZ[i],
+                                 static_cast<int>(useFilter),
+                                 measPos.x, measPos.y, measPos.z, tracks.lastInnovationM[i]);
+                }
+            }
             tracks.measPosX[i] = measPos.x;
             tracks.measPosY[i] = measPos.y;
             tracks.measPosZ[i] = measPos.z;

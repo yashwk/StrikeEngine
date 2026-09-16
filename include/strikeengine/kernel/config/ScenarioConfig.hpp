@@ -80,6 +80,30 @@ namespace StrikeEngine::Kernel {
             double flyoutSec = 0.0;
             double flyoutAheadM = 6000.0;
             double flyoutClimbM = 0.0;
+            // Launch attitude. 0 = inherit the parent's attitude (air rail
+            // launch, the legacy behaviour). > 0 = cold-launch attitude
+            // pitched that many degrees above the horizon toward the target
+            // (ground batteries: the round leaves the tube nose-up and the
+            // midcourse loft takes it from there). pushMps is applied along
+            // that launch axis instead of straight down.
+            double launchElevationDeg = 0.0;
+            // Cold-launch clearance axis (0 = the ejection axis is the launch
+            // axis, no pitch-over). A vertical launch (90) pops the round out
+            // of the canister and the gas thrusters then reorient it to
+            // launchElevationDeg (the loft axis) before the main motor lights.
+            // The kernel applies that reorientation at the first stage's
+            // ignition delay, rotating the body and the ejection velocity
+            // together -- no fin can pitch a cold round over at 40 m/s, which
+            // is exactly why real vertical launchers carry thrusters.
+            double ejectElevationDeg = 0.0;
+            // Target reaction (0 = the target is unaware). The launch warns
+            // the target and it runs: the kernel queues the target a level
+            // Cruise course toward a point this far away on the reciprocal
+            // bearing from the launcher, so a long-range round has to chase a
+            // fleeing target instead of a cooperative one. The target's own
+            // cruise law keeps its altitude; the escape is purely a heading
+            // change at whatever thrust the airframe has.
+            double targetEvadeDistanceM = 0.0;
         };
         LaunchSpec launch;
     };

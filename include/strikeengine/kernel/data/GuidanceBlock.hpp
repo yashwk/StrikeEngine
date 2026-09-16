@@ -111,9 +111,10 @@ namespace StrikeEngine::Kernel {
         std::vector<double> trackAimMinQuality01;    // min track quality to use as aim
         std::vector<double> apnFeedforwardMinQuality01; // min track quality to trust APN ff
         std::vector<bool>   loftEnabled;             // midcourse loft shaping
-        std::vector<double> loftAltitudeM;           // loft apex above launch altitude (m)
-        std::vector<double> loftGain;                // vertical accel per m of loft error
-        std::vector<double> loftRangeM;              // range beyond which loft applies
+        std::vector<double> loftAngleDeg;            // climb bias over the sightline (deg)
+        std::vector<double> loftAltitudeM;           // apex ceiling; 0 = no ceiling (m)
+        std::vector<double> loftGain;                // angle-hold gain (1/s)
+        std::vector<double> loftRangeM;              // range where the bias is full (m)
         // Guidance authority awareness: scale the demand by the autopilot's
         // previous-step delivered/demanded fin margin (0.1..1).
         std::vector<bool>   authorityAwareLimitEnabled;
