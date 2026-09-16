@@ -5,8 +5,16 @@
 namespace StrikeEngine::Kernel
 {
 	/**
-	 * @brief Adaptive 4th/5th-order Runge-Kutta (Fehlberg pair) with
-	 * per-step error control and step halving on rejection.
+	 * @brief Adaptive 5th/4th-order Runge-Kutta (Dormand-Prince pair).
+	 *
+	 * Subdivides the requested step internally until the estimated local error
+	 * per substep is within @p tolerance; it never returns a shorter step than
+	 * it was asked for, so it cannot make the engine's outer step smaller.
+	 *
+	 * Dormand-Prince is preferred to the older Fehlberg pair for two reasons:
+	 * the embedded error estimate is smaller, and the method is FSAL (first
+	 * same as last), so the derivative at the end of a step is reused as the
+	 * first stage of the next, saving one of six derivative evaluations.
 	 */
 	class RK45Integrator final : public Integrator
 	{
@@ -30,7 +38,9 @@ namespace StrikeEngine::Kernel
 		// Stage/accumulator scratch reused across calls and rejection
 		// attempts: no per-step heap allocation. Each kernel owns one
 		// integrator instance, so the buffers are never shared across runs.
+		// acc5 holds the accepted 5th-order increment; accErr the embedded
+		// error estimate.
 		void ensureCapacity(const PhysicsBlock& state);
-		PhysicsBlock k1, k2, k3, k4, k5, k6, stage, acc4, acc5;
+		PhysicsBlock k1, k2, k3, k4, k5, k6, k7, stage, acc5, accErr;
 	};
 } // namespace StrikeEngine::Kernel

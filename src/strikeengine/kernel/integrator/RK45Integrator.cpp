@@ -1,47 +1,68 @@
 #include <strikeengine/kernel/integrator/RK45Integrator.hpp>
 #include <cmath>
 #include <algorithm>
+#include <array>
 
 namespace StrikeEngine::Kernel
 {
 
 namespace
 {
-    // Fehlberg 4(5) coefficients
-    constexpr double c2  = 1.0 / 4.0;
-    constexpr double c3  = 3.0 / 8.0;
-    constexpr double c4  = 12.0 / 13.0;
-    constexpr double c5  = 1.0;
-    constexpr double c6  = 1.0 / 2.0;
+    // Dormand-Prince 5(4), the RK5(4)7M pair.
+    constexpr double c2 = 1.0 / 5.0;
+    constexpr double c3 = 3.0 / 10.0;
+    constexpr double c4 = 4.0 / 5.0;
+    constexpr double c5 = 8.0 / 9.0;
+    constexpr double c6 = 1.0;
 
-    constexpr double a21 = 1.0 / 4.0;
-    constexpr double a31 = 3.0 / 32.0;
-    constexpr double a32 = 9.0 / 32.0;
-    constexpr double a41 = 1932.0 / 2197.0;
-    constexpr double a42 = -7200.0 / 2197.0;
-    constexpr double a43 = 7296.0 / 2197.0;
-    constexpr double a51 = 439.0 / 216.0;
-    constexpr double a52 = -8.0;
-    constexpr double a53 = 3680.0 / 513.0;
-    constexpr double a54 = -845.0 / 4104.0;
-    constexpr double a61 = -8.0 / 27.0;
-    constexpr double a62 = 2.0;
-    constexpr double a63 = -3544.0 / 2565.0;
-    constexpr double a64 = 1859.0 / 4104.0;
-    constexpr double a65 = -11.0 / 40.0;
+    constexpr double a21 = 1.0 / 5.0;
 
-    // 4th-order (local extrapolation uses 5th order as the accepted solution)
-    constexpr double b41 = 25.0 / 216.0;
-    constexpr double b43 = 1408.0 / 2565.0;
-    constexpr double b44 = 2197.0 / 4104.0;
-    constexpr double b45 = -1.0 / 5.0;
+    constexpr double a31 = 3.0 / 40.0;
+    constexpr double a32 = 9.0 / 40.0;
 
-    // 5th-order
-    constexpr double b51 = 16.0 / 135.0;
-    constexpr double b53 = 6656.0 / 12825.0;
-    constexpr double b54 = 28561.0 / 56430.0;
-    constexpr double b55 = -9.0 / 50.0;
-    constexpr double b56 = 2.0 / 55.0;
+    constexpr double a41 = 44.0 / 45.0;
+    constexpr double a42 = -56.0 / 15.0;
+    constexpr double a43 = 32.0 / 9.0;
+
+    constexpr double a51 = 19372.0 / 6561.0;
+    constexpr double a52 = -25360.0 / 2187.0;
+    constexpr double a53 = 64448.0 / 6561.0;
+    constexpr double a54 = -212.0 / 729.0;
+
+    constexpr double a61 = 9017.0 / 3168.0;
+    constexpr double a62 = -355.0 / 33.0;
+    constexpr double a63 = 46732.0 / 5247.0;
+    constexpr double a64 = 49.0 / 176.0;
+    constexpr double a65 = -5103.0 / 18656.0;
+
+    // The seventh stage row doubles as the 5th-order solution weights, which is
+    // what makes the method FSAL: evaluating it leaves the derivative at the
+    // step's end, reusable as the next step's first stage.
+    constexpr double a71 = 35.0 / 384.0;
+    constexpr double a73 = 500.0 / 1113.0;
+    constexpr double a74 = 125.0 / 192.0;
+    constexpr double a75 = -2187.0 / 6784.0;
+    constexpr double a76 = 11.0 / 84.0;
+
+    // 5th-order weights (== the seventh stage row).
+    constexpr double b1 = a71, b3 = a73, b4 = a74, b5 = a75, b6 = a76;
+
+    // Embedded error estimate: 5th-order weights minus the 4th-order weights.
+    constexpr double e1 = 71.0 / 57600.0;
+    constexpr double e3 = -71.0 / 16695.0;
+    constexpr double e4 = 71.0 / 1920.0;
+    constexpr double e5 = -17253.0 / 339200.0;
+    constexpr double e6 = 22.0 / 525.0;
+    constexpr double e7 = -1.0 / 40.0;
+
+    // Step-size controller. 0.9 keeps a margin below the tolerance; the accepted
+    // solution is 5th order so the error falls as h^5, hence the 1/5 exponent.
+    constexpr double kSafety = 0.9;
+    constexpr double kMinShrink = 0.2;
+    constexpr double kMaxGrow = 5.0;
+    constexpr double kMinStep = 1e-6;
+
+    using Field = std::vector<double> PhysicsBlock::*;
 }
 
 RK45Integrator::RK45Integrator(double tol)
@@ -53,15 +74,9 @@ void RK45Integrator::ensureCapacity(const PhysicsBlock& state)
 {
     // Copy assignment recycles the buffers' capacity once the entity count is
     // stable, so steady-state stepping performs no heap allocation.
-    k1 = state;
-    k2 = state;
-    k3 = state;
-    k4 = state;
-    k5 = state;
-    k6 = state;
-    stage = state;
-    acc5 = state;
-    acc4 = state;
+    k1 = state; k2 = state; k3 = state; k4 = state;
+    k5 = state; k6 = state; k7 = state;
+    stage = state; acc5 = state; accErr = state;
 }
 
 double RK45Integrator::integrate(
@@ -70,141 +85,211 @@ double RK45Integrator::integrate(
     double t0,
     double dt)
 {
-    double t = t0;
-    double remaining = dt;
-    double h = dt;
+    const std::size_t n = state.size;
+    ensureCapacity(state);
 
     acceptedStepCount = 0;
     rejectedStepCount = 0;
 
-    // Reused member scratch instead of per-call full-state copies.
-    ensureCapacity(state);
+    // acc5 = sum_r weight_r * k_r, applied to one integrated state field. The
+    // kernels are the seven stage derivatives; inactive entities keep their
+    // state (they are skipped by applyStateUpdate as well).
+    auto combine = [&](PhysicsBlock& acc, Field f,
+                       const std::array<const PhysicsBlock*, 7>& ks,
+                       const std::array<double, 7>& ws) {
+        auto& out = acc.*f;
+        // Hand-built blocks may omit optional state groups (gimbal angles).
+        const auto& first = (*ks[0]).*f;
+        if (out.size() < n || first.size() < n) return;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!state.active[i]) continue;
+            double s = 0.0;
+            for (std::size_t r = 0; r < 7; ++r) s += ws[r] * ((*ks[r]).*f)[i];
+            out[i] = s;
+        }
+    };
 
-    double errMax = 0.0;
+    // Builds one stage state from the a-coefficients of its row: stage = x +
+    // h * sum_j a_ij k_j. Only k_j with a non-zero coefficient are passed.
+    auto buildStage = [&](double h,
+                          std::initializer_list<std::pair<const PhysicsBlock*, double>> terms,
+                          PhysicsBlock& out) {
+        out = state;
+        for (const auto& [k, a] : terms) {
+            if (a != 0.0) applyStateUpdate(out, *k, h * a);
+        }
+    };
+
+    const std::array<double, 7> w5 = {b1, 0.0, b3, b4, b5, b6, 0.0};
+    const std::array<double, 7> we = {e1, 0.0, e3, e4, e5, e6, e7};
+
+    double t = t0;
+    double remaining = dt;
+    double h = dt;
+    bool haveK1 = false;
 
     while (remaining > 1e-12)
     {
         if (h > remaining) h = remaining;
 
         bool accepted = false;
-        int attempts = 0;
-        while (!accepted && attempts < 200)
+        double errMax = 0.0;
+
+        // Rejection must not spin forever: the step is floored at kMinStep, and
+        // a step that cannot meet the tolerance there is accepted with its error
+        // reported rather than silently retried forever.
+        for (int attempts = 0; attempts < 200 && !accepted; ++attempts)
         {
-            errMax = 0.0;
-            deriv(state, t, k1);
-
-            stage = state; applyStateUpdate(stage, k1, h * a21); deriv(stage, t + c2 * h, k2);
-            stage = state; applyStateUpdate(stage, k1, h * a31); applyStateUpdate(stage, k2, h * a32); deriv(stage, t + c3 * h, k3);
-            stage = state; applyStateUpdate(stage, k1, h * a41); applyStateUpdate(stage, k2, h * a42); applyStateUpdate(stage, k3, h * a43); deriv(stage, t + c4 * h, k4);
-            stage = state; applyStateUpdate(stage, k1, h * a51); applyStateUpdate(stage, k2, h * a52); applyStateUpdate(stage, k3, h * a53); applyStateUpdate(stage, k4, h * a54); deriv(stage, t + c5 * h, k5);
-            stage = state; applyStateUpdate(stage, k1, h * a61); applyStateUpdate(stage, k2, h * a62); applyStateUpdate(stage, k3, h * a63); applyStateUpdate(stage, k4, h * a64); applyStateUpdate(stage, k5, h * a65); deriv(stage, t + c6 * h, k6);
-
-            // Weighted derivatives for 4th and 5th order solutions
-            const std::size_t n = state.size;
-            for (std::size_t i = 0; i < n; ++i)
-            {
-                if (!state.active[i]) continue;
-
-                acc4.px[i] = b41 * k1.px[i] + b43 * k3.px[i] + b44 * k4.px[i] + b45 * k5.px[i];
-                acc5.px[i] = b51 * k1.px[i] + b53 * k3.px[i] + b54 * k4.px[i] + b55 * k5.px[i] + b56 * k6.px[i];
-                acc4.py[i] = b41 * k1.py[i] + b43 * k3.py[i] + b44 * k4.py[i] + b45 * k5.py[i];
-                acc5.py[i] = b51 * k1.py[i] + b53 * k3.py[i] + b54 * k4.py[i] + b55 * k5.py[i] + b56 * k6.py[i];
-                acc4.pz[i] = b41 * k1.pz[i] + b43 * k3.pz[i] + b44 * k4.pz[i] + b45 * k5.pz[i];
-                acc5.pz[i] = b51 * k1.pz[i] + b53 * k3.pz[i] + b54 * k4.pz[i] + b55 * k5.pz[i] + b56 * k6.pz[i];
-
-                acc4.vx[i] = b41 * k1.vx[i] + b43 * k3.vx[i] + b44 * k4.vx[i] + b45 * k5.vx[i];
-                acc5.vx[i] = b51 * k1.vx[i] + b53 * k3.vx[i] + b54 * k4.vx[i] + b55 * k5.vx[i] + b56 * k6.vx[i];
-                acc4.vy[i] = b41 * k1.vy[i] + b43 * k3.vy[i] + b44 * k4.vy[i] + b45 * k5.vy[i];
-                acc5.vy[i] = b51 * k1.vy[i] + b53 * k3.vy[i] + b54 * k4.vy[i] + b55 * k5.vy[i] + b56 * k6.vy[i];
-                acc4.vz[i] = b41 * k1.vz[i] + b43 * k3.vz[i] + b44 * k4.vz[i] + b45 * k5.vz[i];
-                acc5.vz[i] = b51 * k1.vz[i] + b53 * k3.vz[i] + b54 * k4.vz[i] + b55 * k5.vz[i] + b56 * k6.vz[i];
-
-                acc4.wx[i] = b41 * k1.wx[i] + b43 * k3.wx[i] + b44 * k4.wx[i] + b45 * k5.wx[i];
-                acc5.wx[i] = b51 * k1.wx[i] + b53 * k3.wx[i] + b54 * k4.wx[i] + b55 * k5.wx[i] + b56 * k6.wx[i];
-                acc4.wy[i] = b41 * k1.wy[i] + b43 * k3.wy[i] + b44 * k4.wy[i] + b45 * k5.wy[i];
-                acc5.wy[i] = b51 * k1.wy[i] + b53 * k3.wy[i] + b54 * k4.wy[i] + b55 * k5.wy[i] + b56 * k6.wy[i];
-                acc4.wz[i] = b41 * k1.wz[i] + b43 * k3.wz[i] + b44 * k4.wz[i] + b45 * k5.wz[i];
-                acc5.wz[i] = b51 * k1.wz[i] + b53 * k3.wz[i] + b54 * k4.wz[i] + b55 * k5.wz[i] + b56 * k6.wz[i];
-
-                acc4.qw[i] = b41 * k1.qw[i] + b43 * k3.qw[i] + b44 * k4.qw[i] + b45 * k5.qw[i];
-                acc5.qw[i] = b51 * k1.qw[i] + b53 * k3.qw[i] + b54 * k4.qw[i] + b55 * k5.qw[i] + b56 * k6.qw[i];
-                acc4.qx[i] = b41 * k1.qx[i] + b43 * k3.qx[i] + b44 * k4.qx[i] + b45 * k5.qx[i];
-                acc5.qx[i] = b51 * k1.qx[i] + b53 * k3.qx[i] + b54 * k4.qx[i] + b55 * k5.qx[i] + b56 * k6.qx[i];
-                acc4.qy[i] = b41 * k1.qy[i] + b43 * k3.qy[i] + b44 * k4.qy[i] + b45 * k5.qy[i];
-                acc5.qy[i] = b51 * k1.qy[i] + b53 * k3.qy[i] + b54 * k4.qy[i] + b55 * k5.qy[i] + b56 * k6.qy[i];
-                acc4.qz[i] = b41 * k1.qz[i] + b43 * k3.qz[i] + b44 * k4.qz[i] + b45 * k5.qz[i];
-                acc5.qz[i] = b51 * k1.qz[i] + b53 * k3.qz[i] + b54 * k4.qz[i] + b55 * k5.qz[i] + b56 * k6.qz[i];
-
-                acc4.mass[i]    = b41 * k1.mass[i] + b43 * k3.mass[i] + b44 * k4.mass[i] + b45 * k5.mass[i];
-                acc5.mass[i]    = b51 * k1.mass[i] + b53 * k3.mass[i] + b54 * k4.mass[i] + b55 * k5.mass[i] + b56 * k6.mass[i];
-                acc4.finPitch[i] = b41 * k1.finPitch[i] + b43 * k3.finPitch[i] + b44 * k4.finPitch[i] + b45 * k5.finPitch[i];
-                acc5.finPitch[i] = b51 * k1.finPitch[i] + b53 * k3.finPitch[i] + b54 * k4.finPitch[i] + b55 * k5.finPitch[i] + b56 * k6.finPitch[i];
-                acc4.finYaw[i]   = b41 * k1.finYaw[i] + b43 * k3.finYaw[i] + b44 * k4.finYaw[i] + b45 * k5.finYaw[i];
-                acc5.finYaw[i]   = b51 * k1.finYaw[i] + b53 * k3.finYaw[i] + b54 * k4.finYaw[i] + b55 * k5.finYaw[i] + b56 * k6.finYaw[i];
-                acc4.finRoll[i]  = b41 * k1.finRoll[i] + b43 * k3.finRoll[i] + b44 * k4.finRoll[i] + b45 * k5.finRoll[i];
-                acc5.finRoll[i]  = b51 * k1.finRoll[i] + b53 * k3.finRoll[i] + b54 * k4.finRoll[i] + b55 * k5.finRoll[i] + b56 * k6.finRoll[i];
-                if (i < acc4.gimbalPitch.size() && i < acc4.gimbalYaw.size()) {
-                    acc4.gimbalPitch[i] = b41 * k1.gimbalPitch[i] + b43 * k3.gimbalPitch[i] + b44 * k4.gimbalPitch[i] + b45 * k5.gimbalPitch[i];
-                    acc5.gimbalPitch[i] = b51 * k1.gimbalPitch[i] + b53 * k3.gimbalPitch[i] + b54 * k4.gimbalPitch[i] + b55 * k5.gimbalPitch[i] + b56 * k6.gimbalPitch[i];
-                    acc4.gimbalYaw[i] = b41 * k1.gimbalYaw[i] + b43 * k3.gimbalYaw[i] + b44 * k4.gimbalYaw[i] + b45 * k5.gimbalYaw[i];
-                    acc5.gimbalYaw[i] = b51 * k1.gimbalYaw[i] + b53 * k3.gimbalYaw[i] + b54 * k4.gimbalYaw[i] + b55 * k5.gimbalYaw[i] + b56 * k6.gimbalYaw[i];
-                }
-
-                // Error estimate: |h*(y4 - y5)| relative to each component's
-                // state scale. Include every integrated state group so the
-                // controller cannot accept a step that is accurate in
-                // translation but poor in attitude or actuator dynamics.
-                const double scale = 1.0 + std::abs(state.px[i]);
-                errMax = std::max(errMax, std::abs(h * (acc4.px[i] - acc5.px[i])) / scale);
-                errMax = std::max(errMax, std::abs(h * (acc4.py[i] - acc5.py[i])) / (1.0 + std::abs(state.py[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.pz[i] - acc5.pz[i])) / (1.0 + std::abs(state.pz[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.vx[i] - acc5.vx[i])) / (1.0 + std::abs(state.vx[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.vy[i] - acc5.vy[i])) / (1.0 + std::abs(state.vy[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.vz[i] - acc5.vz[i])) / (1.0 + std::abs(state.vz[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.wx[i] - acc5.wx[i])) / (1.0 + std::abs(state.wx[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.wy[i] - acc5.wy[i])) / (1.0 + std::abs(state.wy[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.wz[i] - acc5.wz[i])) / (1.0 + std::abs(state.wz[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.qw[i] - acc5.qw[i])) / (1.0 + std::abs(state.qw[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.qx[i] - acc5.qx[i])) / (1.0 + std::abs(state.qx[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.qy[i] - acc5.qy[i])) / (1.0 + std::abs(state.qy[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.qz[i] - acc5.qz[i])) / (1.0 + std::abs(state.qz[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.mass[i] - acc5.mass[i])) / (1.0 + std::abs(state.mass[i])));
-                errMax = std::max(errMax, std::abs(h * (acc4.finPitch[i] - acc5.finPitch[i])) / (1.0 + 0.43));
-                errMax = std::max(errMax, std::abs(h * (acc4.finYaw[i] - acc5.finYaw[i])) / (1.0 + 0.43));
-                errMax = std::max(errMax, std::abs(h * (acc4.finRoll[i] - acc5.finRoll[i])) / (1.0 + 0.43));
-                if (i < acc4.gimbalPitch.size() && i < acc4.gimbalYaw.size()) {
-                    errMax = std::max(errMax, std::abs(h * (acc4.gimbalPitch[i] - acc5.gimbalPitch[i])) / (1.0 + 0.43));
-                    errMax = std::max(errMax, std::abs(h * (acc4.gimbalYaw[i] - acc5.gimbalYaw[i])) / (1.0 + 0.43));
-                }
+            if (!haveK1) {
+                deriv(state, t, k1);
+                haveK1 = true;
             }
 
-            if (errMax <= tolerance || h <= 1e-6)
-            {
+            buildStage(h, {{&k1, a21}}, stage);
+            deriv(stage, t + c2 * h, k2);
+
+            buildStage(h, {{&k1, a31}, {&k2, a32}}, stage);
+            deriv(stage, t + c3 * h, k3);
+
+            buildStage(h,
+                       {{&k1, a41}, {&k2, a42}, {&k3, a43}}, stage);
+            deriv(stage, t + c4 * h, k4);
+
+            buildStage(h,
+                       {{&k1, a51}, {&k2, a52}, {&k3, a53}, {&k4, a54}}, stage);
+            deriv(stage, t + c5 * h, k5);
+
+            buildStage(h,
+                       {{&k1, a61}, {&k2, a62}, {&k3, a63}, {&k4, a64}, {&k5, a65}}, stage);
+            deriv(stage, t + c6 * h, k6);
+
+            // Seventh stage == the 5th-order solution, so it is also the state
+            // the step should land on.
+            const std::array<const PhysicsBlock*, 7> ks =
+                {&k1, &k2, &k3, &k4, &k5, &k6, &k7};
+            buildStage(h,
+                       {{&k1, a71}, {&k3, a73}, {&k4, a74}, {&k5, a75}, {&k6, a76}}, stage);
+            deriv(stage, t + h, k7);
+
+            // acc5 (the increment that produces `stage`) and accErr.
+            combine(acc5, &PhysicsBlock::px, ks, w5);
+            combine(acc5, &PhysicsBlock::py, ks, w5);
+            combine(acc5, &PhysicsBlock::pz, ks, w5);
+            combine(acc5, &PhysicsBlock::vx, ks, w5);
+            combine(acc5, &PhysicsBlock::vy, ks, w5);
+            combine(acc5, &PhysicsBlock::vz, ks, w5);
+            combine(acc5, &PhysicsBlock::wx, ks, w5);
+            combine(acc5, &PhysicsBlock::wy, ks, w5);
+            combine(acc5, &PhysicsBlock::wz, ks, w5);
+            combine(acc5, &PhysicsBlock::qw, ks, w5);
+            combine(acc5, &PhysicsBlock::qx, ks, w5);
+            combine(acc5, &PhysicsBlock::qy, ks, w5);
+            combine(acc5, &PhysicsBlock::qz, ks, w5);
+            combine(acc5, &PhysicsBlock::mass, ks, w5);
+            combine(acc5, &PhysicsBlock::finPitch, ks, w5);
+            combine(acc5, &PhysicsBlock::finYaw, ks, w5);
+            combine(acc5, &PhysicsBlock::finRoll, ks, w5);
+            combine(acc5, &PhysicsBlock::gimbalPitch, ks, w5);
+            combine(acc5, &PhysicsBlock::gimbalYaw, ks, w5);
+
+            combine(accErr, &PhysicsBlock::px, ks, we);
+            combine(accErr, &PhysicsBlock::py, ks, we);
+            combine(accErr, &PhysicsBlock::pz, ks, we);
+            combine(accErr, &PhysicsBlock::vx, ks, we);
+            combine(accErr, &PhysicsBlock::vy, ks, we);
+            combine(accErr, &PhysicsBlock::vz, ks, we);
+            combine(accErr, &PhysicsBlock::wx, ks, we);
+            combine(accErr, &PhysicsBlock::wy, ks, we);
+            combine(accErr, &PhysicsBlock::wz, ks, we);
+            combine(accErr, &PhysicsBlock::qw, ks, we);
+            combine(accErr, &PhysicsBlock::qx, ks, we);
+            combine(accErr, &PhysicsBlock::qy, ks, we);
+            combine(accErr, &PhysicsBlock::qz, ks, we);
+            combine(accErr, &PhysicsBlock::mass, ks, we);
+            combine(accErr, &PhysicsBlock::finPitch, ks, we);
+            combine(accErr, &PhysicsBlock::finYaw, ks, we);
+            combine(accErr, &PhysicsBlock::finRoll, ks, we);
+            combine(accErr, &PhysicsBlock::gimbalPitch, ks, we);
+            combine(accErr, &PhysicsBlock::gimbalYaw, ks, we);
+
+            // Error norm: each component's estimated error relative to its own
+            // state scale, so the controller cannot accept a step that is
+            // accurate in translation but poor in attitude or actuator dynamics.
+            errMax = 0.0;
+            auto errRelative = [&](Field f) {
+                const auto& a = accErr.*f;
+                const auto& sc = state.*f;
+                if (a.size() < n || sc.size() < n) return;
+                for (std::size_t i = 0; i < n; ++i) {
+                    if (!state.active[i]) continue;
+                    errMax = std::max(errMax, std::abs(h * a[i]) / (1.0 + std::abs(sc[i])));
+                }
+            };
+            // Actuator states are bounded (|deflection| <= ~0.43 rad), so a
+            // constant scale is the meaningful one: their own magnitude is not
+            // a measure of the error being small.
+            auto errActuator = [&](Field f) {
+                const auto& a = accErr.*f;
+                if (a.size() < n) return;
+                for (std::size_t i = 0; i < n; ++i) {
+                    if (!state.active[i]) continue;
+                    errMax = std::max(errMax, std::abs(h * a[i]) / (1.0 + 0.43));
+                }
+            };
+            errRelative(&PhysicsBlock::px);
+            errRelative(&PhysicsBlock::py);
+            errRelative(&PhysicsBlock::pz);
+            errRelative(&PhysicsBlock::vx);
+            errRelative(&PhysicsBlock::vy);
+            errRelative(&PhysicsBlock::vz);
+            errRelative(&PhysicsBlock::wx);
+            errRelative(&PhysicsBlock::wy);
+            errRelative(&PhysicsBlock::wz);
+            errRelative(&PhysicsBlock::qw);
+            errRelative(&PhysicsBlock::qx);
+            errRelative(&PhysicsBlock::qy);
+            errRelative(&PhysicsBlock::qz);
+            errRelative(&PhysicsBlock::mass);
+            errActuator(&PhysicsBlock::finPitch);
+            errActuator(&PhysicsBlock::finYaw);
+            errActuator(&PhysicsBlock::finRoll);
+            errActuator(&PhysicsBlock::gimbalPitch);
+            errActuator(&PhysicsBlock::gimbalYaw);
+
+            if (errMax <= tolerance || h <= kMinStep) {
                 accepted = true;
                 ++acceptedStepCount;
-            }
-            else
-            {
-                h = std::max(1e-6, h * 0.5);
+            } else {
+                // Shrink from the error estimate where it is informative; the
+                // estimator can under-predict, so never shrink by less than
+                // kMinShrink.
+                const double factor = std::clamp(
+                    kSafety * std::pow(tolerance / errMax, 0.2), kMinShrink, 1.0);
+                h = std::max(kMinStep, h * factor);
                 ++rejectedStepCount;
-                ++attempts;
+                // k1 is f(state) at the unchanged t, so it stays valid across
+                // rejections; only the coefficients depend on h.
             }
         }
 
-        // Accept 5th-order solution
-        applyStateUpdate(state, acc5, h);
+        // Accept the 5th-order solution. `stage` already holds exactly this
+        // state (it was built from the same a7/b weights), so reuse it rather
+        // than re-deriving, and keep k7 as the next step's first stage (FSAL).
+        state = stage;
         t += h;
         remaining -= h;
+        k1 = k7;
+        haveK1 = true;
 
-        // Adaptive step growth (bounded)
-        if (errMax > 0.0)
-        {
-            const double factor = 0.9 * std::pow(tolerance / errMax, 0.2);
-            // Keep adaptation conservative: a bad stage is shrunk quickly,
-            // while a smooth region grows by at most 4x per accepted step.
-            h = std::clamp(h * factor, 1e-6, std::max(1e-6, 4.0 * h));
-            h = std::min(h, dt);
+        // Grow for the next step, bounded so a smooth region cannot balloon and
+        // a noisy one cannot collapse in a single jump.
+        if (errMax > 0.0) {
+            const double factor = std::clamp(
+                kSafety * std::pow(tolerance / errMax, 0.2), kMinShrink, kMaxGrow);
+            h = std::max(kMinStep, h * factor);
         }
+        if (h > remaining) h = remaining;
+        if (remaining <= 1e-12) break;
     }
 
     return dt;

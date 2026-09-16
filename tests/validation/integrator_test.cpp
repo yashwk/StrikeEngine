@@ -61,6 +61,59 @@ int main()
     check(rk45.rejectedSteps() > 0 && rk45.acceptedSteps() > 1,
           "RK45 rejects an oversized step and adapts its substeps");
 
+    // Observed order of convergence. Integrating dx/dt = x to T with n equal
+    // steps and halving h must reduce the error by ~2^p. This pins the scheme
+    //'s order rather than just its accuracy at one step size, so a change that
+    // silently drops a stage's contribution is caught.
+    {
+        auto errorAt = [&](int steps, double& error) {
+            auto s = makeState();
+            RK4Integrator rk;
+            const double T = 1.0;
+            const double h = T / static_cast<double>(steps);
+            for (int k = 0; k < steps; ++k) {
+                rk.integrate(s, exponentialDerivative, k * h, h);
+            }
+            error = std::abs(s.px[0] - std::exp(T));
+        };
+        double e1 = 0.0, e2 = 0.0, e3 = 0.0;
+        errorAt(16, e1);
+        errorAt(32, e2);
+        errorAt(64, e3);
+        const double order1 = (e1 > 0.0 && e2 > 0.0) ? std::log2(e1 / e2) : 0.0;
+        const double order2 = (e2 > 0.0 && e3 > 0.0) ? std::log2(e2 / e3) : 0.0;
+        std::printf("  [info] RK4 observed order: %.2f then %.2f\n", order1, order2);
+        check(order1 > 3.5 && order2 > 3.5,
+              "RK4 converges at fourth order under step halving");
+    }
+
+    // Tolerances represent an error bound, so tightening the tolerance must
+    // reduce the achieved error. An error controller that ignores the tolerance
+    // (or saturates) would leave these equal.
+    {
+        auto errorAtTolerance = [&](double tol, double& error, std::size_t& accepted) {
+            auto s = makeState();
+            RK45Integrator rk(tol);
+            rk.integrate(s, exponentialDerivative, 0.0, 1.0);
+            error = std::abs(s.px[0] - std::exp(1.0));
+            accepted = rk.acceptedSteps();
+        };
+        double eLoose = 0.0, eTight = 0.0;
+        std::size_t nLoose = 0, nTight = 0;
+        errorAtTolerance(1e-4, eLoose, nLoose);
+        errorAtTolerance(1e-9, eTight, nTight);
+        std::printf("  [info] RK45 tolerance 1e-4 -> err %.2e (%zu steps), "
+                    "1e-9 -> err %.2e (%zu steps)\n",
+                    eLoose, nLoose, eTight, nTight);
+        check(eTight < eLoose,
+              "RK45 achieved error falls when the tolerance is tightened");
+        // The controller bounds the LOCAL error per substep, so global error
+        // accumulates over the substeps and may slightly exceed the tolerance.
+        // Assert the honest contract: within an order of magnitude of it.
+        check(eTight < 10.0 * 1e-9,
+              "RK45 global error stays within an order of magnitude of the tolerance");
+    }
+
     PhysicsBlock impact = makeState();
     impact.pz[0] = -5.0;
     EntityStatusBlock status;
