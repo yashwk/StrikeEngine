@@ -26,6 +26,15 @@ namespace StrikeEngine::Kernel {
             return 3.5;
         }
 
+        /// True when the STRIKE_AIM_TRACE diagnostic is enabled. The
+        /// environment is read once: this is consulted per entity per
+        /// guidance step.
+        inline bool aimTraceEnabled()
+        {
+            static const bool enabled = (std::getenv("STRIKE_AIM_TRACE") != nullptr);
+            return enabled;
+        }
+
         // Result of one guidance-law evaluation; all outputs are finite.
         struct LawResult {
             double ax = 0.0, ay = 0.0, az = 0.0;
@@ -41,19 +50,18 @@ namespace StrikeEngine::Kernel {
             return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
         }
 
-        // Midcourse loft (opt-in): a climb demand that drives the round toward
-        // loftAltitudeM and fades out as the intercept nears. The demand is
-        // proportional to the ALTITUDE ERROR (a constant climb demand would
-        // fly the missile out of the atmosphere — the field was implemented as
-        // gain * altitude with no feedback, which is why no scenario used it).
-        // Midcourse loft shaping (opt-in). A long-range round that flies the
-        // straight PN collision course from a low apex cannot reach far targets:
-        // it must trade kinetic for potential energy early and get it back in
-        // the endgame. The law is a flight-path-angle hold toward the sightline
-        // biased upward by guidanceLoftAngleDeg; the bias fades with range so
-        // terminal guidance sees the pure PN collision course again. A pure
-        // climb demand is NOT used: it would fly the round out of the
-        // atmosphere, where no fin can pull it back down.
+        /**
+         * @brief Midcourse loft shaping (opt-in).
+         *
+         * A long-range round that flies the straight PN collision course from a
+         * low apex cannot reach far targets: it must trade kinetic for potential
+         * energy early and recover it in the endgame. The law holds the
+         * flight-path angle toward the sightline, biased upward by
+         * guidanceLoftAngleDeg, with the bias faded out by range so terminal
+         * guidance sees the pure collision course again. A constant climb demand
+         * is deliberately not used: it would fly the round out of the
+         * atmosphere, where no fin can pull it back down.
+         */
         void applyMidcourseLoft(std::size_t id, const NavigationBlock& nav,
                                 const GuidanceBlock& guidance,
                                 const EnvironmentConfig& env, LawResult& out)
@@ -398,16 +406,18 @@ namespace StrikeEngine::Kernel {
         }
 
         // Midcourse PN / APN on the commanded target track (world frame).
-        // Aim source: a measurement-anchored persistent target track
-        // wins over the raw external command state; see update().
-        // When the seeker is locked, the round's OWN position fix (fresh,
-        // short-range, fire-control grade) wins over the remote datalink
-        // track: a long-range offboard picture carries the source platform's
-        // nav-attitude error projected over the range (kilometres of bias).
-        // The lead still comes from the launcher's fire-control solution
-        // when it provided one -- no differentiated angle velocity (remote
-        // or own) is lead-grade. Before lock (midcourse) the datalink
-        // picture is the only aim and keeps precedence.
+        /**
+         * @brief Midcourse PN/APN on the selected aim state, in the world frame.
+         *
+         * Aim precedence: with a seeker lock, the round's own position fix
+         * (short-range, anchored at the current geometry) wins over the remote
+         * datalink picture, whose long-range position carries the source
+         * platform's nav-attitude error projected over the range. The lead
+         * always comes from the launcher's fire-control solution when one was
+         * provided: no differentiated angle velocity, remote or own, is
+         * lead-grade. Before lock the datalink picture is the only aim and keeps
+         * precedence over the raw external command state.
+         */
         LawResult computeAimPn(
             std::size_t id, const NavigationBlock& nav,
             const TrackBlock* tracks, GuidanceBlock& guidance,
@@ -499,7 +509,7 @@ namespace StrikeEngine::Kernel {
             const double vx = tvx - nav.estVx[id];
             const double vy = tvy - nav.estVy[id];
             const double vz = tvz - nav.estVz[id];
-            if (std::getenv("STRIKE_AIM_TRACE") != nullptr && id == 2) {
+            if (aimTraceEnabled() && id == 2) {
                 static int tick = 0;
                 if ((tick++ % 500) == 0) {
                     const double aimV = std::sqrt(tvx * tvx + tvy * tvy + tvz * tvz);
@@ -629,20 +639,15 @@ namespace StrikeEngine::Kernel {
                     g.trajectoryAimSource[id] = GuidanceAimSource::Track;
                     tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
                     remoteAimVelocity(g, *tracks, id, src, tvx, tvy, tvz);
-                    // A remote (datalink) track's acceleration estimate is NOT
+                    // A remote (datalink) track's acceleration estimate is never
                     // guidance-grade: it is differentiated from range/angle
-                    // measurements and rails to the filter's accel bound on a
-                    // stressing geometry, so feeding it into the intercept
+                    // measurements and rails to the filter's acceleration bound
+                    // on a stressing geometry, so feeding it into the intercept
                     // prediction threw the aim (and the midcourse) far off --
                     // hundreds of m/s^2 of phantom demand. Position and velocity
-                    // from the same track stay usable; acceleration only counts
-                    // when it comes from the seeker's own track.
+                    // from the same track stay usable; acceleration is only
+                    // consumed from the round's own seeker track.
                     accelAvailable = false;
-                    if (accelAvailable && src < tracks->accelX.size()) {
-                        atx = tracks->accelX[src]; aty = tracks->accelY[src]; atz = tracks->accelZ[src];
-                    } else {
-                        accelAvailable = false;
-                    }
                 }
             }
             const bool trackAim = tracks && id < tracks->size &&

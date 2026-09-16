@@ -35,29 +35,6 @@ int intAt(const std::vector<int>& v, std::size_t i, int def)
     return i < v.size() ? v[i] : def;
 }
 
-// Grow only the newly-added state arrays so hand-built blocks stay safe.
-void ensureState(SeekerBlock& s, std::size_t n)
-{
-    auto rbool = [&](std::vector<bool>& v, bool d) { if (v.size() < n) v.resize(n, d); };
-    auto rdouble = [&](std::vector<double>& v, double d) { if (v.size() < n) v.resize(n, d); };
-    auto rint = [&](std::vector<int>& v, int d) { if (v.size() < n) v.resize(n, d); };
-    rbool(s.lockActive, false);
-    rbool(s.hasPublishedMeasurement, false);
-    rdouble(s.measurementAgeSec, 0.0);
-    rdouble(s.gimbalAzimuthRad, 0.0);
-    rdouble(s.gimbalElevationRad, 0.0);
-    rdouble(s.lastSignalStrength, 0.0);
-    rint(s.lockRejectReason, 0);
-    rdouble(s.glintAzM, 0.0);
-    rdouble(s.glintElM, 0.0);
-    rdouble(s.bodyRateFilteredX, 0.0);
-    rdouble(s.bodyRateFilteredY, 0.0);
-    rdouble(s.bodyRateFilteredZ, 0.0);
-    rdouble(s.prevBodyRateX, 0.0);
-    rdouble(s.prevBodyRateY, 0.0);
-    rdouble(s.prevBodyRateZ, 0.0);
-}
-
 double wrapPi(double angle)
 {
     return std::remainder(angle, 2.0 * std::numbers::pi);
@@ -148,7 +125,9 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
     {
         const std::size_t n = std::min({seeker.size, physics.size, status.size});
         const double stepDt = std::max(0.0, dt);
-        ensureState(seeker, n);
+        // Owner of the slot defaults is SeekerBlock::ensureSize. Grow-only, so
+        // it cannot shrink arrays already holding state.
+        seeker.ensureSize(n);
         if (historyEntityCount != seeker.size) {
             measurementHistory.clear();
             measurementHistory.resize(n);
@@ -204,6 +183,20 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
                     seeker.bodyRateStateX[i] = 0.0;
                     seeker.bodyRateStateY[i] = 0.0;
                     seeker.bodyRateStateZ[i] = 0.0;
+                }
+                // The body-angle integral accumulates every step but is only
+                // consumed and zeroed on a same-track commit. Clear it with the
+                // track, so a re-acquisition cannot divide the whole unlocked
+                // gap by a single step.
+                if (i < seeker.gyroIntX.size()) {
+                    seeker.gyroIntX[i] = 0.0;
+                    seeker.gyroIntY[i] = 0.0;
+                    seeker.gyroIntZ[i] = 0.0;
+                }
+                if (i < seeker.prevStepGyroX.size() && i < nav.estWx.size()) {
+                    seeker.prevStepGyroX[i] = nav.estWx[i];
+                    seeker.prevStepGyroY[i] = nav.estWy[i];
+                    seeker.prevStepGyroZ[i] = nav.estWz[i];
                 }
             };
 
@@ -801,6 +794,10 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
 
             // Iterate through all potential targets and acquire the strongest
             // signal (single-track lock). Friendly targets are rejected.
+            // ponytail: O(N) full signature evaluations per unlocked entity per
+            // step, each doing an RCS/IR profile lookup. Acceptable while few
+            // entities carry signatures. Upgrade path: cache each entity's
+            // per-step signal or gate the scan behind the acquisition cadence.
             std::size_t bestTarget = 0;
             Candidate bestCandidate;
             bool foundCandidate = false;

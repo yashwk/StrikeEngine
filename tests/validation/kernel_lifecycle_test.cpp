@@ -186,7 +186,6 @@ int main()
         const PhysicsId id = kernel.createVehicle(init);
         const std::size_t n = kernel.getPhysics().size;
 
-        const auto& physics = kernel.getPhysics();
         const auto& control = kernel.getControl();
         const auto& guidance = kernel.getGuidance();
         const auto& status = kernel.getStatus();

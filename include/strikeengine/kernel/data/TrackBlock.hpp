@@ -1,4 +1,5 @@
 #pragma once
+#include <strikeengine/kernel/data/BlockGrowth.hpp>
 #include <vector>
 #include <array>
 #include <cstdint>
@@ -97,41 +98,41 @@ namespace StrikeEngine::Kernel {
          *        PhysicsBlock::ensureSize.
          */
         void ensureSize(std::size_t n) {
-            confirmations.resize(n, 3);
-            coastTimeoutSec.resize(n, 0.5);
-            lossTimeoutSec.resize(n, 2.0);
-            filterEnabled.resize(n, false);
-            processNoiseMps2.resize(n, 15.0);
-            angleStdRad.resize(n, 0.003);
-            measNoiseScale.resize(n, 1.0);
-            residualGateSigma.resize(n, 0.0);
-            maxAccelMps2.resize(n, 0.0);
-            retargetConfirmations.resize(n, 1);
-            seedPolicy.resize(n, 0);
-            minQuality01.resize(n, 0.0);
-            qualityTauSec.resize(n, 1.0);
-            velocityBlend.resize(n, 0.08);
-            state.resize(n, TrackState::None);
-            trackId.resize(n, -1);
-            posX.resize(n, 0.0); posY.resize(n, 0.0); posZ.resize(n, 0.0);
-            velX.resize(n, 0.0); velY.resize(n, 0.0); velZ.resize(n, 0.0);
-            accelX.resize(n, 0.0); accelY.resize(n, 0.0); accelZ.resize(n, 0.0);
-            accelAvailable.resize(n, false);
-            timestampSec.resize(n, 0.0);
-            ageSec.resize(n, 0.0);
-            positionStdM.resize(n, 5.0);
-            velocityStdMs.resize(n, 25.0);
-            quality01.resize(n, 0.0);
-            updateCount.resize(n, 0u);
-            dropoutCount.resize(n, 0u);
-            measPosX.resize(n, 0.0); measPosY.resize(n, 0.0); measPosZ.resize(n, 0.0);
-            measTimeSec.resize(n, 0.0);
-            kfCov.resize(n);
-            retargetCandidateId.resize(n, -1);
-            retargetCount.resize(n, 0u);
-            lastInnovationM.resize(n, 0.0);
-            residualRejectCount.resize(n, 0u);
-            size = n;
+            growTo(confirmations, n, 3);
+            growTo(coastTimeoutSec, n, 0.5);
+            growTo(lossTimeoutSec, n, 2.0);
+            growTo(filterEnabled, n, false);
+            growTo(processNoiseMps2, n, 15.0);
+            growTo(angleStdRad, n, 0.003);
+            growTo(measNoiseScale, n, 1.0);
+            growTo(residualGateSigma, n, 0.0);
+            growTo(maxAccelMps2, n, 0.0);
+            growTo(retargetConfirmations, n, 1);
+            growTo(seedPolicy, n, 0);
+            growTo(minQuality01, n, 0.0);
+            growTo(qualityTauSec, n, 1.0);
+            growTo(velocityBlend, n, 0.08);
+            growTo(state, n, TrackState::None);
+            growTo(trackId, n, -1);
+            growTo(posX, n, 0.0); growTo(posY, n, 0.0); growTo(posZ, n, 0.0);
+            growTo(velX, n, 0.0); growTo(velY, n, 0.0); growTo(velZ, n, 0.0);
+            growTo(accelX, n, 0.0); growTo(accelY, n, 0.0); growTo(accelZ, n, 0.0);
+            growTo(accelAvailable, n, false);
+            growTo(timestampSec, n, 0.0);
+            growTo(ageSec, n, 0.0);
+            growTo(positionStdM, n, 5.0);
+            growTo(velocityStdMs, n, 25.0);
+            growTo(quality01, n, 0.0);
+            growTo(updateCount, n, 0u);
+            growTo(dropoutCount, n, 0u);
+            growTo(measPosX, n, 0.0); growTo(measPosY, n, 0.0); growTo(measPosZ, n, 0.0);
+            growTo(measTimeSec, n, 0.0);
+            growTo(kfCov, n);
+            growTo(retargetCandidateId, n, -1);
+            growTo(retargetCount, n, 0u);
+            growTo(lastInnovationM, n, 0.0);
+            growTo(residualRejectCount, n, 0u);
+            if (n > size) size = n;
         }
     };
 

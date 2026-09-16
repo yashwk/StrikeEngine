@@ -1,4 +1,5 @@
 #pragma once
+#include <strikeengine/kernel/data/BlockGrowth.hpp>
 #include <vector>
 #include <cstddef>
 #include <memory>
@@ -100,62 +101,63 @@ struct PhysicsBlock {
 	size_t size = 0;
 
 	/**
-	 * @brief Grows every vector to @p n entries.
+	 * @brief Grows every vector to at least @p n entries.
 	 *
 	 * New slots receive the documented defaults; existing entries are
-	 * preserved. Callers must invoke this whenever an entity slot is added so
-	 * the block stays self-consistent. Every consumer indexes with a
-	 * `i < vector.size()` guard, so a vector that is not grown here silently
-	 * disables its subsystem for the newest entity.
+	 * preserved (the call is grow-only and never shrinks an array). Callers
+	 * must invoke this whenever an entity slot is added so the block stays
+	 * self-consistent. Every consumer indexes with a `i < vector.size()`
+	 * guard, so a vector that is not grown here silently disables its
+	 * subsystem for the newest entity.
 	 */
 	void ensureSize(std::size_t n) {
-		px.resize(n, 0.0); py.resize(n, 0.0); pz.resize(n, 0.0);
-		vx.resize(n, 0.0); vy.resize(n, 0.0); vz.resize(n, 0.0);
-		ax.resize(n, 0.0); ay.resize(n, 0.0); az.resize(n, 0.0);
-		qw.resize(n, 1.0); qx.resize(n, 0.0); qy.resize(n, 0.0); qz.resize(n, 0.0);
-		wx.resize(n, 0.0); wy.resize(n, 0.0); wz.resize(n, 0.0);
-		alphax.resize(n, 0.0); alphay.resize(n, 0.0); alphaz.resize(n, 0.0);
-		mach.resize(n, 0.0);
-		dynamicPressure.resize(n, 0.0);
-		airDensity.resize(n, 0.0);
-		localSpeedOfSound.resize(n, 0.0);
-		Ixx.resize(n, 1.0); Iyy.resize(n, 10.0); Izz.resize(n, 10.0);
-		Ixy.resize(n, 0.0); Ixz.resize(n, 0.0); Iyz.resize(n, 0.0);
-		mass.resize(n, 1.0);
-		massDry.resize(n, 1.0);
-		referenceArea.resize(n, 0.1);
-		referenceLength.resize(n, 1.0);
-		cd.resize(n, 0.3);
-		clAlpha.resize(n, 0.0);
-		clFin.resize(n, 0.0);
-		clMax.resize(n, 2.0);
-		tailControl.resize(n, false);
-		aeroTables.resize(n, nullptr);
-		fins.resize(n, nullptr);
-		finSets.resize(n);
-		airframe.resize(n, nullptr);
-		propulsionId.resize(n, -1);
-		ignitionTime.resize(n, 0.0);
-		stageIndex.resize(n, -1);
-		stageCount.resize(n, 0);
-		stageMinMass.resize(n, 0.0);
-		gimbalPitch.resize(n, 0.0); gimbalYaw.resize(n, 0.0);
-		maxGimbalPitchRad.resize(n, 0.0); maxGimbalYawRad.resize(n, 0.0);
-		gimbalTimeConstantSec.resize(n, 0.02);
-		maxGimbalRateRadPerSec.resize(n, 0.0);
-		enginePositionX.resize(n, 0.0);
-		enginePositionY.resize(n, 0.0);
-		enginePositionZ.resize(n, 0.0);
-		finPitch.resize(n, 0.0); finYaw.resize(n, 0.0); finRoll.resize(n, 0.0);
-		maxDeflectionRad.resize(n, 0.43);
-		servoTimeConstantSec.resize(n, 0.02);
-		maxServoRateRadPerSec.resize(n, 5.24);
-		active.resize(n, true);
-		motorFailed.resize(n, false);
-		engineFailed.resize(n, false);
-		tankFailed.resize(n, false);
-		actuatorFailed.resize(n, false);
-		size = n;
+		growTo(px, n, 0.0); growTo(py, n, 0.0); growTo(pz, n, 0.0);
+		growTo(vx, n, 0.0); growTo(vy, n, 0.0); growTo(vz, n, 0.0);
+		growTo(ax, n, 0.0); growTo(ay, n, 0.0); growTo(az, n, 0.0);
+		growTo(qw, n, 1.0); growTo(qx, n, 0.0); growTo(qy, n, 0.0); growTo(qz, n, 0.0);
+		growTo(wx, n, 0.0); growTo(wy, n, 0.0); growTo(wz, n, 0.0);
+		growTo(alphax, n, 0.0); growTo(alphay, n, 0.0); growTo(alphaz, n, 0.0);
+		growTo(mach, n, 0.0);
+		growTo(dynamicPressure, n, 0.0);
+		growTo(airDensity, n, 0.0);
+		growTo(localSpeedOfSound, n, 0.0);
+		growTo(Ixx, n, 1.0); growTo(Iyy, n, 10.0); growTo(Izz, n, 10.0);
+		growTo(Ixy, n, 0.0); growTo(Ixz, n, 0.0); growTo(Iyz, n, 0.0);
+		growTo(mass, n, 1.0);
+		growTo(massDry, n, 1.0);
+		growTo(referenceArea, n, 0.1);
+		growTo(referenceLength, n, 1.0);
+		growTo(cd, n, 0.3);
+		growTo(clAlpha, n, 0.0);
+		growTo(clFin, n, 0.0);
+		growTo(clMax, n, 2.0);
+		growTo(tailControl, n, false);
+		growTo(aeroTables, n, nullptr);
+		growTo(fins, n, nullptr);
+		growTo(finSets, n);
+		growTo(airframe, n, nullptr);
+		growTo(propulsionId, n, -1);
+		growTo(ignitionTime, n, 0.0);
+		growTo(stageIndex, n, -1);
+		growTo(stageCount, n, 0);
+		growTo(stageMinMass, n, 0.0);
+		growTo(gimbalPitch, n, 0.0); growTo(gimbalYaw, n, 0.0);
+		growTo(maxGimbalPitchRad, n, 0.0); growTo(maxGimbalYawRad, n, 0.0);
+		growTo(gimbalTimeConstantSec, n, 0.02);
+		growTo(maxGimbalRateRadPerSec, n, 0.0);
+		growTo(enginePositionX, n, 0.0);
+		growTo(enginePositionY, n, 0.0);
+		growTo(enginePositionZ, n, 0.0);
+		growTo(finPitch, n, 0.0); growTo(finYaw, n, 0.0); growTo(finRoll, n, 0.0);
+		growTo(maxDeflectionRad, n, 0.43);
+		growTo(servoTimeConstantSec, n, 0.02);
+		growTo(maxServoRateRadPerSec, n, 5.24);
+		growTo(active, n, true);
+		growTo(motorFailed, n, false);
+		growTo(engineFailed, n, false);
+		growTo(tankFailed, n, false);
+		growTo(actuatorFailed, n, false);
+		if (n > size) size = n;
 	}
 };
 

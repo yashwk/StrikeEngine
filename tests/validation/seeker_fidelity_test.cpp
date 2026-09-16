@@ -532,6 +532,45 @@ int main()
         check(gapK.isLocked[0], "lock survives intermittent geometry rejection");
         check(std::abs(gapK.targetAzimuthRate[0] - 1.0) < 0.2,
               "skipped-step rate divides by elapsed time (1.0 rad/s over 2 steps)");
+
+        // Lock lost (target out of range) then re-acquired. The trapezoidal
+        // body-angle integral accumulates every step but is only consumed and
+        // zeroed on a same-track commit, so an un-cleared integral would span
+        // the whole unlocked gap while being divided by one step, publishing a
+        // body rate orders of magnitude too large on the first interval after
+        // re-acquisition.
+        PhysicsBlock reP;
+        EntityStatusBlock reS;
+        SeekerBlock reK;
+        makeBlocks(reP, reS, reK);
+        reK.rateFilterTauSec.assign(2, 0.02);
+        NavigationBlock reNav;
+        reNav.size = 2;
+        reNav.estQw.assign(2, 1.0); reNav.estQx.assign(2, 0.0);
+        reNav.estQy.assign(2, 0.0); reNav.estQz.assign(2, 0.0);
+        const double spin = 0.4;  // rad/s body rate the host holds throughout
+        reNav.estWx.assign(2, 0.0);
+        reNav.estWy.assign(2, spin);
+        reNav.estWz.assign(2, 0.0);
+        SeekerSystem reSystem;
+        // Hold a lock, drop it for 40 steps, then re-acquire. Track the peak
+        // published body rate across the whole run: the fault shows up only on
+        // the first interval after re-acquisition, so sampling at the end would
+        // miss it entirely.
+        double peakBodyRate = 0.0;
+        for (int k = 0; k < 120; ++k) {
+            const bool visible = k < 40 || k >= 80;
+            reP.px[1] = visible ? 1000.0 : 1.0e7;  // far target fails acquisition
+            reP.py[1] = 0.0;
+            reSystem.update(reP, reS, reK, reNav, dt, env);
+            if (k >= 80 && reK.isLocked[0]) {
+                peakBodyRate = std::max(
+                    peakBodyRate, std::abs(reK.bodyRateFilteredY[0]));
+            }
+        }
+        check(reK.isLocked[0], "seeker re-acquires after a long outage");
+        check(peakBodyRate < 2.0 * spin,
+              "body rate after re-acquisition stays near the true host rate");
     }
 
     if (g_failures == 0) std::printf("ALL SEEKER FIDELITY TESTS PASSED\n");

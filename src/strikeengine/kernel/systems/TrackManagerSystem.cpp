@@ -35,6 +35,13 @@ namespace StrikeEngine::Kernel {
             return i < v.size() ? v[i] : def;
         }
 
+        /// True when the STRIKE_TRACK_TRACE diagnostic is enabled. The
+        /// environment is read once: this is consulted per entity per step.
+        bool trackTraceEnabled() {
+            static const bool enabled = (std::getenv("STRIKE_TRACK_TRACE") != nullptr);
+            return enabled;
+        }
+
         // --- Constant-acceleration Kalman blocks (one axis, 3x3 covariance
         // packed row-major). q is the target-acceleration white-noise PSD. ---
         void kfPredictAxis(double& p, double& v, double& a, double* P,
@@ -377,7 +384,7 @@ namespace StrikeEngine::Kernel {
             }
             const double tau = std::max(1e-9, valAt(tracks.qualityTauSec, i, kQualityTauSec));
             tracks.quality01[i] = std::exp(-tracks.ageSec[i] / tau);
-            if (std::getenv("STRIKE_TRACK_TRACE") != nullptr && i == 0) {
+            if (trackTraceEnabled() && i == 0) {
                 static int tick = 0;
                 if ((tick++ % 400) == 0) {
                     const double vx = tracks.velX[i], vy = tracks.velY[i], vz = tracks.velZ[i];

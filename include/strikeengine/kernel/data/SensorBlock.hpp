@@ -1,4 +1,5 @@
 #pragma once
+#include <strikeengine/kernel/data/BlockGrowth.hpp>
 
 #include <vector>
 #include <cstddef>
@@ -79,61 +80,61 @@ namespace StrikeEngine::Kernel {
          *        PhysicsBlock::ensureSize.
          */
         void ensureSize(std::size_t n) {
-            accelX.resize(n, 0.0); accelY.resize(n, 0.0); accelZ.resize(n, 0.0);
-            gyroX.resize(n, 0.0); gyroY.resize(n, 0.0); gyroZ.resize(n, 0.0);
-            gpsUpdated.resize(n, false);
-            gpsPosX.resize(n, 0.0); gpsPosY.resize(n, 0.0); gpsPosZ.resize(n, 0.0);
-            gpsVelX.resize(n, 0.0); gpsVelY.resize(n, 0.0); gpsVelZ.resize(n, 0.0);
-            accelNoiseStdDev.resize(n, 0.1);
-            accelBiasStdDev.resize(n, 0.01);
-            gyroNoiseStdDev.resize(n, 0.01);
-            gyroBiasStdDev.resize(n, 0.001);
-            gpsPosNoiseStdDev.resize(n, 5.0);
-            gpsVelNoiseStdDev.resize(n, 0.5);
-            gpsInnovationGateSigma.resize(n, 5.0);
-            baroInnovationGateSigma.resize(n, -1.0);
-            magInnovationGateSigma.resize(n, -1.0);
-            imuLeverArmX.resize(n, 0.0);
-            imuLeverArmY.resize(n, 0.0);
-            imuLeverArmZ.resize(n, 0.0);
-            imuEnabled.resize(n, true);
-            gpsEnabled.resize(n, true);
-            gpsUpdateRateHz.resize(n, 1.0);
-            baroUpdated.resize(n, false);
-            baroAlt.resize(n, 0.0);
-            magUpdated.resize(n, false);
-            magX.resize(n, 0.0); magY.resize(n, 0.0); magZ.resize(n, 0.0);
-            baroEnabled.resize(n, false);
-            baroNoiseStdDev.resize(n, 1.0);
-            baroBiasStdDev.resize(n, 0.0);
-            baroUpdateRateHz.resize(n, 1.0);
-            magEnabled.resize(n, false);
-            magNoiseStdDev.resize(n, 50e-9);
-            magUpdateRateHz.resize(n, 10.0);
-            magDisturbanceGateRel.resize(n, 0.25);
-            gpsLatencySec.resize(n, 0.0);
-            gpsLeverArmX.resize(n, 0.0);
-            gpsLeverArmY.resize(n, 0.0);
-            gpsLeverArmZ.resize(n, 0.0);
-            gpsFixConsistencyEnabled.resize(n, false);
-            insConingCompensationEnabled.resize(n, false);
-            insAdaptiveQEnabled.resize(n, false);
-            insAdaptiveQGain.resize(n, 1.0);
-            initialAttitudeErrorDeg.resize(n, 0.0);
-            initialPositionErrorM.resize(n, 0.0);
-            initialVelocityErrorMps.resize(n, 0.0);
-            insGravityGradientEnabled.resize(n, false);
-            insEarthRotationCouplingEnabled.resize(n, false);
-            gpsBatchUpdateEnabled.resize(n, false);
-            gpsLeverArmCompensationEnabled.resize(n, false);
-            gpsYawCorrectionDamping.resize(n, 0.1);
-            gpsFixConsistencyThreshold.resize(n, 16.81);
-            gpsFixConsistencyConfidence.resize(n, 0.99);
-            gpsFixConsistencyDof.resize(n, 6);
-            maxAccelBiasEstimate.resize(n, 0.5);
-            maxGyroBiasEstimate.resize(n, 0.02);
-            baroAttitudeCorrectionEnabled.resize(n, false);
-            size = n;
+            growTo(accelX, n, 0.0); growTo(accelY, n, 0.0); growTo(accelZ, n, 0.0);
+            growTo(gyroX, n, 0.0); growTo(gyroY, n, 0.0); growTo(gyroZ, n, 0.0);
+            growTo(gpsUpdated, n, false);
+            growTo(gpsPosX, n, 0.0); growTo(gpsPosY, n, 0.0); growTo(gpsPosZ, n, 0.0);
+            growTo(gpsVelX, n, 0.0); growTo(gpsVelY, n, 0.0); growTo(gpsVelZ, n, 0.0);
+            growTo(accelNoiseStdDev, n, 0.1);
+            growTo(accelBiasStdDev, n, 0.01);
+            growTo(gyroNoiseStdDev, n, 0.01);
+            growTo(gyroBiasStdDev, n, 0.001);
+            growTo(gpsPosNoiseStdDev, n, 5.0);
+            growTo(gpsVelNoiseStdDev, n, 0.5);
+            growTo(gpsInnovationGateSigma, n, 5.0);
+            growTo(baroInnovationGateSigma, n, -1.0);
+            growTo(magInnovationGateSigma, n, -1.0);
+            growTo(imuLeverArmX, n, 0.0);
+            growTo(imuLeverArmY, n, 0.0);
+            growTo(imuLeverArmZ, n, 0.0);
+            growTo(imuEnabled, n, true);
+            growTo(gpsEnabled, n, true);
+            growTo(gpsUpdateRateHz, n, 1.0);
+            growTo(baroUpdated, n, false);
+            growTo(baroAlt, n, 0.0);
+            growTo(magUpdated, n, false);
+            growTo(magX, n, 0.0); growTo(magY, n, 0.0); growTo(magZ, n, 0.0);
+            growTo(baroEnabled, n, false);
+            growTo(baroNoiseStdDev, n, 1.0);
+            growTo(baroBiasStdDev, n, 0.0);
+            growTo(baroUpdateRateHz, n, 1.0);
+            growTo(magEnabled, n, false);
+            growTo(magNoiseStdDev, n, 50e-9);
+            growTo(magUpdateRateHz, n, 10.0);
+            growTo(magDisturbanceGateRel, n, 0.25);
+            growTo(gpsLatencySec, n, 0.0);
+            growTo(gpsLeverArmX, n, 0.0);
+            growTo(gpsLeverArmY, n, 0.0);
+            growTo(gpsLeverArmZ, n, 0.0);
+            growTo(gpsFixConsistencyEnabled, n, false);
+            growTo(insConingCompensationEnabled, n, false);
+            growTo(insAdaptiveQEnabled, n, false);
+            growTo(insAdaptiveQGain, n, 1.0);
+            growTo(initialAttitudeErrorDeg, n, 0.0);
+            growTo(initialPositionErrorM, n, 0.0);
+            growTo(initialVelocityErrorMps, n, 0.0);
+            growTo(insGravityGradientEnabled, n, false);
+            growTo(insEarthRotationCouplingEnabled, n, false);
+            growTo(gpsBatchUpdateEnabled, n, false);
+            growTo(gpsLeverArmCompensationEnabled, n, false);
+            growTo(gpsYawCorrectionDamping, n, 0.1);
+            growTo(gpsFixConsistencyThreshold, n, 16.81);
+            growTo(gpsFixConsistencyConfidence, n, 0.99);
+            growTo(gpsFixConsistencyDof, n, 6);
+            growTo(maxAccelBiasEstimate, n, 0.5);
+            growTo(maxGyroBiasEstimate, n, 0.02);
+            growTo(baroAttitudeCorrectionEnabled, n, false);
+            if (n > size) size = n;
         }
     };
 

@@ -368,20 +368,18 @@ namespace StrikeEngine::Kernel {
         // gravity direction (attitude-independent). Roll is optionally
         // suppressed while a lateral demand is being served (skid steering) so
         // it does not fight the yaw channel.
+        // Reuses the gravity vector already resolved for the specific-force
+        // trim above, so the roll reference and the trim cannot disagree about
+        // which gravity model the vehicle is flying (the truth-gravity option
+        // made the previous hardcoded normal-gravity reference inconsistent).
         double gBx, gBy, gBz;
-        if (environment.earth.useEcefTruth) {
-            const Models::EcefCoordinate pos{nav.estPx[id], nav.estPy[id], nav.estPz[id]};
-            const auto geodetic = Models::ecefToGeodetic(pos);
-            const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
-            const double gmag = std::sqrt(grav[0]*grav[0] + grav[1]*grav[1] + grav[2]*grav[2]);
-            const double nx = gmag > 1e-9 ? grav[0]/gmag : 0.0;
-            const double ny = gmag > 1e-9 ? grav[1]/gmag : 0.0;
-            const double nz = gmag > 1e-9 ? grav[2]/gmag : -1.0;
+        {
+            const double gmag = std::sqrt(gx * gx + gy * gy + gz * gz);
+            const double nx = gmag > 1e-9 ? gx / gmag : 0.0;
+            const double ny = gmag > 1e-9 ? gy / gmag : 0.0;
+            const double nz = gmag > 1e-9 ? gz / gmag : -1.0;
             quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
                              nx, ny, nz, gBx, gBy, gBz);
-        } else {
-            quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
-                             0.0, 0.0, -1.0, gBx, gBy, gBz);
         }
         const double verticality = std::clamp(gBz, 0.0, 1.0);
         const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));

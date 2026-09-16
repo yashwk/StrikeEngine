@@ -157,6 +157,10 @@ namespace StrikeEngine::Kernel {
         // report-only — lethality stays warhead-governed (processWarheads),
         // so a proximity warhead still gets its detonation event and kill
         // roll on a close pass instead of being pre-empted here.
+        // ponytail: O(N^2) pairwise scan, plus a set allocation per call when
+        // the latch is on. Acceptable at current entity counts. Upgrade path:
+        // reuse a member buffer for the contact set and a spatial grid for the
+        // pair search once large salvos are modelled.
         const double contactR = environment.kineticImpactRadiusM;
         if (contactR > 0.0) {
             const double contactR2 = contactR * contactR;

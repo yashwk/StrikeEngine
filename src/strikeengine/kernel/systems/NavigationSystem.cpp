@@ -688,8 +688,10 @@ namespace StrikeEngine::Kernel {
         nav.lastMagRejected[id] = false;
         const double innovationGate = id < sensors.gpsInnovationGateSigma.size()
             ? sensors.gpsInnovationGateSigma[id] : 0.0;
-        double rPos = sensors.gpsPosNoiseStdDev[id] * sensors.gpsPosNoiseStdDev[id];
-        double rVel = sensors.gpsVelNoiseStdDev[id] * sensors.gpsVelNoiseStdDev[id];
+        double rPos = sensVal(sensors.gpsPosNoiseStdDev, id, 5.0);
+        rPos *= rPos;
+        double rVel = sensVal(sensors.gpsVelNoiseStdDev, id, 0.5);
+        rVel *= rVel;
 
         auto& covariance = nav.covarianceFull[id];
         std::array<double, kErrorStateSize> correction{};
@@ -1162,7 +1164,7 @@ namespace StrikeEngine::Kernel {
             strapdownINS(i, sensors, nav, dt, environment);
 
             // Low rate EKF fusion
-            if (sensors.gpsUpdated[i] || sensFlag(sensors.baroUpdated, i) || sensFlag(sensors.magUpdated, i)) {
+            if (sensFlag(sensors.gpsUpdated, i) || sensFlag(sensors.baroUpdated, i) || sensFlag(sensors.magUpdated, i)) {
                 ekfUpdate(i, sensors, nav, environment);
             }
         }

@@ -93,52 +93,9 @@ namespace StrikeEngine::Kernel {
         sensors.size = size;
         ensureCapacity(size);
 
-        // Resize sensor arrays if needed (handled in SimulationKernel usually, but let's be safe)
-        if (sensors.accelX.size() < size) {
-            sensors.accelX.resize(size); sensors.accelY.resize(size); sensors.accelZ.resize(size);
-            sensors.gyroX.resize(size); sensors.gyroY.resize(size); sensors.gyroZ.resize(size);
-            sensors.gpsPosX.resize(size); sensors.gpsPosY.resize(size); sensors.gpsPosZ.resize(size);
-            sensors.gpsVelX.resize(size); sensors.gpsVelY.resize(size); sensors.gpsVelZ.resize(size);
-            sensors.gpsUpdated.resize(size);
-            sensors.imuLeverArmX.resize(size); sensors.imuLeverArmY.resize(size); sensors.imuLeverArmZ.resize(size);
-            sensors.gpsInnovationGateSigma.resize(size, 5.0);
-            sensors.baroInnovationGateSigma.resize(size, -1.0);
-            sensors.magInnovationGateSigma.resize(size, -1.0);
-            sensors.imuEnabled.resize(size, true);
-            sensors.gpsEnabled.resize(size, true);
-            sensors.gpsUpdateRateHz.resize(size, 1.0);
-            // Fallback defaults mirror createVehicle wiring so hand-built
-            // blocks never read these out of bounds.
-            sensors.accelNoiseStdDev.resize(size, 0.1);
-            sensors.accelBiasStdDev.resize(size, 0.01);
-            sensors.gyroNoiseStdDev.resize(size, 0.01);
-            sensors.gyroBiasStdDev.resize(size, 0.001);
-            sensors.gpsPosNoiseStdDev.resize(size, 5.0);
-            sensors.gpsVelNoiseStdDev.resize(size, 0.5);
-            sensors.baroAlt.resize(size, 0.0);
-            sensors.baroUpdated.resize(size, false);
-            sensors.magX.resize(size, 0.0); sensors.magY.resize(size, 0.0); sensors.magZ.resize(size, 0.0);
-            sensors.magUpdated.resize(size, false);
-            sensors.baroEnabled.resize(size, false);
-            sensors.baroNoiseStdDev.resize(size, 1.0);
-            sensors.baroBiasStdDev.resize(size, 0.0);
-            sensors.baroUpdateRateHz.resize(size, 1.0);
-            sensors.magEnabled.resize(size, false);
-            sensors.magNoiseStdDev.resize(size, 50e-9);
-            sensors.magUpdateRateHz.resize(size, 10.0);
-            sensors.magDisturbanceGateRel.resize(size, 0.25);
-            sensors.gpsLatencySec.resize(size, 0.0);
-            sensors.gpsLeverArmX.resize(size, 0.0);
-            sensors.gpsLeverArmY.resize(size, 0.0);
-            sensors.gpsLeverArmZ.resize(size, 0.0);
-            sensors.gpsFixConsistencyEnabled.resize(size, false);
-            sensors.insConingCompensationEnabled.resize(size, false);
-            sensors.insAdaptiveQEnabled.resize(size, false);
-            sensors.insAdaptiveQGain.resize(size, 1.0);
-            sensors.initialAttitudeErrorDeg.resize(size, 0.0);
-            sensors.initialPositionErrorM.resize(size, 0.0);
-            sensors.initialVelocityErrorMps.resize(size, 0.0);
-        }
+        // Owner of the slot defaults is SensorBlock::ensureSize. Grow-only, so
+        // it cannot shrink arrays already holding state.
+        sensors.ensureSize(size);
 
         std::normal_distribution<double> stdNorm(0.0, 1.0);
 

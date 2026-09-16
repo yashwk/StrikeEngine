@@ -1,4 +1,5 @@
 #pragma once
+#include <strikeengine/kernel/data/BlockGrowth.hpp>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -59,23 +60,23 @@ namespace StrikeEngine::Kernel {
          *        PhysicsBlock::ensureSize.
          */
         void ensureSize(std::size_t n) {
-            type.resize(n, EntityType::Missile);
-            allegiance.resize(n, Allegiance::Friendly);
-            health.resize(n, 100.0);
-            isAlive.resize(n, true);
-            motorFailed.resize(n, false);
-            engineFailed.resize(n, false);
-            tankFailed.resize(n, false);
-            actuatorFailed.resize(n, false);
-            sensorFailed.resize(n, false);
-            commsFailed.resize(n, false);
-            name.resize(n);
-            role.resize(n);
-            rcsProfileId.resize(n);
-            irProfileId.resize(n);
-            emitterEirpW.resize(n, 0.0);
-            jammerEirpW.resize(n, 0.0);
-            size = n;
+            growTo(type, n, EntityType::Missile);
+            growTo(allegiance, n, Allegiance::Friendly);
+            growTo(health, n, 100.0);
+            growTo(isAlive, n, true);
+            growTo(motorFailed, n, false);
+            growTo(engineFailed, n, false);
+            growTo(tankFailed, n, false);
+            growTo(actuatorFailed, n, false);
+            growTo(sensorFailed, n, false);
+            growTo(commsFailed, n, false);
+            growTo(name, n);
+            growTo(role, n);
+            growTo(rcsProfileId, n);
+            growTo(irProfileId, n);
+            growTo(emitterEirpW, n, 0.0);
+            growTo(jammerEirpW, n, 0.0);
+            if (n > size) size = n;
         }
     };
 
