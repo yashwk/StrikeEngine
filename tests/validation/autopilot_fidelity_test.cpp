@@ -9,6 +9,9 @@
 #include <cmath>
 #include <cstdio>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 using namespace StrikeEngine::Kernel;
 
 namespace {
@@ -403,6 +406,58 @@ int main()
               "pitch AoA damping opposes +alpha (assists the airframe)");
         check(c.aoaDampingYaw[0] > 0.0,
               "yaw AoA damping assists +beta (weathercock direction)");
+    }
+
+    // ---- Roll channel sign: wings-level loop must be negative feedback ------
+    // The bank error used to be negated (atan2(-gBy)), which inverted the loop:
+    // a banked aircraft commanded further roll into the bank. The divergence
+    // rate scaled with kRollP, and the aircraft settled knife-edge at 90 deg
+    // bank where the verticality gate removed the remaining authority (observed
+    // as a 3.3 km descent on a straight-flying target aircraft).
+    //
+    // ECEF only: the legacy local path resolves gravity as (0,0,-9.8), which
+    // puts gBz at -1 and gates the roll channel off through `verticality`.
+    {
+        constexpr double kEarthR = 6378137.0;
+        // Level, east-heading basis at (R,0,0): forward = east, right = south,
+        // down = toward the Earth centre. Body +X forward, +Z down.
+        const glm::mat3 levelBasis(glm::vec3(0.0f, 1.0f, 0.0f),
+                                   glm::vec3(0.0f, 0.0f, -1.0f),
+                                   glm::vec3(-1.0f, 0.0f, 0.0f));
+        const glm::quat levelQ = glm::quat_cast(levelBasis);
+
+        auto banked = [&](double bankRad) {
+            NavigationBlock nav;
+            nav.size = 1;
+            nav.estPx = {kEarthR}; nav.estPy = {0.0}; nav.estPz = {0.0};
+            nav.estVx = {0.0}; nav.estVy = {100.0}; nav.estVz = {0.0};
+            const glm::quat roll = glm::angleAxis(
+                static_cast<float>(bankRad), glm::vec3(1.0f, 0.0f, 0.0f));
+            const glm::quat q = glm::normalize(levelQ * roll);
+            nav.estQw = {q.w}; nav.estQx = {q.x}; nav.estQy = {q.y}; nav.estQz = {q.z};
+            nav.estWx = {0.0}; nav.estWy = {0.0}; nav.estWz = {0.0};
+            return nav;
+        };
+        auto rollCommandFor = [&](double bankRad) {
+            ControlBlock c = makeControl();
+            AutopilotSystem ap;
+            EnvironmentConfig env;
+            env.earth.useEcefTruth = true;
+            EntityStatusBlock st = makeStatus();
+            ap.update(st, banked(bankRad), makeSensor(), makeGuidance(0.0), c, dt, env);
+            return c.rollCommand[0];
+        };
+
+        const double level = rollCommandFor(0.0);
+        const double rightBank = rollCommandFor(+0.30); // 17 deg, right wing down
+        const double leftBank = rollCommandFor(-0.30);
+        std::printf("  [info] roll cmd: level=%+.5f right=%+.5f left=%+.5f\n",
+                    level, rightBank, leftBank);
+        check(std::abs(level) < 1e-6, "wings level commands no roll");
+        check(rightBank < 0.0,
+              "a right bank commands left roll (negative feedback)");
+        check(leftBank > 0.0,
+              "a left bank commands right roll (negative feedback)");
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

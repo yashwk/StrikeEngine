@@ -388,7 +388,15 @@ namespace StrikeEngine::Kernel {
                              nx, ny, nz, gBx, gBy, gBz);
         }
         const double verticality = std::clamp(gBz, 0.0, 1.0);
-        const double rollError = std::atan2(-gBy, std::max(gBz, 0.15));
+        // Wings-level error as the bank angle itself: the body-frame gravity Y
+        // component grows positive as the aircraft rolls LEFT, so the signed
+        // bank angle (right wing down positive) is +gBy. The previous form
+        // negated this, which flipped the loop's sign: a left bank commanded
+        // further left roll, i.e. positive feedback. The divergence rate scaled
+        // with kRollP and the aircraft settled on a knife-edge at 90 deg bank,
+        // where `verticality` removes the remaining authority. The D term below
+        // was already correct and is unchanged.
+        const double rollError = std::atan2(gBy, std::max(gBz, 0.15));
         double rollScale = scheduleDamping ? sqScale * effectiveness : 1.0;
         const double rollSuppress = valAt(control.rollSuppressLateralAccelMps2, id, 0.0);
         if (rollSuppress > 0.0 && std::abs(aySpecificCmd) > rollSuppress) {
