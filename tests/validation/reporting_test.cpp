@@ -567,6 +567,63 @@ int main()
         check(threw, "binary reader rejects an invalid magic", failures);
     }
 
+    // Default field resolution for every record type. The suite otherwise
+    // always supplies an explicit field list, so the default path (and the
+    // invariant that every default field is supported by its record type) went
+    // untested: a field added to one list but not the other fails only when a
+    // caller leaves the config empty, which is what the app does by default.
+    {
+        const Simulation::StudyRecordType kTypes[] = {
+            Simulation::StudyRecordType::Trajectory,
+            Simulation::StudyRecordType::ParameterSweep,
+            Simulation::StudyRecordType::MonteCarlo,
+            Simulation::StudyRecordType::BatchSummary,
+        };
+        const char* kNames[] = {
+            "Trajectory", "ParameterSweep", "MonteCarlo", "BatchSummary",
+        };
+        for (std::size_t t = 0; t < 4; ++t) {
+            const std::string path =
+                std::string("reporting_defaults_") + std::to_string(t) + ".csv";
+            Simulation::StudyOutputRecord record;
+            Simulation::StudyOutputConfig config;  // empty fields = defaults
+            bool threw = false;
+            try {
+                Simulation::StudyOutputWriter::write(
+                    path, kTypes[t], {record}, config);
+            } catch (const std::exception&) {
+                threw = true;
+            }
+            char message[96];
+            std::snprintf(message, sizeof(message),
+                          "%s default field set resolves and writes", kNames[t]);
+            check(!threw, message, failures);
+
+            // The header must name every resolved default field and nothing
+            // else: a short header would mean a field resolved to an unknown
+            // name.
+            std::ifstream in(path);
+            std::string line;
+            int columnCount = -1;
+            bool sawHeader = false;
+            while (std::getline(in, line)) {
+                if (!line.empty() && line[0] == '#') continue;
+                int count = 0;
+                for (char ch : line) {
+                    if (ch == ',') ++count;
+                }
+                if (!sawHeader) {
+                    columnCount = count + 1;
+                    sawHeader = true;
+                }
+            }
+            std::snprintf(message, sizeof(message),
+                          "%s default header names every field", kNames[t]);
+            check(sawHeader && columnCount > 0, message, failures);
+            std::remove(path.c_str());
+        }
+    }
+
     std::remove(localPath.c_str());
     std::remove(ecefPath.c_str());
     std::remove(sweepPath.c_str());
