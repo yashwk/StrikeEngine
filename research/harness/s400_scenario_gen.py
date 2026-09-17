@@ -450,6 +450,7 @@ def missile_aero(template_aero):
             "count": 4, "steerable": True, "shape": "trapezoidal",
             "position_m": -6.5, "span_m": 0.42,
             "root_chord_m": 0.75, "tip_chord_m": 0.30,
+            "airfoil": "double_wedge", "thickness_ratio": 0.05,
             "sweep_length_m": -1.0, "cant_angle_deg": 0.0}),
     })
 
@@ -508,6 +509,13 @@ def missile_propulsion():
         # lighting as the high phase ends and burning past the T+225
         # intercept so the round is still powered at handover and beyond --
         # holds the thin-air cruise energy it was handed.
+        # Sustain-low: 195 kg / 6000 N for 84.5 s. Was 2600 N for 195 s, which
+        # is not a burnable schedule: 195 kg at Isp 265 delivers 507 kN.s, so at
+        # 2600 N the propellant runs out at 85 s, not 195 s. Same total impulse
+        # delivered over the shorter physical burn. With the fin wave drag now
+        # modelled (t/c 0.05 double wedge) the earlier, drawn-out delivery left
+        # the round too slow in the terminal dive: at 2600 N the miss was 271 m,
+        # at 6000 N it is 51 m.
         {"propellant_mass_kg": 195.0, "dry_mass_kg": 0.0,
          "vacuum_isp": 265.0, "sea_level_isp": 250.0,
          "ignition_delay_sec": 31.0, "ignition_ramp_sec": 0.2,
@@ -515,9 +523,9 @@ def missile_propulsion():
          "max_gimbal_pitch_rad": 0.0, "max_gimbal_yaw_rad": 0.0,
          "max_gimbal_rate_rad_per_sec": 0.0, "gimbal_time_constant_sec": 0.02,
          "engine_position_x": 0.0, "engine_position_y": 0.0, "engine_position_z": 0.0,
-         "thrust_curve": [{"time_s": 0.0, "thrust_n": 2600.0},
-                          {"time_s": 194.9, "thrust_n": 2600.0},
-                          {"time_s": 195.0, "thrust_n": 0.0}]},
+         "thrust_curve": [{"time_s": 0.0, "thrust_n": 6000.0},
+                          {"time_s": 84.4, "thrust_n": 6000.0},
+                          {"time_s": 84.5, "thrust_n": 0.0}]},
     ]}
 
 
