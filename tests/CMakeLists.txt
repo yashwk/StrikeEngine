@@ -23,6 +23,9 @@ target_link_libraries(fins_test PRIVATE strikeengine)
 add_executable(airframe_test validation/airframe_test.cpp)
 target_link_libraries(airframe_test PRIVATE strikeengine)
 
+add_executable(simd_math_test validation/simd_math_test.cpp)
+target_link_libraries(simd_math_test PRIVATE strikeengine)
+
 add_executable(integrator_test validation/integrator_test.cpp)
 target_link_libraries(integrator_test PRIVATE strikeengine)
 
@@ -176,6 +179,9 @@ set_tests_properties(fins PROPERTIES TIMEOUT 120)
 
 add_test(NAME airframe COMMAND airframe_test)
 set_tests_properties(airframe PROPERTIES TIMEOUT 120)
+
+add_test(NAME simd_math COMMAND simd_math_test)
+set_tests_properties(simd_math PROPERTIES TIMEOUT 120)
 
 add_test(NAME integrator COMMAND integrator_test)
 set_tests_properties(integrator PROPERTIES TIMEOUT 120)

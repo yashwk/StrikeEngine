@@ -1,5 +1,6 @@
 #include <strikeengine/kernel/systems/NavigationSystem.hpp>
 #include <strikeengine/kernel/math/Quaternion.hpp>
+#include <strikeengine/kernel/math/SimdMath.hpp>
 #include <strikeengine/models/physics/earth/EarthFrames.hpp>
 #include <strikeengine/models/physics/earth/EarthFixedPropagator.hpp>
 #include <strikeengine/models/physics/earth/MagneticModel.hpp>
@@ -14,6 +15,11 @@ constexpr std::size_t kErrorStateSize = 15;
 constexpr double kMinCovariance = 1e-12;
 constexpr double kMaxCovariance = 1e6;
 using Covariance = std::array<double, kErrorStateSize * kErrorStateSize>;
+
+// The covariance kernels hold one full row in vector registers, so the error
+// state cannot change size without them being rewritten to match.
+static_assert(kErrorStateSize == StrikeEngine::Kernel::kCovarianceSize,
+              "the vectorised covariance kernels are sized for the error-state dimension");
 
 // Single-interval sculling/rotation compensation coefficient. For a constant
 // body rate omega and specific force f over one interval, the exact world
@@ -612,30 +618,12 @@ namespace StrikeEngine::Kernel {
             }
         }
 
-        Covariance temp{};
-        temp.fill(0.0);
-        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
-            for (std::size_t column = 0; column < kErrorStateSize; ++column) {
-                double value = 0.0;
-                for (std::size_t k = 0; k < kErrorStateSize; ++k) {
-                    value += transition[covarianceIndex(row, k)] *
-                             covariance[covarianceIndex(k, column)];
-                }
-                temp[covarianceIndex(row, column)] = value;
-            }
-        }
-        Covariance propagated{};
-        propagated.fill(0.0);
-        for (std::size_t row = 0; row < kErrorStateSize; ++row) {
-            for (std::size_t column = 0; column < kErrorStateSize; ++column) {
-                double value = 0.0;
-                for (std::size_t k = 0; k < kErrorStateSize; ++k) {
-                    value += temp[covarianceIndex(row, k)] *
-                             transition[covarianceIndex(column, k)];
-                }
-                propagated[covarianceIndex(row, column)] = value;
-            }
-        }
+        // P <- F P F^T. The kernel reproduces the accumulation order and
+        // rounding of the triple loops it replaces, so a seeded run stays
+        // reproducible; it writes in place, which is safe because the second
+        // product is formed from the intermediate, never from the input
+        // covariance again.
+        propagateCovariance15(transition.data(), covariance.data(), covariance.data());
 
         const double accelNoise = std::max(0.0, sensors.accelNoiseStdDev[id]);
         const double gyroNoise = std::max(0.0, sensors.gyroNoiseStdDev[id]);
@@ -670,10 +658,9 @@ namespace StrikeEngine::Kernel {
             adaptiveFactor = 1.0 + std::max(0.0, sensVal(sensors.insAdaptiveQGain, id, 1.0)) * dyn;
         }
         for (std::size_t i = 0; i < kErrorStateSize; ++i) {
-            propagated[covarianceIndex(i, i)] +=
+            covariance[covarianceIndex(i, i)] +=
                 processNoise[i] * (i < 9 ? adaptiveFactor : 1.0);
         }
-        covariance = propagated;
         boundCovariance(covariance, nav.covarianceDiag[id]);
     }
 
