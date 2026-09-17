@@ -235,7 +235,80 @@ int main()
               "profile ids survive the round-trip");
     }
 
-    // ---- 1.5 Legacy VehicleConfig JSON (no profile-id keys) still loads ----
+    // ---- 1.6 FinsConfig / fin_sets round-trip ----
+    // The byte-identity check above cannot catch a key the serializer never
+    // writes: both sides omit it and stay identical. These assert the field
+    // values instead, which is the only way a dropped key shows up.
+    {
+        FinsConfig fin;
+        fin.shape = StrikeEngine::Models::FinShape::Cranked;
+        fin.count = 4;
+        fin.positionM = -0.645;
+        fin.cantAngleDeg = 12.5;
+        fin.rootChordM = 0.18;
+        fin.tipChordM = 0.09;
+        fin.spanM = 0.12;
+        fin.sweepLengthM = 0.21;
+        fin.steerable = true;
+        fin.airfoil = StrikeEngine::Models::FinAirfoil::Hexagonal;
+        fin.thicknessRatio = 0.055;
+        fin.maxThicknessLocation = 0.42;
+        fin.leadingEdgeRadius = 0.0015;
+        fin.trailingEdgeThickness = 0.0022;
+        fin.crankFraction = 0.37;
+        fin.crankChordFactor = 0.55;
+        fin.midChordLandFraction = 0.62;   // non-default: catches the dropped key
+        fin.controlType = 1;
+        fin.controlFraction = 0.4;
+
+        AeroConfig aero;
+        aero.finSets.push_back(fin);
+
+        std::string text;
+        AeroConfig back;
+        bool ok = true;
+        try {
+            text = serializeVehicleConfig([&] {
+                VehicleConfig v;
+                v.aero = aero;
+                return v;
+            }());
+            back = deserializeVehicleConfig(text).aero;
+        } catch (const std::exception& e) {
+            check(false, "fin_sets round-trip did not throw");
+            std::printf("  unexpected exception: %s\n", e.what());
+            ok = false;
+        }
+        if (ok) {
+            check(back.finSets.size() == 1, "fin_sets round-trips exactly one set");
+            if (back.finSets.size() == 1) {
+                const FinsConfig& b = back.finSets[0];
+                check(b.shape == StrikeEngine::Models::FinShape::Cranked &&
+                          b.airfoil == StrikeEngine::Models::FinAirfoil::Hexagonal &&
+                          b.count == 4 && b.steerable,
+                      "fin shape, airfoil, count and steerable survive");
+                check(b.positionM == fin.positionM && b.cantAngleDeg == fin.cantAngleDeg &&
+                          b.rootChordM == fin.rootChordM && b.tipChordM == fin.tipChordM &&
+                          b.spanM == fin.spanM && b.sweepLengthM == fin.sweepLengthM,
+                      "fin planform geometry (including crank) survives");
+                check(b.thicknessRatio == fin.thicknessRatio &&
+                          b.maxThicknessLocation == fin.maxThicknessLocation &&
+                          b.leadingEdgeRadius == fin.leadingEdgeRadius &&
+                          b.trailingEdgeThickness == fin.trailingEdgeThickness,
+                      "fin airfoil section parameters survive");
+                check(b.crankFraction == fin.crankFraction &&
+                          b.crankChordFactor == fin.crankChordFactor,
+                      "crank parameters survive");
+                check(b.midChordLandFraction == fin.midChordLandFraction,
+                      "mid_chord_land_fraction survives (wave drag + mesh input)");
+                check(b.controlType == fin.controlType &&
+                          b.controlFraction == fin.controlFraction,
+                      "control type and fraction survive");
+            }
+        }
+    }
+
+    // ---- 1.7 Legacy VehicleConfig JSON (no profile-id keys) still loads ----
     {
         std::string legacy = serializeVehicleConfig(VehicleConfig{});
         // Strip the four profile-id keys to emulate a pre-feature persisted file.

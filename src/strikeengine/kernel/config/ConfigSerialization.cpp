@@ -244,6 +244,11 @@ static json finConfigToJson(const FinsConfig& fin) {
     f["max_thickness_location"] = fin.maxThicknessLocation;
     f["leading_edge_radius"] = fin.leadingEdgeRadius;
     f["trailing_edge_thickness"] = fin.trailingEdgeThickness;
+    // Read unconditionally by AeroSchema::finsFromJson, and live: it scales the
+    // hexagonal-fin wave-drag shape factor and the rendered flat land. Omitting
+    // it here silently reverted every authored value to the 0.33 default on the
+    // next save.
+    f["mid_chord_land_fraction"] = fin.midChordLandFraction;
     if (fin.shape != Models::FinShape::Delta) {
         f["tip_chord_m"] = fin.tipChordM;
     }
@@ -335,6 +340,9 @@ void from_json(const json& j, AeroConfig& a) {
         a.tables = j.at("aero_tables").get<Models::AeroTables>();
     }
     if (j.contains("fin_sets") && j.at("fin_sets").is_array()) {
+        // Appends, so start from empty: deserializing over a populated config
+        // must land the same state, not the previous fin sets plus the new ones.
+        a.finSets.clear();
         for (const auto& item : j.at("fin_sets")) {
             a.finSets.push_back(finConfigFromJson(item));
         }
