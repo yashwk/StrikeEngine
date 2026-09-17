@@ -38,9 +38,9 @@ namespace StrikeEngine::Kernel
 		// Stage/accumulator scratch reused across calls and rejection
 		// attempts: no per-step heap allocation. Each kernel owns one
 		// integrator instance, so the buffers are never shared across runs.
-		// acc5 holds the accepted 5th-order increment; accErr the embedded
-		// error estimate.
+		// accErr holds the embedded error estimate (the accepted solution is
+		// `stage` itself, which is built from the same 5th-order weights).
 		void ensureCapacity(const PhysicsBlock& state);
-		PhysicsBlock k1, k2, k3, k4, k5, k6, k7, stage, acc5, accErr;
+		PhysicsBlock k1, k2, k3, k4, k5, k6, k7, stage, accErr;
 	};
 } // namespace StrikeEngine::Kernel

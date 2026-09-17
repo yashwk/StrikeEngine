@@ -113,6 +113,27 @@ namespace StrikeEngine::Kernel
 	}
 
 	/**
+	 * @brief Resets the integrated ODE state of @p dst from @p src.
+	 *
+	 * Copies exactly the fields applyStateUpdate advances. The per-entity
+	 * configuration (reference area, inertia, propulsion id, failure flags, ...)
+	 * and the derived caches are deliberately left alone: dst is expected to
+	 * already carry them, which a full assignment establishes once per step.
+	 * Integrator stage buffers use this instead of whole-block assignment so a
+	 * stage does not re-copy tens of constant arrays.
+	 */
+	inline void copyIntegratedState(PhysicsBlock& dst, const PhysicsBlock& src)
+	{
+		dst.px = src.px; dst.py = src.py; dst.pz = src.pz;
+		dst.vx = src.vx; dst.vy = src.vy; dst.vz = src.vz;
+		dst.wx = src.wx; dst.wy = src.wy; dst.wz = src.wz;
+		dst.qw = src.qw; dst.qx = src.qx; dst.qy = src.qy; dst.qz = src.qz;
+		dst.mass = src.mass;
+		dst.finPitch = src.finPitch; dst.finYaw = src.finYaw; dst.finRoll = src.finRoll;
+		dst.gimbalPitch = src.gimbalPitch; dst.gimbalYaw = src.gimbalYaw;
+	}
+
+	/**
 	 * @brief Base integrator interface (derivative-callback form).
 	 *
 	 * The physics backend supplies a pure derivative function

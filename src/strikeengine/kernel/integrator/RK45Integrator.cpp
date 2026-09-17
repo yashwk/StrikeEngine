@@ -44,9 +44,6 @@ namespace
     constexpr double a75 = -2187.0 / 6784.0;
     constexpr double a76 = 11.0 / 84.0;
 
-    // 5th-order weights (== the seventh stage row).
-    constexpr double b1 = a71, b3 = a73, b4 = a74, b5 = a75, b6 = a76;
-
     // Embedded error estimate: 5th-order weights minus the 4th-order weights.
     constexpr double e1 = 71.0 / 57600.0;
     constexpr double e3 = -71.0 / 16695.0;
@@ -72,11 +69,15 @@ RK45Integrator::RK45Integrator(double tol)
 
 void RK45Integrator::ensureCapacity(const PhysicsBlock& state)
 {
-    // Copy assignment recycles the buffers' capacity once the entity count is
-    // stable, so steady-state stepping performs no heap allocation.
-    k1 = state; k2 = state; k3 = state; k4 = state;
-    k5 = state; k6 = state; k7 = state;
-    stage = state; acc5 = state; accErr = state;
+    // Stage derivatives and accumulators are write-before-read (the derivative
+    // callback zeroes every field it fills), so they need only the right size.
+    // Only `stage` is handed to the callback as a state, so it alone needs the
+    // per-entity configuration; establish it once here, per step.
+    k1.ensureSize(state.size); k2.ensureSize(state.size); k3.ensureSize(state.size);
+    k4.ensureSize(state.size); k5.ensureSize(state.size); k6.ensureSize(state.size);
+    k7.ensureSize(state.size);
+    accErr.ensureSize(state.size);
+    stage = state;
 }
 
 double RK45Integrator::integrate(
@@ -91,8 +92,8 @@ double RK45Integrator::integrate(
     acceptedStepCount = 0;
     rejectedStepCount = 0;
 
-    // acc5 = sum_r weight_r * k_r, applied to one integrated state field. The
-    // kernels are the seven stage derivatives; inactive entities keep their
+    // accErr = sum_r weight_r * k_r, applied to one integrated state field.
+    // The kernels are the seven stage derivatives; inactive entities keep their
     // state (they are skipped by applyStateUpdate as well).
     auto combine = [&](PhysicsBlock& acc, Field f,
                        const std::array<const PhysicsBlock*, 7>& ks,
@@ -114,13 +115,12 @@ double RK45Integrator::integrate(
     auto buildStage = [&](double h,
                           std::initializer_list<std::pair<const PhysicsBlock*, double>> terms,
                           PhysicsBlock& out) {
-        out = state;
+        copyIntegratedState(out, state);
         for (const auto& [k, a] : terms) {
             if (a != 0.0) applyStateUpdate(out, *k, h * a);
         }
     };
 
-    const std::array<double, 7> w5 = {b1, 0.0, b3, b4, b5, b6, 0.0};
     const std::array<double, 7> we = {e1, 0.0, e3, e4, e5, e6, e7};
 
     double t = t0;
@@ -171,27 +171,8 @@ double RK45Integrator::integrate(
                        {{&k1, a71}, {&k3, a73}, {&k4, a74}, {&k5, a75}, {&k6, a76}}, stage);
             deriv(stage, t + h, k7);
 
-            // acc5 (the increment that produces `stage`) and accErr.
-            combine(acc5, &PhysicsBlock::px, ks, w5);
-            combine(acc5, &PhysicsBlock::py, ks, w5);
-            combine(acc5, &PhysicsBlock::pz, ks, w5);
-            combine(acc5, &PhysicsBlock::vx, ks, w5);
-            combine(acc5, &PhysicsBlock::vy, ks, w5);
-            combine(acc5, &PhysicsBlock::vz, ks, w5);
-            combine(acc5, &PhysicsBlock::wx, ks, w5);
-            combine(acc5, &PhysicsBlock::wy, ks, w5);
-            combine(acc5, &PhysicsBlock::wz, ks, w5);
-            combine(acc5, &PhysicsBlock::qw, ks, w5);
-            combine(acc5, &PhysicsBlock::qx, ks, w5);
-            combine(acc5, &PhysicsBlock::qy, ks, w5);
-            combine(acc5, &PhysicsBlock::qz, ks, w5);
-            combine(acc5, &PhysicsBlock::mass, ks, w5);
-            combine(acc5, &PhysicsBlock::finPitch, ks, w5);
-            combine(acc5, &PhysicsBlock::finYaw, ks, w5);
-            combine(acc5, &PhysicsBlock::finRoll, ks, w5);
-            combine(acc5, &PhysicsBlock::gimbalPitch, ks, w5);
-            combine(acc5, &PhysicsBlock::gimbalYaw, ks, w5);
-
+            // Embedded error estimate. The accepted solution is `stage`, which
+            // is built from the same 5th-order weights.
             combine(accErr, &PhysicsBlock::px, ks, we);
             combine(accErr, &PhysicsBlock::py, ks, we);
             combine(accErr, &PhysicsBlock::pz, ks, we);
@@ -275,10 +256,10 @@ double RK45Integrator::integrate(
         // Accept the 5th-order solution. `stage` already holds exactly this
         // state (it was built from the same a7/b weights), so reuse it rather
         // than re-deriving, and keep k7 as the next step's first stage (FSAL).
-        state = stage;
+        copyIntegratedState(state, stage);
         t += h;
         remaining -= h;
-        k1 = k7;
+        copyIntegratedState(k1, k7);
         haveK1 = true;
 
         // Grow for the next step, bounded so a smooth region cannot balloon and

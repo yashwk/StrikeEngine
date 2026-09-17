@@ -6,14 +6,15 @@ namespace StrikeEngine::Kernel
 
 void RK4Integrator::ensureCapacity(const PhysicsBlock& state)
 {
-    // Copy assignment recycles the buffers' capacity once the entity count is
-    // stable, so steady-state stepping performs no heap allocation.
-    k1 = state;
-    k2 = state;
-    k3 = state;
-    k4 = state;
+    // Derivative buffers are fully overwritten by the derivative callback
+    // before they are read, so they only need the right size; only the stage
+    // is passed as a state and therefore needs the per-entity configuration.
+    k1.ensureSize(state.size);
+    k2.ensureSize(state.size);
+    k3.ensureSize(state.size);
+    k4.ensureSize(state.size);
+    acc.ensureSize(state.size);
     stage = state;
-    acc = state;
 }
 
 double RK4Integrator::integrate(
@@ -32,17 +33,17 @@ double RK4Integrator::integrate(
     deriv(state, t, k1);
 
     // k2 = f(t + h/2, x + h/2*k1)
-    stage = state;
+    copyIntegratedState(stage, state);
     applyStateUpdate(stage, k1, h2);
     deriv(stage, t + h2, k2);
 
     // k3 = f(t + h/2, x + h/2*k2)
-    stage = state;
+    copyIntegratedState(stage, state);
     applyStateUpdate(stage, k2, h2);
     deriv(stage, t + h2, k3);
 
     // k4 = f(t + h, x + h*k3)
-    stage = state;
+    copyIntegratedState(stage, state);
     applyStateUpdate(stage, k3, h);
     deriv(stage, t + h, k4);
 
