@@ -193,14 +193,29 @@ namespace StrikeEngine::Models {
             };
 
             // Drag opposes velocity. With tables the cd(M,a) grid is
-            // authoritative; otherwise the flat p.cd coefficient is used.
+            // authoritative; otherwise the flat p.cd coefficient is used. The
+            // tables and p.cd are BODY drag: fin drag is computed from the
+            // fin geometry and added below.
             double cd;
             if (tables) {
                 cd = evalCoeff(alpha, tables->aoaBreakpointsRad, tables->cdTable, false);
             } else {
                 cd = p.cd;
             }
-            const double dragMag = q * S * cd;
+            const auto fList = p.activeFins();
+            double finDrag = 0.0;
+            if (!fList.empty()) {
+                constexpr double kGammaAir = 1.4;
+                constexpr double kGasConstantAir = 287.05;
+                const double airTemperatureK = (speedOfSound > 1e-6)
+                    ? (speedOfSound * speedOfSound) / (kGammaAir * kGasConstantAir)
+                    : 288.15;
+                for (const auto& f : fList) {
+                    if (!f) continue;
+                    finDrag += f->dragC(mach, density, V, airTemperatureK).total;
+                }
+            }
+            const double dragMag = q * S * (cd + finDrag);
             double fx = -dragMag * (u / V);
             double fy = -dragMag * (v / V);
             double fz = -dragMag * (w / V);
@@ -209,8 +224,6 @@ namespace StrikeEngine::Models {
             const bool hasCyTable = tables && tables->hasCyTable();
             const bool hasCnTable = tables && tables->hasCnTable();
             const bool hasClRollTable = tables && tables->hasClRollTable();
-
-            const auto fList = p.activeFins();
 
             // Lift (pitch plane): positive alpha => force -Z (up), saturated at
             // CL_max (stall / control limit). With geometric fins the fin lift

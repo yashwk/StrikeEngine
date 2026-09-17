@@ -497,6 +497,119 @@ static void planformChecks()
     }
 }
 
+static void dragModelChecks()
+{
+    std::printf("\n-- fin drag model --\n");
+    const double r = 0.1;
+    const double refArea = kPi * r * r;
+
+    auto fin = [&](FinAirfoil af, double tc, double land = 0.33, double tte = 0.0) {
+        std::string err;
+        return buildFinsGeometry(FinShape::Trapezoidal, 4, 0.75, 0.30, 0.42, -1.0,
+                                 0.0, 0.0, {}, refArea, &err, true,
+                                 af, tc, 0.5, 0.0, tte, 0.5, 0.5, land);
+    };
+
+    // Ackeret: double wedge and biconvex must match their closed forms exactly
+    // once referenced to the planform area.
+    {
+        auto dw = fin(FinAirfoil::DoubleWedge, 0.05);
+        auto bx = fin(FinAirfoil::Biconvex, 0.05);
+        const double ratio = dw->areaRatio();
+        bool ok = true;
+        for (double M : {1.5, 2.0, 3.0, 4.0}) {
+            const double s = std::sqrt(M * M - 1.0);
+            const double t = 0.05;
+            ok = ok && std::abs(dw->waveDragCoefficient(M) - ratio * 4.0 * t * t / s) < 1e-12;
+            ok = ok && std::abs(bx->waveDragCoefficient(M)
+                                - ratio * (16.0 / 3.0) * t * t / s) < 1e-12;
+        }
+        check(ok, "wave drag matches Ackeret 4(t/c)^2/sqrt(M^2-1) for wedge and biconvex");
+    }
+
+    // Hexagonal carries a flat land, which raises its wave drag over a wedge by
+    // 1/(1-f) for the same thickness ratio.
+    {
+        auto hx = fin(FinAirfoil::Hexagonal, 0.05, 0.33);
+        auto dw = fin(FinAirfoil::DoubleWedge, 0.05);
+        const double expected = dw->waveDragCoefficient(2.0) / (1.0 - 0.33);
+        check(std::abs(hx->waveDragCoefficient(2.0) - expected) < 1e-9,
+              "hexagonal wave drag = double wedge / (1 - land fraction)");
+    }
+
+    // Zero thickness, and a flat plate, must produce no wave drag at any Mach.
+    {
+        auto flat = fin(FinAirfoil::FlatPlate, 0.05);
+        auto zero = fin(FinAirfoil::DoubleWedge, 0.0);
+        double maxFlat = 0.0, maxZero = 0.0;
+        for (double M = 0.1; M <= 6.0; M += 0.1) {
+            maxFlat = std::max(maxFlat, flat->waveDragCoefficient(M));
+            maxZero = std::max(maxZero, zero->waveDragCoefficient(M));
+        }
+        check(maxFlat == 0.0, "flat plate has zero wave drag");
+        check(maxZero == 0.0, "zero thickness has zero wave drag");
+    }
+
+    // Wave drag must rise monotonically through the transonic blend, starting
+    // and ending on the correct values.
+    {
+        auto dw = fin(FinAirfoil::DoubleWedge, 0.05);
+        check(dw->waveDragCoefficient(0.8) == 0.0,
+              "wave drag is zero at the divergence Mach");
+        bool monotonic = true;
+        double prev = 0.0;
+        for (double M = 0.80; M <= 1.20 + 1e-9; M += 0.01) {
+            const double cur = dw->waveDragCoefficient(M);
+            if (cur < prev - 1e-12) monotonic = false;
+            prev = cur;
+        }
+        check(monotonic, "wave drag rises monotonically through the transonic blend");
+        const double s = std::sqrt(1.2 * 1.2 - 1.0);
+        check(std::abs(dw->waveDragCoefficient(1.2)
+                       - dw->areaRatio() * 4.0 * 0.05 * 0.05 / s) < 1e-12,
+              "blend joins the supersonic branch at M=1.2");
+    }
+
+    // Thicker fins must create more wave drag; a thicker section also raises
+    // skin friction through the form factor.
+    {
+        auto thin = fin(FinAirfoil::DoubleWedge, 0.03);
+        auto thick = fin(FinAirfoil::DoubleWedge, 0.08);
+        check(thick->waveDragCoefficient(3.0) > thin->waveDragCoefficient(3.0),
+              "wave drag grows with thickness ratio");
+        check(thick->skinFrictionDragCoefficient(3.0, 0.4, 1000.0, 250.0)
+                  > thin->skinFrictionDragCoefficient(3.0, 0.4, 1000.0, 250.0),
+              "skin friction form factor grows with thickness ratio");
+    }
+
+    // Skin friction must fall as Reynolds number rises.
+    {
+        auto f = fin(FinAirfoil::DoubleWedge, 0.05);
+        const double lowRe = f->skinFrictionDragCoefficient(1.0, 0.4, 100.0, 250.0);
+        const double highRe = f->skinFrictionDragCoefficient(1.0, 0.4, 1000.0, 250.0);
+        check(lowRe > highRe, "skin friction falls with increasing Reynolds number");
+        check(f->skinFrictionDragCoefficient(1.0, 0.0, 1000.0, 250.0) == 0.0,
+              "skin friction is zero without density");
+    }
+
+    // Total is the sum of the parts and the parts are non-negative.
+    {
+        auto f = fin(FinAirfoil::Hexagonal, 0.06, 0.3, 0.001);
+        const auto d = f->dragC(2.5, 0.4, 900.0, 250.0);
+        check(std::abs(d.total - (d.wave + d.skinFriction + d.trailingEdge)) < 1e-15,
+              "total fin drag is the sum of its terms");
+        check(d.wave > 0.0 && d.skinFriction > 0.0 && d.trailingEdge > 0.0,
+              "all three drag terms contribute for a thick section");
+    }
+
+    // Zero trailing edge thickness removes the base term only.
+    {
+        auto f = fin(FinAirfoil::DoubleWedge, 0.05, 0.33, 0.0);
+        check(f->trailingEdgeDragCoefficient(2.0) == 0.0,
+              "no trailing edge thickness means no base drag");
+    }
+}
+
 int main()
 {
     std::printf("=== fins: RocketPy geometric fin model (trapezoidal/elliptical/free-form) ===\n");
@@ -507,6 +620,7 @@ int main()
     serializationChecks();
     validationChecks();
     planformChecks();
+    dragModelChecks();
     flightChecks();
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

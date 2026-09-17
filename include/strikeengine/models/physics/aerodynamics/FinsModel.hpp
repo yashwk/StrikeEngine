@@ -216,6 +216,13 @@ namespace StrikeEngine::Models {
         return p;
     }
 
+    struct FinDragTerms {
+        double wave = 0.0;
+        double skinFriction = 0.0;
+        double trailingEdge = 0.0;
+        double total = 0.0;
+    };
+
     struct FinsGeometry {
         FinShape shape;
         FinAirfoil airfoil = FinAirfoil::FlatPlate;
@@ -238,6 +245,7 @@ namespace StrikeEngine::Models {
 
         double Af = 0.0;
         double AR = 0.0;
+        double mac = 0.0;
         double gammaC = 0.0;
         double Yma = 0.0;
         double cpz = 0.0;
@@ -276,6 +284,20 @@ namespace StrikeEngine::Models {
                    * std::cos(cantRad) * rollGeometricalConstant
                    / (referenceArea * referenceLength * referenceLength);
         }
+
+        double wettedAreaPerFin() const;
+
+        double areaRatio() const;
+
+        double waveDragCoefficient(double mach) const;
+
+        double skinFrictionDragCoefficient(double mach, double density,
+                                           double speed, double temperatureK) const;
+
+        double trailingEdgeDragCoefficient(double mach) const;
+
+        FinDragTerms dragC(double mach, double density, double speed,
+                           double temperatureK) const;
     };
 
     inline double rollForcingInterferenceFactor(double tau) {
@@ -389,6 +411,9 @@ namespace StrikeEngine::Models {
             g->tipChord = tipChord;
             const double Yr = rootChord + tipChord;
             g->Af = Yr * span / 2.0;
+            g->mac = 2.0 * (rootChord * rootChord + rootChord * tipChord
+                            + tipChord * tipChord)
+                     / (3.0 * (rootChord + tipChord));
             g->AR = 2.0 * span * span / g->Af;
             g->gammaC = std::atan((sweep + 0.5 * tipChord - 0.5 * rootChord) / span);
             g->Yma = (span / 3.0) * (rootChord + 2.0 * tipChord) / Yr;
@@ -412,6 +437,7 @@ namespace StrikeEngine::Models {
             g->rootChord = rootChord;
             g->tipChord = tipChord;
             g->Af = kFinPi * rootChord * span / 4.0;
+            g->mac = std::max(metrics.mac, 0.1 * rootChord);
             g->AR = 2.0 * span * span / g->Af;
             g->gammaC = 0.0;
             g->Yma = span / (3.0 * kFinPi) * std::sqrt(9.0 * kFinPi * kFinPi - 64.0);
@@ -461,6 +487,7 @@ namespace StrikeEngine::Models {
             g->rootChord = rootChord > 0.0 ? rootChord : polygonMaxChord(polygon);
             g->tipChord = std::max(0.0, tipHi - tipLo);
             g->Af = metrics.area;
+            g->mac = metrics.mac;
             g->AR = 2.0 * g->span * g->span / g->Af;
             g->Yma = metrics.Yma;
             g->cpz = metrics.cpz;
@@ -474,6 +501,97 @@ namespace StrikeEngine::Models {
 
         g->cpLeverArmM = positionM - g->cpz;
         return g;
+    }
+
+    inline double dynamicViscosity(double temperatureK)
+    {
+        constexpr double mu0 = 1.716e-5;
+        constexpr double T0 = 273.15;
+        constexpr double S = 110.4;
+        const double T = std::max(temperatureK, 1.0);
+        return mu0 * std::pow(T / T0, 1.5) * (T0 + S) / (T + S);
+    }
+
+    inline double airfoilWaveDragShapeFactor(FinAirfoil airfoil, double landFraction)
+    {
+        switch (airfoil) {
+            case FinAirfoil::FlatPlate:   return 0.0;
+            case FinAirfoil::DoubleWedge: return 4.0;
+            case FinAirfoil::Biconvex:    return 16.0 / 3.0;
+            case FinAirfoil::Hexagonal: {
+                const double f = std::clamp(landFraction, 0.0, 0.9);
+                return 4.0 / std::max(1.0 - f, 0.1);
+            }
+        }
+        return 0.0;
+    }
+
+    inline double FinsGeometry::wettedAreaPerFin() const
+    {
+        return 2.0 * Af;
+    }
+
+    inline double FinsGeometry::areaRatio() const
+    {
+        return (referenceArea > 0.0) ? (n * Af / referenceArea) : 0.0;
+    }
+
+    inline double FinsGeometry::waveDragCoefficient(double mach) const
+    {
+        const double factor = airfoilWaveDragShapeFactor(airfoil, midChordLandFraction);
+        if (factor <= 0.0 || thicknessRatio <= 0.0) return 0.0;
+        constexpr double kDivergenceMach = 0.8;
+        constexpr double kSupersonicMach = 1.2;
+        const double t = thicknessRatio;
+        auto supersonic = [&](double m) {
+            return factor * t * t / std::sqrt(std::max(m * m - 1.0, 1e-6));
+        };
+        if (mach <= kDivergenceMach) return 0.0;
+        double cd = (mach >= kSupersonicMach)
+            ? supersonic(mach)
+            : [&] {
+                  const double s = (mach - kDivergenceMach)
+                                   / (kSupersonicMach - kDivergenceMach);
+                  return s * s * (3.0 - 2.0 * s) * supersonic(kSupersonicMach);
+              }();
+        return cd * areaRatio();
+    }
+
+    inline double FinsGeometry::skinFrictionDragCoefficient(
+        double mach, double density, double speed, double temperatureK) const
+    {
+        if (mac <= 1e-9 || density <= 0.0 || speed <= 1e-6) return 0.0;
+        const double mu = dynamicViscosity(temperatureK);
+        const double reynolds = density * speed * mac / mu;
+        if (!(reynolds > 1.0)) return 0.0;
+        const double cfIncompressible = 0.037036 / std::pow(reynolds, 0.155079);
+        const double m = mach;
+        const double compressibility =
+            1.0 + 0.00798 * m - 0.1813 * m * m + 0.0632 * m * m * m
+            - 0.00933 * std::pow(m, 4.0) + 0.000549 * std::pow(m, 5.0);
+        const double cf = std::max(cfIncompressible * compressibility, 0.0);
+        const double formFactor = 1.0 + 2.0 * thicknessRatio;
+        return cf * formFactor * (n * wettedAreaPerFin()) / referenceArea;
+    }
+
+    inline double FinsGeometry::trailingEdgeDragCoefficient(double mach) const
+    {
+        if (trailingEdgeThickness <= 0.0 || mac <= 1e-9) return 0.0;
+        constexpr double kBasePressureCoefficient = 0.20;
+        const double subsonicFactor = (mach < 1.0) ? 1.0 : std::min(1.0, 1.0 / mach);
+        return kBasePressureCoefficient * (trailingEdgeThickness / mac)
+               * subsonicFactor * areaRatio();
+    }
+
+    inline FinDragTerms FinsGeometry::dragC(
+        double mach, double density, double speed, double temperatureK) const
+    {
+        FinDragTerms terms;
+        terms.wave = waveDragCoefficient(mach);
+        terms.skinFriction = skinFrictionDragCoefficient(mach, density, speed, temperatureK);
+        terms.trailingEdge = trailingEdgeDragCoefficient(mach);
+        terms.total = terms.wave + terms.skinFriction + terms.trailingEdge;
+        return terms;
     }
 
 }
