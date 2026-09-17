@@ -134,8 +134,7 @@ namespace StrikeEngine::Models {
 
     /**
      * @brief Bilinear interpolation over a rectilinear grid, clamped to the
-     *        grid bounds (same clamping pattern as RCSDatabase::getRCS but
-     *        without its first-breakpoint off-by-one bug).
+     *        grid bounds so a query at or beyond an edge cannot extrapolate.
      *
      * Queries at or below the first breakpoint clamp to the first column/row
      * and queries at or above the last clamp to the last, so the function is

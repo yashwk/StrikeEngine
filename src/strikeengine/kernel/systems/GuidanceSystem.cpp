@@ -650,12 +650,27 @@ namespace StrikeEngine::Kernel {
                     accelAvailable = false;
                 }
             }
-            const bool trackAim = tracks && id < tracks->size &&
-                                  tracks->active(id) && tracks->updateCount[id] > 0;
+            // The own track supplies a measurement-anchored position, which is
+            // fire-control grade even when the differentiated velocity is not.
+            // Mirrors computeAimPn: the track velocity is only lead-grade when
+            // its own uncertainty says so, otherwise the launcher's
+            // fire-control solution (the command state) supplies the lead.
+            const bool ownPosUsable = tracks && id < tracks->size &&
+                                      tracks->active(id) && tracks->updateCount[id] > 0;
+            const bool commandHasSpeed =
+                id < g.targetVx.size() &&
+                (g.targetVx[id] * g.targetVx[id] + g.targetVy[id] * g.targetVy[id] +
+                 g.targetVz[id] * g.targetVz[id]) > 1.0;
+            const bool trackAim = ownPosUsable &&
+                (commandHasSpeed || aimVelocityTrusted(*tracks, id));
             if (!datalinkAim && trackAim) {
                 g.trajectoryAimSource[id] = GuidanceAimSource::Track;
                 tx = tracks->posX[id]; ty = tracks->posY[id]; tz = tracks->posZ[id];
-                tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
+                if (commandHasSpeed) {
+                    tvx = g.targetVx[id]; tvy = g.targetVy[id]; tvz = g.targetVz[id];
+                } else {
+                    tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
+                }
                 accelAvailable = id < tracks->accelAvailable.size() &&
                                  tracks->accelAvailable[id];
                 if (accelAvailable && id < tracks->accelX.size()) {
