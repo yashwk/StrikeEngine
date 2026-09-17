@@ -27,6 +27,7 @@ namespace StrikeEngine::Kernel {
         void autopilotGravity(std::size_t id, const NavigationBlock& nav,
                               const ControlBlock& control,
                               const EnvironmentConfig& environment,
+                              const Models::GeodeticCoordinate& navGeodetic,
                               double& gx, double& gy, double& gz)
         {
             const bool truth = flagAt(control.useTruthGravityModel, id);
@@ -44,8 +45,7 @@ namespace StrikeEngine::Kernel {
                         return;
                     }
                 }
-                const auto geodetic = Models::ecefToGeodetic(pos);
-                const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(geodetic);
+                const auto grav = Models::EarthFrames::ecefNormalGravityAcceleration(navGeodetic);
                 gx = grav[0]; gy = grav[1]; gz = grav[2];
             } else {
                 gx = 0.0; gy = 0.0; gz = -9.80665;
@@ -142,8 +142,15 @@ namespace StrikeEngine::Kernel {
         // intentionally feed-forward: feeding the fin's own measured force
         // back into this simplified airframe model creates a short-period
         // limit cycle. Rates and AoA below provide the stabilizing feedback.
+        // The geodetic position is needed by both the gravity model and the
+        // atmosphere query below; convert once rather than twice.
+        Models::GeodeticCoordinate navGeodetic{};
+        if (environment.earth.useEcefTruth) {
+            navGeodetic = Models::ecefToGeodetic({nav.estPx[id], nav.estPy[id], nav.estPz[id]});
+        }
+
         double gx, gy, gz;
-        autopilotGravity(id, nav, control, environment, gx, gy, gz);
+        autopilotGravity(id, nav, control, environment, navGeodetic, gx, gy, gz);
         double gravityBx, gravityBy, gravityBz;
         quatRotateToBody(nav.estQw[id], nav.estQx[id], nav.estQy[id], nav.estQz[id],
                          gx, gy, gz, gravityBx, gravityBy, gravityBz);
@@ -170,8 +177,7 @@ namespace StrikeEngine::Kernel {
         const double speed = std::sqrt(vx * vx + vy * vy + vz * vz);
         double alt;
         if (environment.earth.useEcefTruth) {
-            const auto geo = Models::ecefToGeodetic({nav.estPx[id], nav.estPy[id], nav.estPz[id]});
-            alt = std::max(0.0, geo.altitudeM);
+            alt = std::max(0.0, navGeodetic.altitudeM);
         } else {
             alt = std::max(0.0, nav.estPz[id]);
         }
