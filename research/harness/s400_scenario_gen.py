@@ -428,11 +428,24 @@ def missile_aero(template_aero):
     area = math.pi * (0.515 / 2.0) ** 2
     machs = [0.5, 0.8, 1.0, 1.2, 1.6, 2.0, 2.6, 3.2, 4.0, 5.0, 6.0]
     cd0 = [0.22, 0.27, 0.34, 0.33, 0.26, 0.22, 0.19, 0.175, 0.165, 0.155, 0.15]
-    aoa = [0.0, 0.05, 0.10, 0.15, 0.20, 0.25]
-    aoa_rise = [0.0, 0.010, 0.035, 0.080, 0.150, 0.240]
+    # The grid must cover the alpha this airframe actually flies. It previously
+    # stopped at 0.25 rad (14.3 deg), and interpolateCoefficient clamps beyond
+    # the last breakpoint, so past 14.3 deg BOTH lift and drag froze: lift at
+    # 0.65 (the declared cl_max of 3.2 was unreachable) and drag at +0.24 over
+    # cd0. A terminal turn therefore bought lift without paying induced drag.
+    # The grid now runs to 0.60 rad (34 deg) with a post-stall plateau in cl and
+    # a steep continuation of the drag rise, so high-alpha manoeuvring is
+    # priced correctly.
+    aoa = [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60]
+    # Linear lift slope 2.6/rad to 0.25 rad, then separation: the slope rolls
+    # off to a plateau near cl = 1.05 rather than continuing to cl_max.
+    cl_curve = [0.0, 0.13, 0.26, 0.39, 0.52, 0.65, 0.75, 0.90, 1.00, 1.05]
+    # Drag rise over cd0: attached-flow growth to 14.3 deg, then the much
+    # steeper separation drag that accompanies the stalled plateau in cl.
+    aoa_rise = [0.0, 0.010, 0.035, 0.080, 0.150, 0.240, 0.340, 0.550, 0.780, 1.000]
     cd_table = [[round(c + rise, 5) for rise in aoa_rise] for c in cd0]  # [mach][aoa]
     cl_alpha, cl_max = 2.6, 3.2
-    cl_table = [[round(min(cl_alpha * a, cl_max), 4) for a in aoa] for _ in machs]
+    cl_table = [list(cl_curve) for _ in machs]
     return dict(template_aero, **{
         "aero_tables": {"mach_breakpoints": machs, "aoa_breakpoints_rad": aoa,
                         "cd_table": cd_table, "cl_table": cl_table},

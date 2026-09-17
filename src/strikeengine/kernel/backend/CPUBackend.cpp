@@ -175,6 +175,11 @@ namespace StrikeEngine::Kernel
             params.tailControl     = s.tailControl[i];
             params.tables          = s.aeroTables[i];
             params.fins            = s.fins[i];
+            // Rotational inertia, so the aero model can bound its moment as an
+            // angular acceleration rather than against dynamic pressure.
+            if (i < s.Ixx.size()) params.inertiaX = s.Ixx[i];
+            if (i < s.Iyy.size()) params.inertiaY = s.Iyy[i];
+            if (i < s.Izz.size()) params.inertiaZ = s.Izz[i];
             if (s.finSets.size() > i) {
                 params.finSets     = s.finSets[i];
             }
