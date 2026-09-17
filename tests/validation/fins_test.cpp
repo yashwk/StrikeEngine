@@ -125,7 +125,7 @@ static void machAndSignChecks()
         p.referenceArea = kRefAreaRadius01;
         p.referenceLength = 0.2;
         p.cd = 0.0; p.clAlpha = 0.0; p.clFin = 0.0; p.clMax = 2.0;
-        p.fins = tail;
+        p.finSets = {tail};
         BasicAeroModel m;
         // alpha ~ 0.05 rad: u=100, w=5
         auto w = m.computeWrench(100.0, 0.0, 5.0, 0.0, 0.0, 0.0,
@@ -292,7 +292,7 @@ static void controlPolarityChecks()
     p.referenceArea = kRefAreaRadius01;
     p.referenceLength = 0.2;
     p.cd = 0.0; p.clAlpha = 0.0; p.clFin = 0.0; p.clMax = 2.0;
-    p.fins = tail;
+    p.finSets = {tail};
     BasicAeroModel m;
     const double V = 100.0;
 
@@ -670,7 +670,7 @@ static void controlSurfaceChecks()
             AeroParams p;
             p.referenceArea = refArea;
             p.referenceLength = 2.0 * r;
-            p.fins = g;
+            p.finSets = {g};
             return p;
         };
         BasicAeroModel model;

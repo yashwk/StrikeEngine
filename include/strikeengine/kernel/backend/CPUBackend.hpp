@@ -71,6 +71,13 @@ namespace StrikeEngine::Kernel
 
 		void ensureDerivCapacity(const PhysicsBlock& state);
 
+		// Per-entity aero parameters, rebuilt once per step. The aero model
+		// reads its parameters (including the fin-set list) on every derivative
+		// evaluation, several per step per entity; rebuilding them inside the
+		// evaluation copied two vectors each time. Inertia is refreshed each
+		// step because staging rescales it.
+		void refreshAeroParams(const PhysicsBlock& state);
+
 		std::unique_ptr<Integrator> integrator;
 		std::unique_ptr<HybridScheduler> scheduler;
 
@@ -86,6 +93,7 @@ namespace StrikeEngine::Kernel
 
 		WorkerPool threadPool;
 		PhysicsBlock derivBuffer;   // scratch for cache refresh + stage reuse
+		std::vector<Models::AeroParams> aeroParamCache;
 
 		// Current step dt, set by step() before integrating. The fuel-
 		// depletion guard caps mass flow so the remaining fuel lasts this

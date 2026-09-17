@@ -197,10 +197,11 @@ int main() {
         p.clFin = 0.0;
         p.clMax = 10.0;
         p.tables = std::make_shared<const AeroTables>(t);
-        p.fins = StrikeEngine::Models::buildFinsGeometry(
+        p.finSets = {StrikeEngine::Models::buildFinsGeometry(
             StrikeEngine::Models::FinShape::Trapezoidal, 4,
-            0.5, 0.35, 0.25, 0.15, -1.6, 0.0, {}, 0.05, &err);
-        check(p.fins != nullptr, "test fin set builds");
+            0.5, 0.35, 0.25, 0.15, -1.6, 0.0, {}, 0.05, &err)};
+        check(!p.finSets.empty() && p.finSets.front() != nullptr,
+              "test fin set builds");
 
         StrikeEngine::Models::BasicAeroModel model;
         const double V = 100.0;  // Mach 1 at sound speed 100, q = 5 kPa
@@ -227,7 +228,7 @@ int main() {
         check(std::abs(aMinus.force_z) > 1.0, "negative alpha produces lift");
 
         // Same mirror requirement on the finless abstract path.
-        p.fins = nullptr;
+        p.finSets.clear();
         const auto nPlus = atBeta(0.05), nMinus = atBeta(-0.05);
         check(nPlus.force_y < -1.0 && nMinus.force_y > 1.0,
               "finless sideslip force opposes beta in both directions");
@@ -240,7 +241,7 @@ int main() {
         // nose-up/nose-right moments with downloads. Geometric fins derive this
         // from their CP lever arm and ignore the flag.
         {
-            p.fins = nullptr;
+            p.finSets.clear();
             p.tailControl = false;
             p.clFin = 2.0;
             const double V = 100.0, rho = 1.0, sound = 100.0;

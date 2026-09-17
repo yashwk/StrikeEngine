@@ -112,6 +112,28 @@ namespace StrikeEngine::Kernel
         derivBuffer.size = n;
     }
 
+    void CPUBackend::refreshAeroParams(const PhysicsBlock& s)
+    {
+        aeroParamCache.resize(s.size);
+        for (std::size_t i = 0; i < s.size; ++i) {
+            Models::AeroParams& p = aeroParamCache[i];
+            p.referenceArea   = s.referenceArea[i];
+            p.referenceLength = s.referenceLength[i];
+            p.cd              = s.cd[i];
+            p.clAlpha         = s.clAlpha[i];
+            p.clFin           = s.clFin[i];
+            p.clMax           = s.clMax[i];
+            p.tailControl     = s.tailControl[i];
+            p.tables          = s.aeroTables[i];
+            p.inertiaX        = s.Ixx[i];
+            p.inertiaY        = s.Iyy[i];
+            p.inertiaZ        = s.Izz[i];
+            p.finSets         = (s.finSets.size() > i) ? s.finSets[i]
+                                                      : decltype(p.finSets){};
+            p.airframe        = (s.airframe.size() > i) ? s.airframe[i] : nullptr;
+        }
+    }
+
     void CPUBackend::evaluateDerivativeChunk(
         const PhysicsBlock& s,
         const ControlBlock& c,
@@ -164,28 +186,10 @@ namespace StrikeEngine::Kernel
                              s.vx[i] - wind[0], s.vy[i] - wind[1],
                              s.vz[i] - wind[2], u, v, w);
 
-            // 3. Aerodynamics: body-frame forces and moments.
-            Models::AeroParams params;
-            params.referenceArea   = s.referenceArea[i];
-            params.referenceLength = s.referenceLength[i];
-            params.cd              = s.cd[i];
-            params.clAlpha         = s.clAlpha[i];
-            params.clFin           = s.clFin[i];
-            params.clMax           = s.clMax[i];
-            params.tailControl     = s.tailControl[i];
-            params.tables          = s.aeroTables[i];
-            params.fins            = s.fins[i];
-            // Rotational inertia, so the aero model can bound its moment as an
-            // angular acceleration.
-            if (i < s.Ixx.size()) params.inertiaX = s.Ixx[i];
-            if (i < s.Iyy.size()) params.inertiaY = s.Iyy[i];
-            if (i < s.Izz.size()) params.inertiaZ = s.Izz[i];
-            if (s.finSets.size() > i) {
-                params.finSets     = s.finSets[i];
-            }
-            if (s.airframe.size() > i) {
-                params.airframe    = s.airframe[i];
-            }
+            // 3. Aerodynamics: body-frame forces and moments. Parameters are
+            // cached per step (see refreshAeroParams); the cached entry for this
+            // entity carries the same values the block would supply here.
+            const Models::AeroParams& params = aeroParamCache[i];
 
             const Models::AeroWrench aeroWrench = aero->computeWrench(
                 u, v, w,
@@ -500,6 +504,7 @@ namespace StrikeEngine::Kernel
         double dt)
     {
         ensureDerivCapacity(physics);
+        refreshAeroParams(physics);
         currentStepDt = (dt > 0.0) ? dt : 0.01;
 
         // Derivative callback: pure function of (state, time) with fixed

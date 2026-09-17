@@ -37,11 +37,7 @@ namespace StrikeEngine::Models {
         // Optional geometric fins (trapezoidal/elliptical/free-form). When
         // non-null they replace the abstract fin terms (clFin in lift/side
         // force, CM_delta/Cl_delta moments) with geometry-derived,
-        // Mach-dependent terms; nullptr keeps the byte-identical legacy path.
-        std::shared_ptr<const Models::FinsGeometry> fins;
-
-        // Optional multiple geometric fin sets (e.g. canards + tails).
-        // When non-empty, all fin sets are composited in the force and moment calculations.
+        // Mach-dependent terms; empty keeps the byte-identical legacy path.
         std::vector<std::shared_ptr<const Models::FinsGeometry>> finSets;
 
         // Optional aircraft airframe. When present the entity is a wing-body-tail
@@ -70,14 +66,16 @@ namespace StrikeEngine::Models {
                 : kFallbackMomentCeiling;
         }
 
-        std::vector<std::shared_ptr<const Models::FinsGeometry>> activeFins() const {
-            if (!finSets.empty()) {
-                return finSets;
-            }
-            if (fins) {
-                return {fins};
-            }
-            return {};
+        /**
+         * @brief The fin sets, by reference.
+         *
+         * Returned by reference rather than by value: this is read once per
+         * aero evaluation, which runs several times per step per entity, so a
+         * returned vector would allocate on the hot path. A single fin set is
+         * a one-element list.
+         */
+        const std::vector<std::shared_ptr<const Models::FinsGeometry>>& activeFins() const {
+            return finSets;
         }
     };
 
