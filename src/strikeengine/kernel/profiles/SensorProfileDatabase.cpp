@@ -4,9 +4,10 @@
 
 namespace StrikeEngine::Kernel {
 
-    bool SensorProfileDatabase::loadProfile(const std::string& file_path) {
+    bool SensorProfileDatabase::loadProfile(const std::string& file_path, std::string* error) {
         std::ifstream f(file_path);
         if (!f.is_open()) {
+            if (error) *error = "cannot open file";
             return false;
         }
 
@@ -61,10 +62,8 @@ namespace StrikeEngine::Kernel {
             cfg.maxGyroBiasEstimate = data.value("max_gyro_bias_estimate", cfg.maxGyroBiasEstimate);
             cfg.baroAttitudeCorrectionEnabled = data.value("baro_attitude_correction_enabled", cfg.baroAttitudeCorrectionEnabled);
             _sensor = cfg;
-        } catch (const std::exception&) {
-            // Any load failure (syntax, missing required key, wrong type)
-            // makes the profile unloadable; createVehicle translates this
-            // into a friendly std::runtime_error.
+        } catch (const std::exception& e) {
+            if (error) *error = e.what();
             return false;
         }
 

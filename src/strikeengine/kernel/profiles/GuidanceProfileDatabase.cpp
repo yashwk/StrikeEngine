@@ -22,9 +22,10 @@ namespace StrikeEngine::Kernel {
         return def;
     }
 
-    bool GuidanceProfileDatabase::loadProfile(const std::string& file_path) {
+    bool GuidanceProfileDatabase::loadProfile(const std::string& file_path, std::string* error) {
         std::ifstream f(file_path);
         if (!f.is_open()) {
+            if (error) *error = "cannot open file";
             return false;
         }
 
@@ -119,7 +120,8 @@ namespace StrikeEngine::Kernel {
             cfg.datalinkTargetId = getIntKey(data, "datalink_target_id", "datalinkTargetId", cfg.datalinkTargetId);
 
             _guidanceAutopilot = cfg;
-        } catch (const std::exception&) {
+        } catch (const std::exception& e) {
+            if (error) *error = e.what();
             return false;
         }
 

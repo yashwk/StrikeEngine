@@ -5,9 +5,10 @@
 
 namespace StrikeEngine::Kernel {
 
-    bool MotorProfileDatabase::loadProfile(const std::string& file_path) {
+    bool MotorProfileDatabase::loadProfile(const std::string& file_path, std::string* error) {
         std::ifstream f(file_path);
         if (!f.is_open()) {
+            if (error) *error = "cannot open file";
             return false;
         }
 
@@ -41,13 +42,14 @@ namespace StrikeEngine::Kernel {
                 stage.enginePositionZ = stageJson.value("engine_position_z", stage.enginePositionZ);
                 cfg.stages.push_back(stage);
             }
-            std::string error;
-            if (!validatePropulsionConfig(cfg, &error)) return false;
+            std::string curveError;
+            if (!validatePropulsionConfig(cfg, &curveError)) {
+                if (error) *error = curveError;
+                return false;
+            }
             _propulsion = cfg;
-        } catch (const std::exception&) {
-            // Any load failure (syntax, missing required key, wrong type)
-            // makes the profile unloadable; createVehicle translates this
-            // into a friendly std::runtime_error.
+        } catch (const std::exception& e) {
+            if (error) *error = e.what();
             return false;
         }
 

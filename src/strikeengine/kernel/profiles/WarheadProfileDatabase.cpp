@@ -12,9 +12,10 @@ namespace StrikeEngine::Kernel {
         throw std::invalid_argument("Unknown fusing type: " + s);
     }
 
-    bool WarheadProfileDatabase::loadProfile(const std::string& file_path) {
+    bool WarheadProfileDatabase::loadProfile(const std::string& file_path, std::string* error) {
         std::ifstream f(file_path);
         if (!f.is_open()) {
+            if (error) *error = "cannot open file";
             return false;
         }
 
@@ -64,11 +65,13 @@ namespace StrikeEngine::Kernel {
             cfg.tailOnLethalityFactor = getDouble("tail_on_lethality_factor", "tailOnLethalityFactor", cfg.tailOnLethalityFactor);
 
             if (cfg.falloffRadiusM > 0.0 && cfg.falloffRadiusM < cfg.lethalRadiusM) {
+                if (error) *error = "falloff_radius_m is below lethal_radius_m";
                 return false;
             }
 
             _warhead = cfg;
-        } catch (const std::exception&) {
+        } catch (const std::exception& e) {
+            if (error) *error = e.what();
             return false;
         }
 

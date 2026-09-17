@@ -16,9 +16,10 @@ namespace StrikeEngine::Kernel {
         }
     }
 
-    bool AeroProfileDatabase::loadProfile(const std::string& file_path) {
+    bool AeroProfileDatabase::loadProfile(const std::string& file_path, std::string* error) {
         std::ifstream f(file_path);
         if (!f.is_open()) {
+            if (error) *error = "cannot open file";
             return false;
         }
 
@@ -65,7 +66,9 @@ namespace StrikeEngine::Kernel {
                     cfg.tables.clRollTable =
                         t.at("cl_roll_table").get<std::vector<std::vector<double>>>();
                 }
-                if (!cfg.tables.isValid()) {
+                std::string tableError;
+                if (!cfg.tables.isValid(&tableError)) {
+                    if (error) *error = "aero_tables: " + tableError;
                     return false;
                 }
             }
@@ -83,10 +86,8 @@ namespace StrikeEngine::Kernel {
                 AeroSchema::airframeFromJson(data.at("airframe"), cfg.airframe);
             }
             _aero = cfg;
-        } catch (const std::exception&) {
-            // Any load failure (syntax, missing required key, wrong type)
-            // makes the profile unloadable; createVehicle translates this
-            // into a friendly std::runtime_error.
+        } catch (const std::exception& e) {
+            if (error) *error = e.what();
             return false;
         }
 

@@ -6,9 +6,10 @@
 
 namespace StrikeEngine::Kernel {
 
-    bool SeekerProfileDatabase::loadProfile(const std::string& file_path) {
+    bool SeekerProfileDatabase::loadProfile(const std::string& file_path, std::string* error) {
         std::ifstream f(file_path);
         if (!f.is_open()) {
+            if (error) *error = "cannot open file";
             return false;
         }
 
@@ -65,10 +66,8 @@ namespace StrikeEngine::Kernel {
             cfg.passiveRfDutyCycle = data.value("passive_rf_duty_cycle", cfg.passiveRfDutyCycle);
             cfg.illuminatorEntityId = data.value("illuminator_entity_id", cfg.illuminatorEntityId);
             _seeker = cfg;
-        } catch (const std::exception&) {
-            // Any load failure (syntax, missing required key, wrong type,
-            // unknown type string) makes the profile unloadable;
-            // createVehicle translates this into a friendly std::runtime_error.
+        } catch (const std::exception& e) {
+            if (error) *error = e.what();
             return false;
         }
 

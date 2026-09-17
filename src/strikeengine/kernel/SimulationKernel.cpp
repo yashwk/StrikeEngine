@@ -39,9 +39,11 @@ namespace StrikeEngine::Kernel {
             const auto it = cache.find(path);
             if (it != cache.end()) return it->second;
             Db db;
-            if (!db.loadProfile(path)) {
+            std::string reason;
+            if (!db.loadProfile(path, &reason)) {
                 throw std::runtime_error(std::string(dbName) +
-                                         " could not load profile '" + path + "'");
+                                         " could not load profile '" + path +
+                                         "': " + reason);
             }
             return cache.emplace(path, extract(db)).first->second;
         }
