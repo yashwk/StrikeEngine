@@ -145,8 +145,10 @@ int main() {
                   ga.gainSchedulingEnabled == true &&
                   ga.refDynamicPressurePa == 45000.0 &&
                   ga.minDynamicPressurePa == 3000.0 &&
-                  ga.maxDynamicPressurePa == 250000.0,
-              "GuidanceProfileDatabase parses all GuidanceAutopilotConfig fields");
+                  ga.maxDynamicPressurePa == 250000.0 &&
+                  ga.kAccelErrP == 0.012 &&
+                  ga.autopilotThreeLoopEnabled == true,
+              "GuidanceProfileDatabase parses the serialized GuidanceAutopilotConfig keys");
 
         WarheadProfileDatabase warhead;
         check(warhead.loadProfile(kFixtures + "warhead_mk1.json"),

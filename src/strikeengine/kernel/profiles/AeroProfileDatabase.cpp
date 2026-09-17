@@ -37,40 +37,8 @@ namespace StrikeEngine::Kernel {
                                   data.value("tailControl", cfg.tailControl));
             cfg.clMax           = data.value("cl_max", cfg.clMax);
             if (data.contains("aero_tables")) {
-                const auto& t = data["aero_tables"];
-                cfg.tables.machBreakpoints =
-                    t.at("mach_breakpoints").get<std::vector<double>>();
-                cfg.tables.aoaBreakpointsRad =
-                    t.at("aoa_breakpoints_rad").get<std::vector<double>>();
-                cfg.tables.clTable =
-                    t.at("cl_table").get<std::vector<std::vector<double>>>();
-                cfg.tables.cdTable =
-                    t.at("cd_table").get<std::vector<std::vector<double>>>();
-                if (t.contains("cm_table")) {
-                    cfg.tables.cmTable =
-                        t.at("cm_table").get<std::vector<std::vector<double>>>();
-                }
-                if (t.contains("beta_breakpoints_rad")) {
-                    cfg.tables.betaBreakpointsRad =
-                        t.at("beta_breakpoints_rad").get<std::vector<double>>();
-                }
-                if (t.contains("cy_table")) {
-                    cfg.tables.cyTable =
-                        t.at("cy_table").get<std::vector<std::vector<double>>>();
-                }
-                if (t.contains("cn_table")) {
-                    cfg.tables.cnTable =
-                        t.at("cn_table").get<std::vector<std::vector<double>>>();
-                }
-                if (t.contains("cl_roll_table")) {
-                    cfg.tables.clRollTable =
-                        t.at("cl_roll_table").get<std::vector<std::vector<double>>>();
-                }
-                std::string tableError;
-                if (!cfg.tables.isValid(&tableError)) {
-                    if (error) *error = "aero_tables: " + tableError;
-                    return false;
-                }
+                cfg.tables = AeroSchema::aeroTablesFromJson(data.at("aero_tables"),
+                                                            "AeroProfileDatabase");
             }
             // Multiple geometric fin sets (canards + tails); `fins` is the
             // single-set legacy form. Both share one schema.

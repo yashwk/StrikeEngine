@@ -181,29 +181,10 @@ void to_json(nlohmann::json& j, const AeroTables& t) {
 }
 
 void from_json(const nlohmann::json& j, AeroTables& t) {
-    t.machBreakpoints = j.at("mach_breakpoints").get<std::vector<double>>();
-    t.aoaBreakpointsRad = j.at("aoa_breakpoints_rad").get<std::vector<double>>();
-    t.clTable = j.at("cl_table").get<std::vector<std::vector<double>>>();
-    t.cdTable = j.at("cd_table").get<std::vector<std::vector<double>>>();
-    if (j.contains("cm_table")) {
-        t.cmTable = j.at("cm_table").get<std::vector<std::vector<double>>>();
-    }
-    if (j.contains("beta_breakpoints_rad")) {
-        t.betaBreakpointsRad = j.at("beta_breakpoints_rad").get<std::vector<double>>();
-    }
-    if (j.contains("cy_table")) {
-        t.cyTable = j.at("cy_table").get<std::vector<std::vector<double>>>();
-    }
-    if (j.contains("cn_table")) {
-        t.cnTable = j.at("cn_table").get<std::vector<std::vector<double>>>();
-    }
-    if (j.contains("cl_roll_table")) {
-        t.clRollTable = j.at("cl_roll_table").get<std::vector<std::vector<double>>>();
-    }
-    std::string err;
-    if (!t.isValid(&err)) {
-        throw std::runtime_error("AeroTables invalid: " + err);
-    }
+    // Single implementation, shared with the aero profile path; see
+    // AeroSchema::aeroTablesFromJson. Kept as the ADL counterpart of the
+    // to_json below for `json.get<AeroTables>()` callers.
+    t = StrikeEngine::Kernel::AeroSchema::aeroTablesFromJson(j, "AeroTables");
 }
 
 } // namespace StrikeEngine::Models
@@ -337,7 +318,7 @@ void from_json(const json& j, AeroConfig& a) {
     a.tailControl = j.value("tail_control", j.value("tailControl", false));
     // Optional: existing files without aero_tables must still load.
     if (j.contains("aero_tables")) {
-        a.tables = j.at("aero_tables").get<Models::AeroTables>();
+        a.tables = AeroSchema::aeroTablesFromJson(j.at("aero_tables"), "AeroConfig");
     }
     if (j.contains("fin_sets") && j.at("fin_sets").is_array()) {
         // Appends, so start from empty: deserializing over a populated config

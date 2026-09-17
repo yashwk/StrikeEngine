@@ -20,5 +20,7 @@
   "gain_scheduling_enabled": true,
   "ref_dynamic_pressure_pa": 45000.0,
   "min_dynamic_pressure_pa": 3000.0,
-  "max_dynamic_pressure_pa": 250000.0
+  "max_dynamic_pressure_pa": 250000.0,
+  "k_accel_err_p": 0.012,
+  "autopilot_three_loop_enabled": true
 }

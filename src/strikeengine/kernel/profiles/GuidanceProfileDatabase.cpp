@@ -106,6 +106,12 @@ namespace StrikeEngine::Kernel {
             cfg.guidanceAuthorityAwareLimitEnabled = getBoolKey(data, "guidance_authority_aware_limit_enabled", "guidanceAuthorityAwareLimitEnabled", cfg.guidanceAuthorityAwareLimitEnabled);
             cfg.minDynamicPressurePa = getDoubleKey(data, "min_dynamic_pressure_pa", "minDynamicPressurePa", cfg.minDynamicPressurePa);
             cfg.maxDynamicPressurePa = getDoubleKey(data, "max_dynamic_pressure_pa", "maxDynamicPressurePa", cfg.maxDynamicPressurePa);
+            // Outer accel loop and the three-loop cascade. serializeVehicleConfig
+            // writes both, so omitting them here silently reverts an exported
+            // three-loop airframe to the legacy direct-fin law (and a disabled
+            // accel error loop back to auto).
+            cfg.kAccelErrP = getDoubleKey(data, "k_accel_err_p", "kAccelErrP", cfg.kAccelErrP);
+            cfg.autopilotThreeLoopEnabled = getBoolKey(data, "autopilot_three_loop_enabled", "autopilotThreeLoopEnabled", cfg.autopilotThreeLoopEnabled);
 
             // Cruise + datalink + TPN-G fields: serializeVehicleConfig writes
             // all of these, so the profile path must read them back too or a

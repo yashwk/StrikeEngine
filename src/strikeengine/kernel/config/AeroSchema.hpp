@@ -83,6 +83,41 @@ namespace StrikeEngine::Kernel::AeroSchema {
     }
 
     /**
+     * @brief Parses an `aero_tables` block.
+     * @param context Caller name used in the error message.
+     * @throws std::runtime_error on a missing breakpoint/table key or a table
+     *         that fails AeroTables::isValid (shape mismatch).
+     */
+    inline Models::AeroTables aeroTablesFromJson(const nlohmann::json& t, const char* context)
+    {
+        Models::AeroTables tables;
+        tables.machBreakpoints = t.at("mach_breakpoints").get<std::vector<double>>();
+        tables.aoaBreakpointsRad = t.at("aoa_breakpoints_rad").get<std::vector<double>>();
+        tables.clTable = t.at("cl_table").get<std::vector<std::vector<double>>>();
+        tables.cdTable = t.at("cd_table").get<std::vector<std::vector<double>>>();
+        if (t.contains("cm_table")) {
+            tables.cmTable = t.at("cm_table").get<std::vector<std::vector<double>>>();
+        }
+        if (t.contains("beta_breakpoints_rad")) {
+            tables.betaBreakpointsRad = t.at("beta_breakpoints_rad").get<std::vector<double>>();
+        }
+        if (t.contains("cy_table")) {
+            tables.cyTable = t.at("cy_table").get<std::vector<std::vector<double>>>();
+        }
+        if (t.contains("cn_table")) {
+            tables.cnTable = t.at("cn_table").get<std::vector<std::vector<double>>>();
+        }
+        if (t.contains("cl_roll_table")) {
+            tables.clRollTable = t.at("cl_roll_table").get<std::vector<std::vector<double>>>();
+        }
+        std::string error;
+        if (!tables.isValid(&error)) {
+            throw std::runtime_error(std::string(context) + ": aero_tables invalid: " + error);
+        }
+        return tables;
+    }
+
+    /**
      * @brief Parses an `airframe` block into @p out.
      * @throws std::runtime_error if a required key is missing.
      */
