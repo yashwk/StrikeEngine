@@ -606,7 +606,11 @@ namespace StrikeEngine::Kernel {
                     fc.spanM, fc.sweepLengthM,
                     fc.positionM, fc.cantAngleDeg,
                     fc.shapePoints, resolved.aero.referenceArea, &err,
-                    fc.steerable);
+                    fc.steerable,
+                    fc.airfoil, fc.thicknessRatio, fc.maxThicknessLocation,
+                    fc.leadingEdgeRadius, fc.trailingEdgeThickness,
+                    fc.crankFraction, fc.crankChordFactor,
+                    fc.midChordLandFraction);
                 if (!g) {
                     throw std::runtime_error("Invalid fins configuration: " + err);
                 }

@@ -224,6 +224,8 @@ static json finConfigToJson(const FinsConfig& fin) {
     switch (fin.shape) {
         case Models::FinShape::Trapezoidal: f["shape"] = "trapezoidal"; break;
         case Models::FinShape::Elliptical:  f["shape"] = "elliptical";  break;
+        case Models::FinShape::Delta:       f["shape"] = "delta";       break;
+        case Models::FinShape::Cranked:     f["shape"] = "cranked";     break;
         case Models::FinShape::FreeForm:    f["shape"] = "freeform";    break;
     }
     f["count"] = fin.count;
@@ -232,9 +234,27 @@ static json finConfigToJson(const FinsConfig& fin) {
     f["root_chord_m"] = fin.rootChordM;
     f["span_m"] = fin.spanM;
     f["steerable"] = fin.steerable;
-    if (fin.shape == Models::FinShape::Trapezoidal) {
+    switch (fin.airfoil) {
+        case Models::FinAirfoil::FlatPlate:   f["airfoil"] = "flat_plate";   break;
+        case Models::FinAirfoil::DoubleWedge: f["airfoil"] = "double_wedge"; break;
+        case Models::FinAirfoil::Biconvex:    f["airfoil"] = "biconvex";     break;
+        case Models::FinAirfoil::Hexagonal:   f["airfoil"] = "hexagonal";    break;
+    }
+    f["thickness_ratio"] = fin.thicknessRatio;
+    f["max_thickness_location"] = fin.maxThicknessLocation;
+    f["leading_edge_radius"] = fin.leadingEdgeRadius;
+    f["trailing_edge_thickness"] = fin.trailingEdgeThickness;
+    if (fin.shape != Models::FinShape::Delta) {
         f["tip_chord_m"] = fin.tipChordM;
+    }
+    if (fin.shape == Models::FinShape::Trapezoidal ||
+        fin.shape == Models::FinShape::Delta ||
+        fin.shape == Models::FinShape::Cranked) {
         f["sweep_length_m"] = fin.sweepLengthM;
+    }
+    if (fin.shape == Models::FinShape::Cranked) {
+        f["crank_fraction"] = fin.crankFraction;
+        f["crank_chord_factor"] = fin.crankChordFactor;
     }
     if (fin.shape == Models::FinShape::FreeForm) {
         f["shape_points"] = fin.shapePoints;

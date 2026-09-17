@@ -18,15 +18,25 @@ namespace StrikeEngine::Kernel {
      */
     struct FinsConfig {
         Models::FinShape shape = Models::FinShape::Trapezoidal;
-        int    count = 0;                  // 0 = disabled, >= 3 enabled
+        int    count = 0;
         double rootChordM = 0.0;
-        double tipChordM  = 0.0;           // trapezoidal only
+        double tipChordM  = 0.0;
         double spanM      = 0.0;
-        double sweepLengthM = -1.0;        // <0 -> root - tip (trapezoidal)
+        double sweepLengthM = -1.0;
         double positionM    = 0.0;
         double cantAngleDeg = 0.0;
-        std::vector<std::array<double, 2>> shapePoints; // free-form only
-        bool steerable = true; // true = responds to control deflections (finPitch/finYaw/finRoll)
+        std::vector<std::array<double, 2>> shapePoints;
+        bool steerable = true;
+
+        Models::FinAirfoil airfoil = Models::FinAirfoil::FlatPlate;
+        double thicknessRatio = 0.0;
+        double maxThicknessLocation = 0.5;
+        double leadingEdgeRadius = 0.0;
+        double trailingEdgeThickness = 0.0;
+
+        double crankFraction = 0.5;
+        double crankChordFactor = 0.5;
+        double midChordLandFraction = 0.33;
 
         bool enabled() const { return count >= 3; }
     };

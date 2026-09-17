@@ -393,6 +393,110 @@ static void multiFinSetChecks()
     check(rt.aero.allFinSets().size() == 2, "allFinSets() returns both sets");
 }
 
+static void planformChecks()
+{
+    std::printf("\n-- polygon planform engine --\n");
+    const double r = 0.1;
+    const double refArea = kPi * r * r;
+
+    // The polygon metrics must reproduce the closed forms for the shapes that
+    // have them, and must be independent of the caller's y origin.
+    {
+        std::string err;
+        auto rect = [&](double y0) {
+            return buildFinsGeometry(FinShape::FreeForm, 4, 0.0, 0.0, 0.0, -1.0,
+                                     0.0, 0.0,
+                                     {{0.0, y0}, {0.0, y0 + 0.2},
+                                      {0.5, y0 + 0.2}, {0.5, y0}},
+                                     refArea, &err);
+        };
+        auto a = rect(0.0);
+        auto b = rect(0.2);
+        auto c = rect(1.0);
+        check(a && b && c, "free-form fin builds at every y origin");
+        if (a && b && c) {
+            const bool same =
+                std::abs(a->Af - b->Af) < 1e-12 && std::abs(b->Af - c->Af) < 1e-12 &&
+                std::abs(a->cpz - b->cpz) < 1e-12 && std::abs(b->cpz - c->cpz) < 1e-12 &&
+                std::abs(a->Yma - b->Yma) < 1e-12 && std::abs(b->Yma - c->Yma) < 1e-12 &&
+                std::abs(a->span - c->span) < 1e-12;
+            check(same, "free-form metrics are invariant under a y-origin shift");
+            check(std::abs(a->Af - 0.1) < 1e-12, "free-form rectangle area = 0.1");
+            check(std::abs(a->cpz - 0.125) < 1e-12,
+                  "free-form rectangle cpz = quarter-MAC = 0.125");
+            check(std::abs(a->Yma - 0.1) < 1e-12, "free-form rectangle Yma = 0.1");
+        }
+    }
+
+    // Delta preset: right triangle, area = root*span/2, quarter-MAC CP.
+    {
+        std::string err;
+        auto g = buildFinsGeometry(FinShape::Delta, 4, 0.5, 0.0, 0.4, -1.0,
+                                   0.0, 0.0, {}, refArea, &err);
+        check(g != nullptr, "delta fin builds");
+        if (g) {
+            check(std::abs(g->Af - 0.1) < 1e-12, "delta area = root*span/2 = 0.1");
+            check(g->Yma > 0.0, "delta Yma is positive");
+            check(g->cpz > 0.0 && g->cpz < 0.5, "delta cpz is inside the root chord");
+        }
+    }
+
+    // Cranked (double-delta) preset: six-vertex polygon, larger area than the
+    // straight taper it would otherwise be.
+    {
+        std::string err;
+        auto g = buildFinsGeometry(FinShape::Cranked, 4, 0.5, 0.15, 0.4, 0.2,
+                                   0.0, 0.0, {}, refArea, &err, true,
+                                   FinAirfoil::FlatPlate, 0.0, 0.5, 0.0, 0.0,
+                                   0.4, 0.6);
+        check(g != nullptr, "cranked fin builds");
+        if (g) {
+            check(g->Af > 0.1 && g->Af < 0.25, "cranked area lies between root and taper");
+            check(g->Yma > 0.0 && g->cpz > 0.0, "cranked metrics are positive");
+        }
+        std::string bad;
+        auto rejected = buildFinsGeometry(FinShape::Cranked, 4, 0.5, 0.15, 0.4, 0.2,
+                                          0.0, 0.0, {}, refArea, &bad, true,
+                                          FinAirfoil::FlatPlate, 0.0, 0.5, 0.0, 0.0,
+                                          1.5, 0.6);
+        check(rejected == nullptr, "cranked rejects a crank fraction outside (0,1)");
+    }
+
+    // Airfoil section parameters are carried through and validated.
+    {
+        std::string err;
+        auto g = buildFinsGeometry(FinShape::Trapezoidal, 4, 0.5, 0.35, 0.25, 0.15,
+                                   0.0, 0.0, {}, refArea, &err, true,
+                                   FinAirfoil::DoubleWedge, 0.05, 0.4, 0.001, 0.002);
+        check(g != nullptr, "fin with an airfoil section builds");
+        if (g) {
+            check(g->airfoil == FinAirfoil::DoubleWedge, "airfoil type is preserved");
+            check(std::abs(g->thicknessRatio - 0.05) < 1e-12, "thickness ratio preserved");
+            check(std::abs(g->maxThicknessLocation - 0.4) < 1e-12,
+                  "max thickness location preserved");
+            check(std::abs(g->leadingEdgeRadius - 0.001) < 1e-12 &&
+                      std::abs(g->trailingEdgeThickness - 0.002) < 1e-12,
+                  "edge radii preserved");
+        }
+        std::string bad;
+        auto rejected = buildFinsGeometry(FinShape::Trapezoidal, 4, 0.5, 0.35, 0.25, 0.15,
+                                          0.0, 0.0, {}, refArea, &bad, true,
+                                          FinAirfoil::DoubleWedge, 0.9);
+        check(rejected == nullptr, "thickness ratio above 0.5 is rejected");
+    }
+
+    // A flat-plate fin with zero thickness must equal the legacy geometry: the
+    // airfoil fields default to inert.
+    {
+        std::string err;
+        auto g = buildFinsGeometry(FinShape::Trapezoidal, 4, 0.5, 0.35, 0.25, 0.15,
+                                   0.0, 0.0, {}, refArea, &err);
+        check(g && g->airfoil == FinAirfoil::FlatPlate &&
+                  g->thicknessRatio == 0.0,
+              "default fin is a flat plate with zero thickness");
+    }
+}
+
 int main()
 {
     std::printf("=== fins: RocketPy geometric fin model (trapezoidal/elliptical/free-form) ===\n");
@@ -402,6 +506,7 @@ int main()
     multiFinSetChecks();
     serializationChecks();
     validationChecks();
+    planformChecks();
     flightChecks();
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

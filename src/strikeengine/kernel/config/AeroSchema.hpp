@@ -30,10 +30,25 @@ namespace StrikeEngine::Kernel::AeroSchema {
         const std::string shape = f.value("shape", std::string("trapezoidal"));
         if (shape == "trapezoidal") fin.shape = Models::FinShape::Trapezoidal;
         else if (shape == "elliptical") fin.shape = Models::FinShape::Elliptical;
+        else if (shape == "delta") fin.shape = Models::FinShape::Delta;
+        else if (shape == "cranked") fin.shape = Models::FinShape::Cranked;
         else if (shape == "freeform") fin.shape = Models::FinShape::FreeForm;
         else {
             throw std::runtime_error(std::string(context) +
                                      ": unknown fins shape '" + shape + "'");
+        }
+        const std::string airfoil = f.value("airfoil", std::string("flat_plate"));
+        if (airfoil == "flat_plate" || airfoil == "Flat Slab" || airfoil == "flat_slab") {
+            fin.airfoil = Models::FinAirfoil::FlatPlate;
+        } else if (airfoil == "double_wedge" || airfoil == "Double Wedge") {
+            fin.airfoil = Models::FinAirfoil::DoubleWedge;
+        } else if (airfoil == "biconvex" || airfoil == "Biconvex") {
+            fin.airfoil = Models::FinAirfoil::Biconvex;
+        } else if (airfoil == "hexagonal" || airfoil == "Hexagonal") {
+            fin.airfoil = Models::FinAirfoil::Hexagonal;
+        } else {
+            throw std::runtime_error(std::string(context) +
+                                     ": unknown fin airfoil '" + airfoil + "'");
         }
         fin.count = f.at("count").get<int>();
         fin.positionM = f.value("position_m", 0.0);
@@ -43,6 +58,15 @@ namespace StrikeEngine::Kernel::AeroSchema {
         fin.tipChordM = f.value("tip_chord_m", 0.0);
         fin.sweepLengthM = f.value("sweep_length_m", -1.0);
         fin.steerable = f.value("steerable", true);
+        fin.thicknessRatio = f.contains("thickness_ratio")
+            ? f.value("thickness_ratio", 0.0)
+            : f.value("thickness_chord_ratio", 0.0);
+        fin.maxThicknessLocation = f.value("max_thickness_location", 0.5);
+        fin.leadingEdgeRadius = f.value("leading_edge_radius", 0.0);
+        fin.trailingEdgeThickness = f.value("trailing_edge_thickness", 0.0);
+        fin.crankFraction = f.value("crank_fraction", 0.5);
+        fin.crankChordFactor = f.value("crank_chord_factor", 0.5);
+        fin.midChordLandFraction = f.value("mid_chord_land_fraction", 0.33);
         if (f.contains("shape_points")) {
             fin.shapePoints =
                 f.at("shape_points").get<std::vector<std::array<double, 2>>>();
