@@ -180,6 +180,8 @@ namespace StrikeEngine::Kernel {
         const WarheadState& getWarhead(PhysicsId id) const;
         double getSimulationTime() const { return time.currentTime(); }
         std::size_t getEntityCount() const { return physicsBlock.size - freeList.size(); }
+        const EnvironmentConfig& getEnvironment() const { return environment; }
+        EnvironmentConfig& getEnvironment() { return environment; }
 
     private:
         PhysicsBlock physicsBlock;
