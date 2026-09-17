@@ -610,6 +610,86 @@ static void dragModelChecks()
     }
 }
 
+static void controlSurfaceChecks()
+{
+    std::printf("\n-- control surface model --\n");
+    const double r = 0.1;
+    const double refArea = kPi * r * r;
+
+    auto fin = [&](bool steerable, FinControlType type, double fraction) {
+        std::string err;
+        return buildFinsGeometry(FinShape::Trapezoidal, 4, 0.5, 0.35, 0.25, 0.15,
+                                 0.0, 0.0, {}, refArea, &err, steerable,
+                                 FinAirfoil::FlatPlate, 0.0, 0.5, 0.0, 0.0,
+                                 0.5, 0.5, 0.33, type, fraction);
+    };
+
+    // An all-moving surface keeps full authority regardless of fraction: the
+    // whole surface rotates.
+    {
+        auto g = fin(true, FinControlType::AllMoving, 0.3);
+        check(g != nullptr && std::abs(g->controlEffectiveness() - 1.0) < 1e-12,
+              "all-moving fin keeps full authority at any control fraction");
+    }
+
+    // A trailing-edge flap scales with the square root of its chord fraction,
+    // capped at 0.7 of the all-moving authority.
+    {
+        auto full = fin(true, FinControlType::TrailingEdgeFlap, 1.0);
+        auto half = fin(true, FinControlType::TrailingEdgeFlap, 0.25);
+        auto none = fin(true, FinControlType::TrailingEdgeFlap, 0.0);
+        check(full && half && none, "flap fins build");
+        if (full && half && none) {
+            check(std::abs(full->controlEffectiveness() - 0.7) < 1e-12,
+                  "a full-chord flap delivers 0.7 of all-moving authority");
+            check(std::abs(half->controlEffectiveness() - 0.35) < 1e-12,
+                  "a quarter-chord flap delivers half of a full flap");
+            check(none->controlEffectiveness() == 0.0,
+                  "a zero-fraction flap has no authority");
+            check(half->controlEffectiveness() < full->controlEffectiveness(),
+                  "flap authority grows with chord fraction");
+        }
+    }
+
+    // A non-steerable fin has no authority whatever its control type.
+    {
+        auto g = fin(false, FinControlType::AllMoving, 1.0);
+        check(g && g->controlEffectiveness() == 0.0,
+              "non-steerable fin has zero control authority");
+    }
+
+    // The effectiveness must actually reduce control authority in the wrench:
+    // same geometry, same command, less deflection for a flap.
+    {
+        std::string err;
+        auto build = [&](FinControlType type, double fraction) {
+            auto g = buildFinsGeometry(FinShape::Trapezoidal, 4, 0.5, 0.35, 0.25, 0.15,
+                                       -1.0, 0.0, {}, refArea, &err, true,
+                                       FinAirfoil::FlatPlate, 0.0, 0.5, 0.0, 0.0,
+                                       0.5, 0.5, 0.33, type, fraction);
+            AeroParams p;
+            p.referenceArea = refArea;
+            p.referenceLength = 2.0 * r;
+            p.fins = g;
+            return p;
+        };
+        BasicAeroModel model;
+        // Kept below the moment ceiling so the comparison measures the control
+        // model rather than the clamp.
+        const double V = 50.0, rho = 1.0, a = 340.0;
+        const auto allMoving = model.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                                   0.1, 0.0, 0.0, rho, a,
+                                                   build(FinControlType::AllMoving, 1.0));
+        const auto flap = model.computeWrench(V, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                              0.1, 0.0, 0.0, rho, a,
+                                              build(FinControlType::TrailingEdgeFlap, 0.25));
+        check(std::abs(allMoving.torque_y) > 0.0 &&
+                  std::abs(flap.torque_y) > 0.0 &&
+                  std::abs(allMoving.torque_y) > std::abs(flap.torque_y),
+              "a flap produces less pitch moment than an all-moving fin");
+    }
+}
+
 int main()
 {
     std::printf("=== fins: RocketPy geometric fin model (trapezoidal/elliptical/free-form) ===\n");
@@ -621,6 +701,7 @@ int main()
     validationChecks();
     planformChecks();
     dragModelChecks();
+    controlSurfaceChecks();
     flightChecks();
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

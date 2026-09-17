@@ -67,6 +67,14 @@ namespace StrikeEngine::Kernel::AeroSchema {
         fin.crankFraction = f.value("crank_fraction", 0.5);
         fin.crankChordFactor = f.value("crank_chord_factor", 0.5);
         fin.midChordLandFraction = f.value("mid_chord_land_fraction", 0.33);
+        const std::string control = f.value("control_type", std::string("all_moving"));
+        if (control == "all_moving") fin.controlType = 0;
+        else if (control == "trailing_edge_flap") fin.controlType = 1;
+        else {
+            throw std::runtime_error(std::string(context) +
+                                     ": unknown fin control type '" + control + "'");
+        }
+        fin.controlFraction = f.value("control_fraction", 1.0);
         if (f.contains("shape_points")) {
             fin.shapePoints =
                 f.at("shape_points").get<std::vector<std::array<double, 2>>>();

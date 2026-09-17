@@ -238,7 +238,7 @@ namespace StrikeEngine::Models {
                 for (const auto& f : fList) {
                     if (!f) continue;
                     const double clFin = f->clAlpha(mach);
-                    const double effPitch = f->steerable ? finPitch : 0.0;
+                    const double effPitch = f->controlEffectiveness() * finPitch;
                     // The deflection's local-AoA contribution is SIGNED by the
                     // fin CP lever arm so the control FORCE matches the coded
                     // +|xcp|*effPitch nose-up control MOMENT for both canards
@@ -276,7 +276,7 @@ namespace StrikeEngine::Models {
                 for (const auto& f : fList) {
                     if (!f) continue;
                     const double clFin = f->clAlpha(mach);
-                    const double effYaw = f->steerable ? finYaw : 0.0;
+                    const double effYaw = f->controlEffectiveness() * finYaw;
                     // Yaw mirrors the pitch fix with the OPPOSITE sign: the
                     // coded +|xcp|*effYaw nose-right control moment corresponds
                     // to a tail fin pushing the tail LEFT (-Y force, i.e. a
@@ -360,9 +360,9 @@ namespace StrikeEngine::Models {
                     if (!f) continue;
                     const double clFin = f->clAlpha(mach);
                     const double xcp = f->cpLeverArmM;
-                    const double effPitch = f->steerable ? finPitch : 0.0;
-                    const double effYaw = f->steerable ? finYaw : 0.0;
-                    const double effRoll = f->steerable ? finRoll : 0.0;
+                    const double effPitch = f->controlEffectiveness() * finPitch;
+                    const double effYaw = f->controlEffectiveness() * finYaw;
+                    const double effRoll = f->controlEffectiveness() * finRoll;
 
                     // Roll damping needs the 1/V the RocketPy reference
                     // carries (q*S*l^2*cld*omega/(2V)); rollDampingCoeff is

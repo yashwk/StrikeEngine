@@ -216,6 +216,11 @@ namespace StrikeEngine::Models {
         return p;
     }
 
+    enum class FinControlType : uint8_t {
+        AllMoving,
+        TrailingEdgeFlap
+    };
+
     struct FinDragTerms {
         double wave = 0.0;
         double skinFriction = 0.0;
@@ -256,6 +261,16 @@ namespace StrikeEngine::Models {
         double rollForcingInterferenceFactor = 0.0;
         double finNumCorrection = 0.0;
         bool steerable = true;
+        FinControlType controlType = FinControlType::AllMoving;
+        double controlFraction = 1.0;
+
+        double controlEffectiveness() const
+        {
+            if (!steerable) return 0.0;
+            const double frac = std::clamp(controlFraction, 0.0, 1.0);
+            if (controlType == FinControlType::AllMoving) return 1.0;
+            return std::max(0.0, std::min(1.0, 0.7 * std::sqrt(frac)));
+        }
 
         double clAlphaSingle(double mach) const {
             const double m2 = mach * mach;
@@ -337,7 +352,9 @@ namespace StrikeEngine::Models {
         double trailingEdgeThickness = 0.0,
         double crankFraction = 0.5,
         double crankChordFactor = 0.5,
-        double midChordLandFraction = 0.33)
+        double midChordLandFraction = 0.33,
+        FinControlType controlType = FinControlType::AllMoving,
+        double controlFraction = 1.0)
     {
         auto fail = [&](const char* msg) {
             if (error) *error = msg;
@@ -392,6 +409,8 @@ namespace StrikeEngine::Models {
         g->positionM = positionM;
         g->cantRad = cantAngleDeg * kFinPi / 180.0;
         g->steerable = steerable;
+        g->controlType = controlType;
+        g->controlFraction = std::clamp(controlFraction, 0.0, 1.0);
         g->thicknessRatio = thicknessRatio;
         g->maxThicknessLocation = std::clamp(maxThicknessLocation, 0.05, 0.95);
         g->leadingEdgeRadius = std::max(0.0, leadingEdgeRadius);

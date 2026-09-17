@@ -610,7 +610,10 @@ namespace StrikeEngine::Kernel {
                     fc.airfoil, fc.thicknessRatio, fc.maxThicknessLocation,
                     fc.leadingEdgeRadius, fc.trailingEdgeThickness,
                     fc.crankFraction, fc.crankChordFactor,
-                    fc.midChordLandFraction);
+                    fc.midChordLandFraction,
+                    (fc.controlType == 1) ? Models::FinControlType::TrailingEdgeFlap
+                                          : Models::FinControlType::AllMoving,
+                    fc.controlFraction);
                 if (!g) {
                     throw std::runtime_error("Invalid fins configuration: " + err);
                 }

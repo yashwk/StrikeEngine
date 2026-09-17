@@ -37,6 +37,8 @@ namespace StrikeEngine::Kernel {
         double crankFraction = 0.5;
         double crankChordFactor = 0.5;
         double midChordLandFraction = 0.33;
+        int controlType = 0;
+        double controlFraction = 1.0;
 
         bool enabled() const { return count >= 3; }
     };

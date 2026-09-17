@@ -259,6 +259,8 @@ static json finConfigToJson(const FinsConfig& fin) {
     if (fin.shape == Models::FinShape::FreeForm) {
         f["shape_points"] = fin.shapePoints;
     }
+    f["control_type"] = (fin.controlType == 1) ? "trailing_edge_flap" : "all_moving";
+    f["control_fraction"] = fin.controlFraction;
     return f;
 }
 
