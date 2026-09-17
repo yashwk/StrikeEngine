@@ -151,12 +151,9 @@ namespace StrikeEngine::Kernel {
     /**
      * @brief Resolves primaryEntityIndex to a kernel entity id.
      *
-     * primaryEntityIndex is written as an index into the scenario's entity
-     * list, but it is consumed as an index into the kernel's physics block.
-     * Those differ whenever a scenario contains rail-launched entities, which
-     * are not created until they spawn: for such a scenario the list index is
-     * larger than the t=0 entity count. Validating against the list alone (as
-     * the study wrappers used to) therefore let an out-of-range id through.
+     * The index addresses the scenario's entity list but is consumed as an
+     * index into the kernel's physics block. The two differ when a scenario
+     * contains rail-launched entities, which are not created until they spawn.
      *
      * @param kernelEntityCount entities actually created at t=0.
      * @throws std::invalid_argument when the index addresses no live entity.

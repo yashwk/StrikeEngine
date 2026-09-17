@@ -42,15 +42,11 @@ namespace StrikeEngine::Kernel
 			state.wy[i] += scale * d.wy[i];
 			state.wz[i] += scale * d.wz[i];
 
-			// Attitude: integrate the body rate with the exponential map rather
-			// than forming q_dot = 0.5 q (x) (0, w) and adding it. Over an
-			// interval at rate w the exact solution is
-			//     q(scale) = q (x) exp(w * scale / 2),
-			// which stays on the unit sphere by construction. Adding a linear
-			// form to q and renormalizing afterwards introduces a truncation
-			// error and then projects it back onto the sphere, which bounds the
-			// attitude order no matter how accurately the stages are evaluated.
-			// exp(w a) = (cos a, sin(a) * w_hat) with a = |w| scale / 2.
+			// Attitude: apply the exponential map of the body rate, whose exact
+			// solution over the interval is q * exp(w * scale / 2). This stays
+			// on the unit sphere by construction, unlike adding a linear
+			// derivative and renormalizing, whose projection bounds the
+			// achievable attitude order. exp(w a) = (cos a, sin(a) * w_hat).
 			{
 				const double wx = state.wx[i];
 				const double wy = state.wy[i];
@@ -79,7 +75,7 @@ namespace StrikeEngine::Kernel
 			}
 
 			// Renormalize: the product of two unit quaternions is unit, so this
-			// now corrects floating-point round-off only.
+			// corrects floating-point round-off only.
 			const double qn = std::sqrt(state.qw[i] * state.qw[i] + state.qx[i] * state.qx[i] +
 			                            state.qy[i] * state.qy[i] + state.qz[i] * state.qz[i]);
 			const double qinv = (qn > 1e-12) ? 1.0 / qn : 0.0;

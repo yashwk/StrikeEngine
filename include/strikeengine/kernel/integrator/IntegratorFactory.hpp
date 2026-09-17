@@ -10,15 +10,10 @@ namespace StrikeEngine::Kernel
 	/**
 	 * @brief Selects the truth integrator used by the CPU backend.
 	 *
-	 * RK4 is the default. RK45 is an adaptive-step scheme that subdivides
-	 * within the requested step (it never returns a shorter step than asked
-	 * for); see RK45Integrator.
-	 *
-	 * Euler and velocity-Verlet (symplectic) were removed: Euler is
-	 * first-order and unusable for the stiff roll mode, and Verlet is only
-	 * symplectic for a separable Hamiltonian, which a velocity- and
-	 * rate-dependent aerodynamic force does not have. It cost 3 derivative
-	 * evaluations for O(h^2) where RK4 costs 4 for O(h^4).
+	 * RK4 is the default; RK45 adaptively subdivides within the requested step.
+	 * Euler and velocity-Verlet were removed: Euler is first-order, and Verlet
+	 * is only symplectic for a separable Hamiltonian, which a velocity- and
+	 * rate-dependent aerodynamic force is not.
 	 */
 	enum class IntegratorType
 	{
