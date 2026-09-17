@@ -62,6 +62,20 @@ namespace StrikeEngine::Models {
             _rcs_table_dbsm = std::move(transposed);
         }
 
+        // Structural validation, mirroring IRSignatureDatabase: the table must
+        // be [elevation][azimuth] and match the breakpoint counts. Without it a
+        // mis-shaped table loaded silently and getRCS interpolated across the
+        // wrong axis (or clamped to the wrong row), producing a plausible but
+        // wrong RCS with no error.
+        if (_rcs_table_dbsm.size() != _elevation_breakpoints_rad.size()) {
+            return false;
+        }
+        for (const auto& row : _rcs_table_dbsm) {
+            if (row.size() != _azimuth_breakpoints_rad.size()) {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -115,11 +129,19 @@ namespace StrikeEngine::Models {
         const std::size_t col1_r2 = std::min(static_cast<std::size_t>(j - 1), numCols2 - 1);
         const std::size_t col2_r2 = std::min(static_cast<std::size_t>(j), numCols2 - 1);
 
-        // Get the four corner points for interpolation
+        // Get the four corner points for interpolation. The upper index is
+        // clamped separately from `j`/`i`: those are forced to at least 1 so
+        // that `j - 1` is valid, which makes `breakpoints[j]` out of bounds
+        // when an axis has a single entry. Clamping it collapses dAz/dEl to
+        // zero and the guard below returns the tabulated corner.
+        const std::size_t jUp = std::min(static_cast<std::size_t>(j),
+                                         _azimuth_breakpoints_rad.size() - 1);
+        const std::size_t iUp = std::min(static_cast<std::size_t>(i),
+                                         _elevation_breakpoints_rad.size() - 1);
         double az1 = _azimuth_breakpoints_rad[j - 1];
-        double az2 = _azimuth_breakpoints_rad[j];
+        double az2 = _azimuth_breakpoints_rad[jUp];
         double el1 = _elevation_breakpoints_rad[i - 1];
-        double el2 = _elevation_breakpoints_rad[i];
+        double el2 = _elevation_breakpoints_rad[iUp];
 
         double rcs_dbsm_11 = _rcs_table_dbsm[row1][col1_r1];
         double rcs_dbsm_12 = _rcs_table_dbsm[row1][col2_r1];

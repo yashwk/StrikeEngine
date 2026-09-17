@@ -1,0 +1,7 @@
+{
+  "name": "degenerate azimuth axis",
+  "azimuth_breakpoints_deg": [0.0],
+  "elevation_breakpoints_deg": [0.0, 90.0],
+  "radiant_intensity_table_W_per_sr": [[250.0], [250.0]],
+  "description": "Single azimuth breakpoint: no azimuth interval to interpolate over."
+}

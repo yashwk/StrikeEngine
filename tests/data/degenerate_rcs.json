@@ -1,0 +1,6 @@
+{
+  "name": "degenerate azimuth axis",
+  "azimuth_breakpoints_deg": [0.0],
+  "elevation_breakpoints_deg": [0.0, 90.0],
+  "rcs_table_dbsm": [[10.0], [10.0]]
+}

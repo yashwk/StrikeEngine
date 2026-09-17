@@ -1,0 +1,6 @@
+{
+  "name": "malformed table shape",
+  "azimuth_breakpoints_deg": [0.0, 180.0],
+  "elevation_breakpoints_deg": [0.0, 90.0, 180.0],
+  "rcs_table_dbsm": [[0.0, 0.0], [10.0, 10.0]]
+}

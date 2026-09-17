@@ -120,10 +120,19 @@ namespace StrikeEngine::Models {
         const std::size_t col1_r2 = std::min(static_cast<std::size_t>(j - 1), numCols2 - 1);
         const std::size_t col2_r2 = std::min(static_cast<std::size_t>(j), numCols2 - 1);
 
+        // The upper breakpoint index is clamped separately from `i`/`j`: those
+        // are forced to at least 1 so that `j - 1` is valid, which makes
+        // `breakpoints[j]` out of bounds when an axis has a single entry.
+        // Clamping it collapses the denominator to zero and the guard below
+        // returns the tabulated corner.
+        const std::size_t jUp = std::min(static_cast<std::size_t>(j),
+                                         _azimuth_breakpoints_rad.size() - 1);
+        const std::size_t iUp = std::min(static_cast<std::size_t>(i),
+                                         _elevation_breakpoints_rad.size() - 1);
         double az1 = _azimuth_breakpoints_rad[j - 1];
-        double az2 = _azimuth_breakpoints_rad[j];
+        double az2 = _azimuth_breakpoints_rad[jUp];
         double el1 = _elevation_breakpoints_rad[i - 1];
-        double el2 = _elevation_breakpoints_rad[i];
+        double el2 = _elevation_breakpoints_rad[iUp];
 
         double ri_11 = _radiant_intensity_table_W_per_sr[row1][col1_r1];
         double ri_12 = _radiant_intensity_table_W_per_sr[row1][col2_r1];
