@@ -46,6 +46,14 @@ namespace StrikeEngine::Models {
         double fuselageDiameterM = 0.0;
         double fuselageLengthM   = 0.0;
 
+        // Control-surface chord fractions (movable chord / surface chord). These
+        // set the control effectiveness factor tau; 0.3 is a typical transport
+        // elevator/rudder/aileron.
+        double elevatorChordFraction = 0.30;
+        double rudderChordFraction   = 0.30;
+        double aileronChordFraction  = 0.25;
+        double aileronSpanFraction   = 0.35;  // aileron span / semispan (per side)
+
         // Derived semi-empirical terms (Mach-independent base values; the
         // Mach-dependent lift slope is evaluated per-step).
         double cd0              = 0.03;   // parasite + wave drag
@@ -57,7 +65,47 @@ namespace StrikeEngine::Models {
         double tailVolumeV      = 0.0;    // (S_vt * l_vt) / (S_w * b_w)
 
         double referenceLength  = 1.0;    // MAC (for moment/non-dimensionalising)
+
+        // Derived control power (per rad), from tail volume and control
+        // effectiveness. Filled by buildAirframeParams at the low-Mach slope;
+        // the per-step wrench rescales by the current Mach slope ratio.
+        double elevatorPowerPerRad = 0.0;
+        double rudderPowerPerRad   = 0.0;
+        double aileronPowerPerRad  = 0.0;
+
+        // Low-Mach reference slopes, for the per-step Mach rescaling of the
+        // control powers above.
+        double referenceWingSlope  = 0.0;
+        double referenceTailSlopeH = 0.0;
+        double referenceTailSlopeV = 0.0;
     };
+
+    /**
+     * @brief Control-surface effectiveness factor tau.
+     *
+     * The standard plain-flap relation tau = 1 - (theta - sin theta)/pi with
+     * cos(theta) = 2*cf/c - 1, from thin-airfoil theory (Nelson, "Flight
+     * Stability and Automatic Control"). Real values run somewhat lower
+     * because of viscosity; DATCOM's charts are the reference for a refined
+     * value.
+     */
+    inline double controlEffectivenessTau(double chordFraction)
+    {
+        const double f = std::clamp(chordFraction, 0.0, 1.0);
+        if (f <= 0.0) return 0.0;
+        if (f >= 1.0) return 1.0;
+        const double theta = std::acos(std::clamp(2.0 * f - 1.0, -1.0, 1.0));
+        return std::clamp(1.0 - (theta - std::sin(theta)) / M_PI, 0.0, 1.0);
+    }
+
+    /// Finite-surface lift-curve slope (Helmbold/Prandtl) at a given Mach.
+    inline double surfaceLiftSlope(double aspectRatio, double mach)
+    {
+        const double beta = std::sqrt(std::max(1.0 - mach * mach, 0.05));
+        const double ar = std::max(aspectRatio, 0.1);
+        const double twoD = 2.0 * M_PI / beta;
+        return twoD * ar / (2.0 + std::sqrt(4.0 + ar * ar / (beta * beta)));
+    }
 
     /**
      * @brief Build AirframeParams (finite-wing / tail volume long-hand) from
@@ -71,12 +119,18 @@ namespace StrikeEngine::Models {
         double htailSpanM, double htailChordM, double htailPositionM,
         double vtailSpanM, double vtailChordM, double vtailPositionM,
         double fuselageDiameterM, double fuselageLengthM,
-        double cd0, double oswaldEff, double clMax)
+        double cd0, double oswaldEff, double clMax,
+        double elevatorChordFraction = 0.30, double rudderChordFraction = 0.30,
+        double aileronChordFraction = 0.25, double aileronSpanFraction = 0.35)
     {
         (void)wingSweepDeg;  // swept-wing corrections not modelled yet
         if (wingSpanM <= 1e-6 || wingRootChordM <= 1e-6) return nullptr;
 
         auto a = std::make_shared<AirframeParams>();
+        a->elevatorChordFraction = elevatorChordFraction;
+        a->rudderChordFraction   = rudderChordFraction;
+        a->aileronChordFraction  = aileronChordFraction;
+        a->aileronSpanFraction   = aileronSpanFraction;
         a->wingSpanM    = wingSpanM;
         a->wingMeanChordM = 0.5 * (wingRootChordM + wingTipChordM);
         a->wingAreaM2   = wingSpanM * a->wingMeanChordM;
@@ -108,6 +162,40 @@ namespace StrikeEngine::Models {
         const double mac = std::max(a->wingMeanChordM, 1e-9);
         a->tailVolumeH = (a->htailAreaM2 * a->htailPositionM) / (a->wingAreaM2 * mac);
         a->tailVolumeV = (a->vtailAreaM2 * a->vtailPositionM) / (a->wingAreaM2 * a->wingSpanM);
+
+        // Control power, derived rather than assumed. DATCOM:
+        //   Cm_de = -a_h * V_H * eta * tau_e        (elevator)
+        //   Cn_dr = -a_v * V_V * eta * tau_r        (rudder)
+        // a_h / a_v are the surface lift-curve slopes and eta the tail dynamic
+        // pressure ratio. Stored at the low-Mach slope; the wrench rescales by
+        // the ratio of current to low-Mach slope so the Mach dependence is not
+        // frozen at load time.
+        constexpr double kTailEfficiency = 0.95;
+        const double aHlow = surfaceLiftSlope(a->htailAspectRatio, 0.0);
+        const double aVlow = surfaceLiftSlope(
+            (a->vtailSpanM > 1e-6 && a->vtailAreaM2 > 1e-9)
+                ? a->vtailSpanM * a->vtailSpanM / a->vtailAreaM2 : 0.0, 0.0);
+        a->elevatorPowerPerRad = aHlow * a->tailVolumeH * kTailEfficiency
+            * controlEffectivenessTau(a->elevatorChordFraction);
+        a->rudderPowerPerRad = aVlow * a->tailVolumeV * kTailEfficiency
+            * controlEffectivenessTau(a->rudderChordFraction);
+
+        // Aileron roll power. The rolling moment of a symmetric aileron pair is
+        //   Cl_da = Cl_alpha_w * tau * c * b * (1 - a^2) / (2 * S)
+        // for ailerons spanning a..1 of the semispan (each side), from
+        // integrating y*c dy over the aileron span.
+        const double aileronInboardFrac =
+            1.0 - std::clamp(a->aileronSpanFraction, 0.0, 1.0);
+        a->aileronPowerPerRad = surfaceLiftSlope(a->wingAspectRatio, 0.0)
+            * controlEffectivenessTau(a->aileronChordFraction)
+            * (a->wingMeanChordM * a->wingSpanM
+               * (1.0 - aileronInboardFrac * aileronInboardFrac))
+            / (2.0 * std::max(a->wingAreaM2, 1e-9));
+
+        // Low-Mach reference slopes, for the per-step Mach rescaling.
+        a->referenceWingSlope = surfaceLiftSlope(a->wingAspectRatio, 0.0);
+        a->referenceTailSlopeH = aHlow;
+        a->referenceTailSlopeV = aVlow;
 
         return a;
     }
@@ -176,12 +264,16 @@ namespace StrikeEngine::Models {
         const double wingCmAlpha = -(a.wingPositionM / std::max(mac, 1e-9)) * cLalpha;
         const double tailCmAlpha = -cLalpha * a.tailVolumeH * (1.0 - a.downwashPerAlpha);
         const double cmAlpha = wingCmAlpha + tailCmAlpha;
-        // Elevator authority: realistic finite-elevator effectiveness (~0.8 per
-        // rad), NOT the full-tail derivative cLalpha*tailVolumeH (which is far
-        // larger than a real elevator and over-drives the heavy airframe). A
-        // positive pitch command must produce a nose-UP moment.
-        const double cMdelta = 0.80;
-        const double cM = a.cm0 + cmAlpha * alpha + cMdelta * finPitch;
+        // Elevator authority, derived from tail volume and the elevator chord
+        // fraction rather than assumed. It is the DATCOM control power rescaled
+        // from the load-time low-Mach slope to the current Mach. A positive
+        // pitch command produces a nose-UP moment, matching the engine's
+        // control-sign convention.
+        const double aHnow = surfaceLiftSlope(a.htailAspectRatio, mach);
+        const double elevatorPower = (a.referenceTailSlopeH > 1e-9)
+            ? a.elevatorPowerPerRad * (aHnow / a.referenceTailSlopeH)
+            : a.elevatorPowerPerRad;
+        const double cM = a.cm0 + cmAlpha * alpha + elevatorPower * finPitch;
 
         // --- Side / yaw (directional) ------------------------------------------
         // Vertical tail provides directional (weathercock) stability. Body
@@ -192,14 +284,23 @@ namespace StrikeEngine::Models {
         // < 0 and cnBeta > 0 for a stable aircraft (verified open-loop: a
         // +5 deg uncommanded sideslip must develop +wz, not -wz).
         const double cnBeta = cLalpha * a.tailVolumeV;               // >0 stable
-        const double cn = cnBeta * beta + 0.50 * finYaw;
+        const double aVnow = surfaceLiftSlope(
+            (a.vtailSpanM > 1e-6 && a.vtailAreaM2 > 1e-9)
+                ? a.vtailSpanM * a.vtailSpanM / a.vtailAreaM2 : 0.0, mach);
+        const double rudderPower = (a.referenceTailSlopeV > 1e-9)
+            ? a.rudderPowerPerRad * (aVnow / a.referenceTailSlopeV)
+            : a.rudderPowerPerRad;
+        const double cn = cnBeta * beta + rudderPower * finYaw;
         const double cyBeta = -cLalpha * a.tailVolumeV;              // side force per rad sideslip
 
         // --- Roll (dihedral + aileron) ------------------------------------------
-        // Dihedral produces a restoring roll from sideslip; aileron (finRoll)
-        // commands roll. Normalised to a ~ unity magnitude.
+        // Dihedral produces a restoring roll from sideslip; the aileron commands
+        // roll, its power derived from the wing slope and aileron geometry.
         const double clDihedral = -a.wingDihedralRad * cLalpha * (a.wingSpanM / (2.0 * std::max(mac, 1e-9)));
-        const double cl = clDihedral * beta + 0.08 * finRoll;
+        const double aileronPower = (a.referenceWingSlope > 1e-9)
+            ? a.aileronPowerPerRad * (cLalpha / a.referenceWingSlope)
+            : a.aileronPowerPerRad;
+        const double cl = clDihedral * beta + aileronPower * finRoll;
 
         // --- Body-frame forces (N) ----------------------------------------------
         // Drag opposes the velocity vector. The rate-damping terms divide by

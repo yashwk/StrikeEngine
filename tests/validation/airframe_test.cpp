@@ -211,12 +211,113 @@ static void levelFlightChecks()
     check(altAt20 > 7000.0, "aircraft aero produces lift (slow descent, not free-fall by 20 s)");
 }
 
+static void controlPowerChecks()
+{
+    std::printf("\n-- derived control power (DATCOM tail-volume form) --\n");
+
+    // Control-surface effectiveness rises with chord fraction and is bounded.
+    {
+        const double t0 = controlEffectivenessTau(0.0);
+        const double t25 = controlEffectivenessTau(0.25);
+        const double t30 = controlEffectivenessTau(0.30);
+        const double t50 = controlEffectivenessTau(0.50);
+        check(t0 == 0.0, "zero-chord control surface has zero effectiveness");
+        check(t25 < t30 && t30 < t50, "tau grows with control chord fraction");
+        check(t50 < 1.0, "tau stays below unity for a finite control surface");
+        std::printf("  tau: 0.25 -> %.3f, 0.30 -> %.3f, 0.50 -> %.3f\n", t25, t30, t50);
+    }
+
+    // A representative transport: tail volume should land Cm_de in DATCOM's
+    // published -0.2..-4 /rad band, and Cn_dr in the typical transport range.
+    auto build = [](double hSpan, double hChord, double hPos,
+                    double vSpan, double vChord, double vPos) {
+        return buildAirframeParams(25.4, 4.6, 1.6, 0.0, 1.0, 0.0,
+                                   hSpan, hChord, hPos, vSpan, vChord, vPos,
+                                   2.8, 27.0, 0.028, 0.85, 1.45);
+    };
+    {
+        auto a = build(8.0, 2.0, 12.0, 3.0, 2.4, 12.0);
+        check(a != nullptr, "transport airframe builds");
+        if (a) {
+            std::printf("  V_H=%.3f V_V=%.4f  elevator=%.3f rudder=%.4f aileron=%.3f\n",
+                        a->tailVolumeH, a->tailVolumeV,
+                        a->elevatorPowerPerRad, a->rudderPowerPerRad,
+                        a->aileronPowerPerRad);
+            check(a->tailVolumeH > 0.4 && a->tailVolumeH < 1.2,
+                  "horizontal tail volume is in the conventional range");
+            check(a->elevatorPowerPerRad > 0.2 && a->elevatorPowerPerRad < 4.0,
+                  "elevator power is inside DATCOM's published range");
+            check(a->rudderPowerPerRad > 0.01 && a->rudderPowerPerRad < 0.5,
+                  "rudder power is a plausible directional control power");
+            check(a->aileronPowerPerRad > 0.05 && a->aileronPowerPerRad < 2.0,
+                  "aileron power is a plausible roll control power");
+            check(a->elevatorPowerPerRad > a->rudderPowerPerRad,
+                  "elevator authority exceeds rudder authority for an aft tail");
+        }
+    }
+
+    // Scaling: authority tracks tail volume and control chord fraction, so the
+    // derivatives respond to geometry rather than being fixed constants.
+    {
+        auto small = build(4.0, 1.0, 12.0, 1.5, 1.2, 12.0);
+        auto large = build(8.0, 2.0, 12.0, 3.0, 2.4, 12.0);
+        check(small && large, "both tail sizes build");
+        if (small && large) {
+            check(large->tailVolumeH > small->tailVolumeH,
+                  "tail volume grows with tail area");
+            check(large->elevatorPowerPerRad > small->elevatorPowerPerRad,
+                  "elevator power grows with horizontal tail volume");
+            check(large->rudderPowerPerRad > small->rudderPowerPerRad,
+                  "rudder power grows with vertical tail volume");
+        }
+    }
+    {
+        auto thin = buildAirframeParams(25.4, 4.6, 1.6, 0.0, 1.0, 0.0,
+                                        8.0, 2.0, 12.0, 3.0, 2.4, 12.0,
+                                        2.8, 27.0, 0.028, 0.85, 1.45,
+                                        0.15, 0.30, 0.25, 0.35);
+        auto wide = buildAirframeParams(25.4, 4.6, 1.6, 0.0, 1.0, 0.0,
+                                        8.0, 2.0, 12.0, 3.0, 2.4, 12.0,
+                                        2.8, 27.0, 0.028, 0.85, 1.45,
+                                        0.45, 0.30, 0.25, 0.35);
+        check(thin && wide, "both elevator chord fractions build");
+        if (thin && wide) {
+            check(wide->elevatorPowerPerRad > thin->elevatorPowerPerRad,
+                  "a larger elevator chord fraction raises elevator power");
+        }
+    }
+
+    // The wrench must consume the derived power: a smaller elevator chord
+    // fraction produces less pitch moment for the same command.
+    {
+        auto params = [](double elevFrac) {
+            AeroParams p;
+            p.referenceArea = 78.7;
+            p.airframe = buildAirframeParams(25.4, 4.6, 1.6, 0.0, 1.0, 0.0,
+                                             8.0, 2.0, 12.0, 3.0, 2.4, 12.0,
+                                             2.8, 27.0, 0.028, 0.85, 1.45,
+                                             elevFrac, 0.30, 0.25, 0.35);
+            return p;
+        };
+        BasicAeroModel model;
+        const auto strong = model.computeWrench(200.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                                0.05, 0.0, 0.0, 0.5, 320.0, params(0.45));
+        const auto weak = model.computeWrench(200.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                              0.05, 0.0, 0.0, 0.5, 320.0, params(0.15));
+        check(strong.torque_y > 0.0 && weak.torque_y > 0.0,
+              "elevator command produces a nose-up moment at both chord fractions");
+        check(strong.torque_y > weak.torque_y,
+              "the wrench consumes the derived elevator power");
+    }
+}
+
 int main()
 {
     std::printf("=== airframe: aircraft wing-body-tail aero model ===\n");
     aeroChecks();
     serializationChecks();
     levelFlightChecks();
+    controlPowerChecks();
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }
