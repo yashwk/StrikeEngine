@@ -428,23 +428,17 @@ def missile_aero(template_aero):
     area = math.pi * (0.515 / 2.0) ** 2
     machs = [0.5, 0.8, 1.0, 1.2, 1.6, 2.0, 2.6, 3.2, 4.0, 5.0, 6.0]
     cd0 = [0.22, 0.27, 0.34, 0.33, 0.26, 0.22, 0.19, 0.175, 0.165, 0.155, 0.15]
-    # The grid must cover the alpha this airframe actually flies. It previously
-    # stopped at 0.25 rad (14.3 deg), and interpolateCoefficient clamps beyond
-    # the last breakpoint, so past 14.3 deg BOTH lift and drag froze: lift at
-    # 0.65 (the declared cl_max of 3.2 was unreachable) and drag at +0.24 over
-    # cd0. A terminal turn therefore bought lift without paying induced drag.
-    # The grid now runs to 0.60 rad (34 deg) with a post-stall plateau in cl and
-    # a steep continuation of the drag rise, so high-alpha manoeuvring is
-    # priced correctly.
+    # alpha grid must reach the alpha this airframe flies: interpolateCoefficient
+    # clamps beyond the last breakpoint, so a short grid freezes lift AND drag.
     aoa = [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60]
-    # Linear lift slope 2.6/rad to 0.25 rad, then separation: the slope rolls
-    # off to a plateau near cl = 1.05 rather than continuing to cl_max.
-    cl_curve = [0.0, 0.13, 0.26, 0.39, 0.52, 0.65, 0.75, 0.90, 1.00, 1.05]
-    # Drag rise over cd0: attached-flow growth to 14.3 deg, then the much
-    # steeper separation drag that accompanies the stalled plateau in cl.
-    aoa_rise = [0.0, 0.010, 0.035, 0.080, 0.150, 0.240, 0.340, 0.550, 0.780, 1.000]
+    # Lift slope 3.2/rad, then separation rolls it off to a plateau. cl_alpha
+    # below is kept equal to this slope so the table and the fallback agree.
+    cl_curve = [0.0, 0.16, 0.32, 0.48, 0.64, 0.80, 0.95, 1.20, 1.35, 1.45]
+    # Drag rise over cd0: attached flow, then the steeper separation drag that
+    # accompanies the stalled plateau in cl.
+    aoa_rise = [0.0, 0.013, 0.048, 0.115, 0.215, 0.355, 0.520, 0.870, 1.25, 1.62]
     cd_table = [[round(c + rise, 5) for rise in aoa_rise] for c in cd0]  # [mach][aoa]
-    cl_alpha, cl_max = 2.6, 3.2
+    cl_alpha, cl_max = 3.2, 1.45
     cl_table = [list(cl_curve) for _ in machs]
     return dict(template_aero, **{
         "aero_tables": {"mach_breakpoints": machs, "aoa_breakpoints_rad": aoa,
@@ -611,7 +605,10 @@ def missile_entity(template):
             "servoTimeConstantSec": 0.02,
             "autopilotIntegralEnabled": False,
             "controlEffectivenessEnabled": False,
-            "guidanceAuthorityAwareLimitEnabled": True,
+            # Demand-scaling on the authority margin throttles the command
+            # exactly when the airframe under-delivers; with the aero moment
+            # ceiling corrected it only costs miss distance.
+            "guidanceAuthorityAwareLimitEnabled": False,
             "guidanceScaleDemandOnInfeasible": True,
             "gravityCompensationEnabled": True,
             "guidanceRangeGainShapingEnabled": False,

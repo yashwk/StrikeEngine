@@ -49,24 +49,19 @@ namespace StrikeEngine::Models {
         // (airframeAeroWrench) instead of the axisymmetric missile path.
         std::shared_ptr<const Models::AirframeParams> airframe;
 
-        // Body rotational inertia (kg*m^2), used only to bound the aero moment
-        // as an angular acceleration. The backend fills these from the physics
-        // block; zero (a hand-built param set) falls back to a fixed moment
-        // ceiling instead.
+        // Body rotational inertia (kg*m^2), used to bound the aero moment as an
+        // angular acceleration. Zero falls back to a fixed moment ceiling.
         double inertiaX = 0.0;
         double inertiaY = 0.0;
         double inertiaZ = 0.0;
 
         // Ceiling on the angular acceleration the aerodynamic moment may
-        // command (rad/s^2). Bounds the linear coefficient model at large alpha
-        // without being a function of dynamic pressure. 60 rad/s^2 leaves
-        // ordinary manoeuvring untouched while still catching non-physical
-        // growth.
+        // command (rad/s^2). Bounds the linear coefficient model at large alpha.
         static constexpr double kMaxAngularAccelRadPerSec2 = 60.0;
-        // Moment ceiling when no inertia is supplied.
+        // Moment ceiling used when no inertia is supplied.
         static constexpr double kFallbackMomentCeiling = 600.0;
 
-        /// Largest |moment| the airframe may receive on the given axis.
+        /// Largest |moment| permitted on the given axis (0 = roll, 1 = pitch).
         double momentCeiling(int axis) const {
             const double inertia =
                 (axis == 0) ? inertiaX : (axis == 1) ? inertiaY : inertiaZ;
@@ -107,12 +102,9 @@ namespace StrikeEngine::Models {
      * world frame and uses torques directly in the body-frame Euler
      * equations (W2 spine).
      *
-     * The total body moment is bounded by an angular-acceleration ceiling
-     * applied through the airframe's own rotational inertia, so the limit is a
-     * property of the vehicle rather than of dynamic pressure. A q-dependent
-     * bound cannot serve both a 150 kg airframe (I ~ 10 kg*m^2) and a 1900 kg
-     * one (I ~ 7300): it is either far too permissive at low q or strips the
-     * heavy airframe of control exactly when its fins are most effective.
+     * The total body moment is bounded as an angular acceleration through the
+     * airframe's own inertia, so the limit is a property of the vehicle rather
+     * than of dynamic pressure.
      */
     class AeroModel {
     public:
@@ -336,19 +328,10 @@ namespace StrikeEngine::Models {
             // Fin control authority and the validated pitch restoring term.
             constexpr double CM_delta = 0.50;  // pitch/yaw moment per rad
             constexpr double Cl_delta = 0.15;  // roll moment per rad
-            // Aero moment ceiling. A control surface's authority scales with
-            // dynamic pressure (a fin produces q*S*Cl*deflection), so a bound
-            // that DECAYS with q is backwards: the previous form was
-            // 600 * clamp(6000/qS, 0.1, 1), i.e. 600 N*m falling to a 60 N*m
-            // floor as q rose, applied to the TOTAL moment (control, static and
-            // damping together). On the 40N6 at M4.0 / 10 km the unclamped fin
-            // moment is ~3.2e5 N*m and it was clamped to 60 N*m, a 5300x
-            // reduction that left the airframe unable to hold the attitude its
-            // own lift required. The ceiling is now an angular acceleration
-            // through the airframe's own inertia, which is a property of the
-            // vehicle: it does not decay with q, and it scales correctly from a
-            // 150 kg airframe to a 1900 kg one. Measured effect on the S-400
-            // flyout: terminal miss 10.6 km -> 0.41 km.
+            // Aero moment ceiling: an angular acceleration through the
+            // airframe's own inertia. The previous bound decayed with dynamic
+            // pressure (600 N*m falling to a 60 N*m floor), which removed
+            // control authority exactly where a fin is most effective.
             const double maxRollMoment = p.momentCeiling(0);
             const double maxPitchMoment = p.momentCeiling(1);
             const double maxYawMoment = p.momentCeiling(2);
@@ -421,10 +404,9 @@ namespace StrikeEngine::Models {
                 tx -= q * S * l * Clp * lOverV * wx;
             }
 
-            // Bound the complete aerodynamic moment, not only the commanded
-            // fin contribution. At large AoA the linear static-stability and
-            // rate-damping terms can otherwise grow without bound and drive the
-            // simplified rigid body into an unrecoverable spin.
+            // Bound the complete aerodynamic moment, not only the commanded fin
+            // contribution: at large AoA the linear static and rate-damping
+            // terms can otherwise drive the rigid body into a spin.
             tx = std::clamp(tx, -maxRollMoment, maxRollMoment);
             ty = std::clamp(ty, -maxPitchMoment, maxPitchMoment);
             tz = std::clamp(tz, -maxYawMoment, maxYawMoment);
