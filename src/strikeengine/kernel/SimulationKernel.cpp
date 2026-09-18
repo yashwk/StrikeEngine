@@ -741,6 +741,12 @@ namespace StrikeEngine::Kernel {
         seekerBlock.decoyRejectionDb[id] = resolved.seeker.decoyRejectionDb;
         seekerBlock.passiveRfDutyCycle[id] = resolved.seeker.passiveRfDutyCycle;
         seekerBlock.illuminatorEntityId[id] = resolved.seeker.illuminatorEntityId;
+        seekerBlock.aperturePositionX[id] = resolved.seeker.aperturePositionX;
+        seekerBlock.aperturePositionY[id] = resolved.seeker.aperturePositionY;
+        seekerBlock.aperturePositionZ[id] = resolved.seeker.aperturePositionZ;
+        seekerBlock.apertureNormalX[id] = resolved.seeker.apertureNormalX;
+        seekerBlock.apertureNormalY[id] = resolved.seeker.apertureNormalY;
+        seekerBlock.apertureNormalZ[id] = resolved.seeker.apertureNormalZ;
         seekerBlock.isLocked[id] = false;
         seekerBlock.lockedTargetId[id] = 0;
         seekerBlock.targetRange[id] = 0.0;

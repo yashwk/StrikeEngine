@@ -81,6 +81,7 @@ VehicleConfig makeRichConfig()
     stage.seaLevelIsp = 225.0;
     stage.propellantMassKg = 300.0;
     stage.dryMassKg = 600.0;
+    stage.nozzlePositions = { {-1.5, 0.0, 0.0} };
     cfg.propulsion.stages.push_back(stage);
 
     cfg.seeker.type = SeekerType::RF;
@@ -104,6 +105,12 @@ VehicleConfig makeRichConfig()
     cfg.seeker.lockHysteresisDb = 4.0;
     cfg.seeker.lockDropoutTimeSec = 0.2;
     cfg.seeker.measurementLatencySec = 0.05;
+    cfg.seeker.aperturePositionX = 0.35;
+    cfg.seeker.aperturePositionY = 0.0;
+    cfg.seeker.aperturePositionZ = 0.0;
+    cfg.seeker.apertureNormalX = 1.0;
+    cfg.seeker.apertureNormalY = 0.0;
+    cfg.seeker.apertureNormalZ = 0.0;
 
     cfg.sensor.imuEnabled = false;
     cfg.sensor.gpsEnabled = true;
@@ -118,6 +125,10 @@ VehicleConfig makeRichConfig()
     cfg.sensor.imuLeverArmX = 0.1;
     cfg.sensor.imuLeverArmY = 0.2;
     cfg.sensor.imuLeverArmZ = 0.3;
+    cfg.sensor.antennaPositionX = 0.25;
+    cfg.sensor.antennaPositionY = 0.0;
+    cfg.sensor.antennaPositionZ = -0.10;
+    cfg.sensor.antennaScanRateHz = 12.0;
 
     cfg.guidanceAutopilot.navigationConstant = 4.0;
     cfg.guidanceAutopilot.waypointGain = 25.0;
@@ -199,12 +210,24 @@ int main()
                   cfg2.propulsion.stages[0].propellantMassKg == 300.0 &&
                   cfg2.propulsion.stages[0].dryMassKg == 600.0,
               "propulsion stage (thrust points + Isps + masses) survives");
+        check(cfg2.propulsion.stages[0].nozzlePositions.size() == 1 &&
+                  cfg2.propulsion.stages[0].nozzlePositions[0][0] == -1.5 &&
+                  cfg2.propulsion.stages[0].nozzlePositions[0][1] == 0.0 &&
+                  cfg2.propulsion.stages[0].nozzlePositions[0][2] == 0.0,
+              "propulsion stage nozzle positions survive");
         check(cfg2.seeker.type == SeekerType::RF, "seeker type survives as RF");
         check(cfg2.seeker.transmitterPowerW == 2000.0 &&
                   cfg2.seeker.antennaGainDb == 28.0 &&
                   cfg2.seeker.wavelengthBand == 2 &&
                   cfg2.seeker.lockDropoutTimeSec == 0.2,
               "seeker RF/tracking fields survive");
+        check(cfg2.seeker.aperturePositionX == 0.35 &&
+                  cfg2.seeker.aperturePositionY == 0.0 &&
+                  cfg2.seeker.aperturePositionZ == 0.0 &&
+                  cfg2.seeker.apertureNormalX == 1.0 &&
+                  cfg2.seeker.apertureNormalY == 0.0 &&
+                  cfg2.seeker.apertureNormalZ == 0.0,
+              "seeker aperture position and normal survive");
         check(cfg2.sensor.imuEnabled == false && cfg2.sensor.gpsEnabled == true,
               "sensor enable flags survive (imu disabled)");
         check(cfg2.sensor.accelNoiseStdDev == 0.3 &&
@@ -213,6 +236,11 @@ int main()
                   cfg2.sensor.gpsInnovationGateSigma == 4.0 &&
                   cfg2.sensor.imuLeverArmZ == 0.3,
               "sensor noise/bias/lever-arm fields survive");
+        check(cfg2.sensor.antennaPositionX == 0.25 &&
+                  cfg2.sensor.antennaPositionY == 0.0 &&
+                  cfg2.sensor.antennaPositionZ == -0.10 &&
+                  cfg2.sensor.antennaScanRateHz == 12.0,
+              "sensor antenna position and scan rate survive");
         check(cfg2.guidanceAutopilot.navigationConstant == 4.0 &&
                   cfg2.guidanceAutopilot.kAccelP == 0.05 &&
                   cfg2.guidanceAutopilot.maxServoRateRadPerSec == 6.0 &&
@@ -260,6 +288,9 @@ int main()
         fin.midChordLandFraction = 0.62;   // non-default: catches the dropped key
         fin.controlType = 1;
         fin.controlFraction = 0.4;
+        fin.rootOffsetY = 0.05;
+        fin.rootOffsetZ = -0.02;
+        fin.dihedralDeg = 15.0;
 
         AeroConfig aero;
         aero.finSets.push_back(fin);
@@ -304,6 +335,10 @@ int main()
                 check(b.controlType == fin.controlType &&
                           b.controlFraction == fin.controlFraction,
                       "control type and fraction survive");
+                check(b.rootOffsetY == fin.rootOffsetY &&
+                          b.rootOffsetZ == fin.rootOffsetZ &&
+                          b.dihedralDeg == fin.dihedralDeg,
+                      "fin root offsets and dihedral angle survive");
             }
         }
     }

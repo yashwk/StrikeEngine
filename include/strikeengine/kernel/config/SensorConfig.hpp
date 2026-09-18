@@ -93,6 +93,12 @@ namespace StrikeEngine::Kernel {
         // A barometer observes neither orientation nor rotation rate; the
         // default freezes those EKF rows. Enable only for experimentation.
         bool   baroAttitudeCorrectionEnabled = false;
+
+        // --- Radar / Sensor antenna mounting (body frame relative to CG, m) ---
+        double antennaPositionX = 0.0;
+        double antennaPositionY = 0.0;
+        double antennaPositionZ = 0.0;
+        double antennaScanRateHz = 0.0;
     };
 
 } // namespace StrikeEngine::Kernel

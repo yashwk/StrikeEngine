@@ -67,6 +67,16 @@ namespace StrikeEngine::Kernel {
         double decoyRejectionDb = 0.0;           // Chaff/Flare apparent-signal cut
         double passiveRfDutyCycle = 1.0;         // 1.0 = continuous emitter
         int    illuminatorEntityId = -1;         // SARH live illuminator (-1 static)
+
+        // --- Spatial aperture mounting (body frame relative to CG, m) -------
+        // aperturePositionX/Y/Z: position of the seeker aperture (+X noseward)
+        // apertureNormalX/Y/Z: boresight unit vector in body frame (default +X [1, 0, 0])
+        double aperturePositionX = 0.0;
+        double aperturePositionY = 0.0;
+        double aperturePositionZ = 0.0;
+        double apertureNormalX = 1.0;
+        double apertureNormalY = 0.0;
+        double apertureNormalZ = 0.0;
     };
 
 } // namespace StrikeEngine::Kernel

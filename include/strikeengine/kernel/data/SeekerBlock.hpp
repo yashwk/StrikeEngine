@@ -93,6 +93,14 @@ namespace StrikeEngine::Kernel {
         std::vector<double> passiveRfDutyCycle;       // 1.0 = continuous emitter
         std::vector<int> illuminatorEntityId;         // SARH live illuminator (-1 static)
 
+        // --- Spatial aperture mounting (body frame relative to CG, m) -------
+        std::vector<double> aperturePositionX;
+        std::vector<double> aperturePositionY;
+        std::vector<double> aperturePositionZ;
+        std::vector<double> apertureNormalX;
+        std::vector<double> apertureNormalY;
+        std::vector<double> apertureNormalZ;
+
         // Output tracking state
         std::vector<bool> isLocked;
         std::vector<std::size_t> lockedTargetId;
@@ -238,6 +246,12 @@ namespace StrikeEngine::Kernel {
             growTo(decoyRejectionDb, n, 0.0);
             growTo(passiveRfDutyCycle, n, 1.0);
             growTo(illuminatorEntityId, n, -1);
+            growTo(aperturePositionX, n, 0.0);
+            growTo(aperturePositionY, n, 0.0);
+            growTo(aperturePositionZ, n, 0.0);
+            growTo(apertureNormalX, n, 1.0);
+            growTo(apertureNormalY, n, 0.0);
+            growTo(apertureNormalZ, n, 0.0);
             growTo(isLocked, n, false);
             growTo(lockedTargetId, n, 0);
             growTo(targetRange, n, 0.0);

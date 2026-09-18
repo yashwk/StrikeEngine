@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include <cmath>
 #include <string>
 #include <strikeengine/models/physics/propulsion/ThrustCurve.hpp>
@@ -31,6 +32,11 @@ namespace StrikeEngine::Kernel {
         double enginePositionX = 0.0;
         double enginePositionY = 0.0;
         double enginePositionZ = 0.0;
+
+        // Explicit nozzle exit position(s) in body frame relative to CG (m, +X noseward).
+        // Each entry is [x, y, z]. If empty, the engine nozzle defaults to
+        // [enginePositionX, enginePositionY, enginePositionZ].
+        std::vector<std::array<double, 3>> nozzlePositions;
     };
 
     struct PropulsionConfig {
@@ -78,6 +84,11 @@ namespace StrikeEngine::Kernel {
             if (!std::isfinite(stage.enginePositionX) || !std::isfinite(stage.enginePositionY) ||
                 !std::isfinite(stage.enginePositionZ)) {
                 return fail("engine position must be finite");
+            }
+            for (const auto& np : stage.nozzlePositions) {
+                if (!std::isfinite(np[0]) || !std::isfinite(np[1]) || !std::isfinite(np[2])) {
+                    return fail("nozzle position coordinates must be finite");
+                }
             }
         }
         return true;

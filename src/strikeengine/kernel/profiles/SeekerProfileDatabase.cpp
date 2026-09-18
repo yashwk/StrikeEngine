@@ -65,6 +65,12 @@ namespace StrikeEngine::Kernel {
             cfg.decoyRejectionDb = data.value("decoy_rejection_db", cfg.decoyRejectionDb);
             cfg.passiveRfDutyCycle = data.value("passive_rf_duty_cycle", cfg.passiveRfDutyCycle);
             cfg.illuminatorEntityId = data.value("illuminator_entity_id", cfg.illuminatorEntityId);
+            cfg.aperturePositionX = data.value("aperture_position_x", cfg.aperturePositionX);
+            cfg.aperturePositionY = data.value("aperture_position_y", cfg.aperturePositionY);
+            cfg.aperturePositionZ = data.value("aperture_position_z", cfg.aperturePositionZ);
+            cfg.apertureNormalX = data.value("aperture_normal_x", cfg.apertureNormalX);
+            cfg.apertureNormalY = data.value("aperture_normal_y", cfg.apertureNormalY);
+            cfg.apertureNormalZ = data.value("aperture_normal_z", cfg.apertureNormalZ);
             _seeker = cfg;
         } catch (const std::exception& e) {
             if (error) *error = e.what();

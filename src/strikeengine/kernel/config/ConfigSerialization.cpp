@@ -247,6 +247,9 @@ static json finConfigToJson(const FinsConfig& fin) {
     }
     f["control_type"] = (fin.controlType == 1) ? "trailing_edge_flap" : "all_moving";
     f["control_fraction"] = fin.controlFraction;
+    if (fin.rootOffsetY != 0.0) f["root_offset_y"] = fin.rootOffsetY;
+    if (fin.rootOffsetZ != 0.0) f["root_offset_z"] = fin.rootOffsetZ;
+    if (fin.dihedralDeg != 0.0) f["dihedral_deg"] = fin.dihedralDeg;
     return f;
 }
 
@@ -387,6 +390,10 @@ void to_json(json& j, const SensorConfig& s) {
     j["max_accel_bias_estimate"] = s.maxAccelBiasEstimate;
     j["max_gyro_bias_estimate"] = s.maxGyroBiasEstimate;
     j["baro_attitude_correction_enabled"] = s.baroAttitudeCorrectionEnabled;
+    j["antenna_position_x"] = s.antennaPositionX;
+    j["antenna_position_y"] = s.antennaPositionY;
+    j["antenna_position_z"] = s.antennaPositionZ;
+    j["antenna_scan_rate_hz"] = s.antennaScanRateHz;
 }
 
 void from_json(const json& j, SensorConfig& s) {
@@ -435,6 +442,10 @@ void from_json(const json& j, SensorConfig& s) {
     s.maxAccelBiasEstimate = j.value("max_accel_bias_estimate", 0.5);
     s.maxGyroBiasEstimate = j.value("max_gyro_bias_estimate", 0.02);
     s.baroAttitudeCorrectionEnabled = j.value("baro_attitude_correction_enabled", false);
+    s.antennaPositionX = j.value("antenna_position_x", 0.0);
+    s.antennaPositionY = j.value("antenna_position_y", 0.0);
+    s.antennaPositionZ = j.value("antenna_position_z", 0.0);
+    s.antennaScanRateHz = j.value("antenna_scan_rate_hz", 0.0);
 }
 
 void to_json(json& j, const GuidanceAutopilotConfig& g) {
@@ -629,6 +640,9 @@ void to_json(json& j, const StageConfig& s) {
     j["engine_position_x"] = s.enginePositionX;
     j["engine_position_y"] = s.enginePositionY;
     j["engine_position_z"] = s.enginePositionZ;
+    if (!s.nozzlePositions.empty()) {
+        j["nozzle_positions"] = s.nozzlePositions;
+    }
 }
 
 void from_json(const json& j, StageConfig& s) {
@@ -648,6 +662,9 @@ void from_json(const json& j, StageConfig& s) {
     s.enginePositionX = j.value("engine_position_x", s.enginePositionX);
     s.enginePositionY = j.value("engine_position_y", s.enginePositionY);
     s.enginePositionZ = j.value("engine_position_z", s.enginePositionZ);
+    if (j.contains("nozzle_positions") && j.at("nozzle_positions").is_array()) {
+        s.nozzlePositions = j.at("nozzle_positions").get<std::vector<std::array<double, 3>>>();
+    }
 }
 
 void to_json(json& j, const PropulsionConfig& p) {
@@ -705,6 +722,12 @@ void to_json(json& j, const SeekerConfig& s) {
     j["decoy_rejection_db"] = s.decoyRejectionDb;
     j["passive_rf_duty_cycle"] = s.passiveRfDutyCycle;
     j["illuminator_entity_id"] = s.illuminatorEntityId;
+    j["aperture_position_x"] = s.aperturePositionX;
+    j["aperture_position_y"] = s.aperturePositionY;
+    j["aperture_position_z"] = s.aperturePositionZ;
+    j["aperture_normal_x"] = s.apertureNormalX;
+    j["aperture_normal_y"] = s.apertureNormalY;
+    j["aperture_normal_z"] = s.apertureNormalZ;
 }
 
 void from_json(const json& j, SeekerConfig& s) {
@@ -746,6 +769,12 @@ void from_json(const json& j, SeekerConfig& s) {
     s.decoyRejectionDb = j.value("decoy_rejection_db", 0.0);
     s.passiveRfDutyCycle = j.value("passive_rf_duty_cycle", 1.0);
     s.illuminatorEntityId = j.value("illuminator_entity_id", -1);
+    s.aperturePositionX = j.value("aperture_position_x", s.aperturePositionX);
+    s.aperturePositionY = j.value("aperture_position_y", s.aperturePositionY);
+    s.aperturePositionZ = j.value("aperture_position_z", s.aperturePositionZ);
+    s.apertureNormalX = j.value("aperture_normal_x", s.apertureNormalX);
+    s.apertureNormalY = j.value("aperture_normal_y", s.apertureNormalY);
+    s.apertureNormalZ = j.value("aperture_normal_z", s.apertureNormalZ);
 }
 
 // --- WarheadConfig ----------------------------------------------------------

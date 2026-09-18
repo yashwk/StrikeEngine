@@ -40,6 +40,9 @@ namespace StrikeEngine::Kernel {
                 stage.enginePositionX = stageJson.value("engine_position_x", stage.enginePositionX);
                 stage.enginePositionY = stageJson.value("engine_position_y", stage.enginePositionY);
                 stage.enginePositionZ = stageJson.value("engine_position_z", stage.enginePositionZ);
+                if (stageJson.contains("nozzle_positions") && stageJson.at("nozzle_positions").is_array()) {
+                    stage.nozzlePositions = stageJson.at("nozzle_positions").get<std::vector<std::array<double, 3>>>();
+                }
                 cfg.stages.push_back(stage);
             }
             std::string curveError;

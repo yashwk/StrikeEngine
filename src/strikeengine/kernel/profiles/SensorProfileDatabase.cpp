@@ -61,6 +61,10 @@ namespace StrikeEngine::Kernel {
             cfg.maxAccelBiasEstimate = data.value("max_accel_bias_estimate", cfg.maxAccelBiasEstimate);
             cfg.maxGyroBiasEstimate = data.value("max_gyro_bias_estimate", cfg.maxGyroBiasEstimate);
             cfg.baroAttitudeCorrectionEnabled = data.value("baro_attitude_correction_enabled", cfg.baroAttitudeCorrectionEnabled);
+            cfg.antennaPositionX = data.value("antenna_position_x", cfg.antennaPositionX);
+            cfg.antennaPositionY = data.value("antenna_position_y", cfg.antennaPositionY);
+            cfg.antennaPositionZ = data.value("antenna_position_z", cfg.antennaPositionZ);
+            cfg.antennaScanRateHz = data.value("antenna_scan_rate_hz", cfg.antennaScanRateHz);
             _sensor = cfg;
         } catch (const std::exception& e) {
             if (error) *error = e.what();

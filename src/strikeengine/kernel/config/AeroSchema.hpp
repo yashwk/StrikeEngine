@@ -75,6 +75,9 @@ namespace StrikeEngine::Kernel::AeroSchema {
                                      ": unknown fin control type '" + control + "'");
         }
         fin.controlFraction = f.value("control_fraction", 1.0);
+        fin.rootOffsetY = f.value("root_offset_y", 0.0);
+        fin.rootOffsetZ = f.value("root_offset_z", 0.0);
+        fin.dihedralDeg = f.value("dihedral_deg", 0.0);
         if (f.contains("shape_points")) {
             fin.shapePoints =
                 f.at("shape_points").get<std::vector<std::array<double, 2>>>();
