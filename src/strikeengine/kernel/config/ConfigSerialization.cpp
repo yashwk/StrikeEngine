@@ -249,6 +249,7 @@ static json finConfigToJson(const FinsConfig& fin) {
     f["control_fraction"] = fin.controlFraction;
     if (fin.rootOffsetY != 0.0) f["root_offset_y"] = fin.rootOffsetY;
     if (fin.rootOffsetZ != 0.0) f["root_offset_z"] = fin.rootOffsetZ;
+    if (fin.baseAzimuthDeg != 0.0) f["base_azimuth_deg"] = fin.baseAzimuthDeg;
     if (fin.dihedralDeg != 0.0) f["dihedral_deg"] = fin.dihedralDeg;
     return f;
 }

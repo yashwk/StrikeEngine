@@ -40,9 +40,10 @@ namespace StrikeEngine::Kernel {
         int controlType = 0;
         double controlFraction = 1.0;
 
-        // Mounting offset and dihedral (body frame relative to centerline, m/deg)
+        // Mounting offset, azimuth and dihedral (body frame relative to centerline, m/deg)
         double rootOffsetY = 0.0;
         double rootOffsetZ = 0.0;
+        double baseAzimuthDeg = 0.0;
         double dihedralDeg = 0.0;
 
         bool enabled() const { return count >= 3; }

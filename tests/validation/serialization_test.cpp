@@ -290,6 +290,7 @@ int main()
         fin.controlFraction = 0.4;
         fin.rootOffsetY = 0.05;
         fin.rootOffsetZ = -0.02;
+        fin.baseAzimuthDeg = 45.0;
         fin.dihedralDeg = 15.0;
 
         AeroConfig aero;
@@ -337,8 +338,9 @@ int main()
                       "control type and fraction survive");
                 check(b.rootOffsetY == fin.rootOffsetY &&
                           b.rootOffsetZ == fin.rootOffsetZ &&
+                          b.baseAzimuthDeg == fin.baseAzimuthDeg &&
                           b.dihedralDeg == fin.dihedralDeg,
-                      "fin root offsets and dihedral angle survive");
+                      "fin root offsets, base azimuth and dihedral angle survive");
             }
         }
     }
