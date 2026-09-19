@@ -395,6 +395,17 @@ void to_json(json& j, const SensorConfig& s) {
     j["antenna_position_y"] = s.antennaPositionY;
     j["antenna_position_z"] = s.antennaPositionZ;
     j["antenna_scan_rate_hz"] = s.antennaScanRateHz;
+    j["radar_enabled"] = s.radarEnabled;
+    j["radar_max_range_m"] = s.radarMaxRangeM;
+    j["radar_field_of_view_half_angle_rad"] = s.radarFieldOfViewHalfAngleRad;
+    j["radar_range_noise_std_dev_m"] = s.radarRangeNoiseStdDevM;
+    j["radar_range_rate_noise_std_dev_mps"] = s.radarRangeRateNoiseStdDevMps;
+    j["radar_angle_noise_std_dev_rad"] = s.radarAngleNoiseStdDevRad;
+    j["radar_measurement_latency_sec"] = s.radarMeasurementLatencySec;
+    j["radar_terrain_masking_enabled"] = s.radarTerrainMaskingEnabled;
+    j["radar_track_coast_timeout_sec"] = s.radarTrackCoastTimeoutSec;
+    j["radar_track_loss_timeout_sec"] = s.radarTrackLossTimeoutSec;
+    j["radar_track_quality_tau_sec"] = s.radarTrackQualityTauSec;
 }
 
 void from_json(const json& j, SensorConfig& s) {
@@ -447,6 +458,19 @@ void from_json(const json& j, SensorConfig& s) {
     s.antennaPositionY = j.value("antenna_position_y", 0.0);
     s.antennaPositionZ = j.value("antenna_position_z", 0.0);
     s.antennaScanRateHz = j.value("antenna_scan_rate_hz", 0.0);
+    s.radarEnabled = j.value("radar_enabled", false);
+    s.radarMaxRangeM = j.value("radar_max_range_m", 0.0);
+    s.radarFieldOfViewHalfAngleRad = j.value(
+        "radar_field_of_view_half_angle_rad", s.radarFieldOfViewHalfAngleRad);
+    s.radarRangeNoiseStdDevM = j.value("radar_range_noise_std_dev_m", 0.0);
+    s.radarRangeRateNoiseStdDevMps = j.value(
+        "radar_range_rate_noise_std_dev_mps", 0.0);
+    s.radarAngleNoiseStdDevRad = j.value("radar_angle_noise_std_dev_rad", 0.0);
+    s.radarMeasurementLatencySec = j.value("radar_measurement_latency_sec", 0.0);
+    s.radarTerrainMaskingEnabled = j.value("radar_terrain_masking_enabled", false);
+    s.radarTrackCoastTimeoutSec = j.value("radar_track_coast_timeout_sec", 0.5);
+    s.radarTrackLossTimeoutSec = j.value("radar_track_loss_timeout_sec", 2.0);
+    s.radarTrackQualityTauSec = j.value("radar_track_quality_tau_sec", 1.0);
 }
 
 void to_json(json& j, const GuidanceAutopilotConfig& g) {
@@ -1199,8 +1223,9 @@ void ScenarioConfig::loadInto(SimulationKernel& kernel) const {
 
     // The scenario's source/target relationship is explicit even when the
     // target round itself is still pending on a rail. Each authored target
-    // gets a separate relay record; the kernel refreshes those records from
-    // the target navigation estimates during the run.
+    // gets a separate relay record. An active source radar refreshes its
+    // records from delivered measurements; legacy sources fall back to the
+    // target navigation estimates during the run.
     for (const auto& entityCfg : entities) {
         const int sourceId = entityCfg.vehicleConfig.guidanceAutopilot.datalinkSourceId;
         int targetId = entityCfg.vehicleConfig.guidanceAutopilot.datalinkTargetId;

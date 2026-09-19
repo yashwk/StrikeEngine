@@ -65,6 +65,26 @@ namespace StrikeEngine::Kernel {
             cfg.antennaPositionY = data.value("antenna_position_y", cfg.antennaPositionY);
             cfg.antennaPositionZ = data.value("antenna_position_z", cfg.antennaPositionZ);
             cfg.antennaScanRateHz = data.value("antenna_scan_rate_hz", cfg.antennaScanRateHz);
+            cfg.radarEnabled = data.value("radar_enabled", cfg.radarEnabled);
+            cfg.radarMaxRangeM = data.value("radar_max_range_m", cfg.radarMaxRangeM);
+            cfg.radarFieldOfViewHalfAngleRad = data.value(
+                "radar_field_of_view_half_angle_rad", cfg.radarFieldOfViewHalfAngleRad);
+            cfg.radarRangeNoiseStdDevM = data.value(
+                "radar_range_noise_std_dev_m", cfg.radarRangeNoiseStdDevM);
+            cfg.radarRangeRateNoiseStdDevMps = data.value(
+                "radar_range_rate_noise_std_dev_mps", cfg.radarRangeRateNoiseStdDevMps);
+            cfg.radarAngleNoiseStdDevRad = data.value(
+                "radar_angle_noise_std_dev_rad", cfg.radarAngleNoiseStdDevRad);
+            cfg.radarMeasurementLatencySec = data.value(
+                "radar_measurement_latency_sec", cfg.radarMeasurementLatencySec);
+            cfg.radarTerrainMaskingEnabled = data.value(
+                "radar_terrain_masking_enabled", cfg.radarTerrainMaskingEnabled);
+            cfg.radarTrackCoastTimeoutSec = data.value(
+                "radar_track_coast_timeout_sec", cfg.radarTrackCoastTimeoutSec);
+            cfg.radarTrackLossTimeoutSec = data.value(
+                "radar_track_loss_timeout_sec", cfg.radarTrackLossTimeoutSec);
+            cfg.radarTrackQualityTauSec = data.value(
+                "radar_track_quality_tau_sec", cfg.radarTrackQualityTauSec);
             _sensor = cfg;
         } catch (const std::exception& e) {
             if (error) *error = e.what();

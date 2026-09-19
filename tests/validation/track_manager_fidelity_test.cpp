@@ -4,7 +4,11 @@
 // overwrite/lifecycle path is covered by track_manager_test.
 #include <strikeengine/kernel/systems/TrackManagerSystem.hpp>
 #include <strikeengine/kernel/systems/CommandProcessor.hpp>
+#include <strikeengine/kernel/systems/SensorSystem.hpp>
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
+#include <strikeengine/kernel/data/EntityStatusBlock.hpp>
+#include <strikeengine/kernel/data/PhysicsBlock.hpp>
+#include <strikeengine/kernel/data/SensorBlock.hpp>
 #include <strikeengine/kernel/data/TrackBlock.hpp>
 
 #include <algorithm>
@@ -343,6 +347,62 @@ int main()
               g.trackMinQuality01 == 0.25 && g.trackQualityTauSec == 1.5 &&
               g.trackVelocityBlend == 0.2,
               "track policy keys round-trip");
+    }
+
+    // ---- 11. Multi-target active radar measurements -------------------------
+    {
+        PhysicsBlock physics;
+        physics.ensureSize(3);
+        physics.active = {true, true, true};
+        physics.px = {0.0, 1000.0, 1000.0};
+        physics.py = {0.0, 0.0, 100.0};
+        physics.pz = {1000.0, 1000.0, 1000.0};
+        physics.qw = {1.0, 1.0, 1.0};
+        physics.qx = {0.0, 0.0, 0.0};
+        physics.qy = {0.0, 0.0, 0.0};
+        physics.qz = {0.0, 0.0, 0.0};
+        physics.vx = {100.0, -50.0, -50.0};
+        physics.vy = {0.0, 0.0, 0.0};
+        physics.vz = {0.0, 0.0, 0.0};
+
+        EntityStatusBlock status;
+        status.ensureSize(3);
+        status.allegiance = {Allegiance::Friendly, Allegiance::Hostile,
+                             Allegiance::Hostile};
+        status.isAlive = {true, true, true};
+
+        SensorBlock sensors;
+        sensors.ensureSize(3);
+        sensors.imuEnabled = {false, false, false};
+        sensors.gpsEnabled = {false, false, false};
+        sensors.radarEnabled[0] = true;
+        sensors.antennaScanRateHz[0] = 5.0;
+        sensors.radarMaxRangeM[0] = 5000.0;
+        sensors.radarFieldOfViewHalfAngleRad[0] = 1.0;
+        sensors.radarMeasurementLatencySec[0] = 0.15;
+        sensors.radarRangeNoiseStdDevM[0] = 2.0;
+        sensors.radarRangeRateNoiseStdDevMps[0] = 0.5;
+        sensors.radarAngleNoiseStdDevRad[0] = 0.001;
+
+        SensorSystem sensorSystem;
+        sensorSystem.setSeed(0x12345678u);
+        EnvironmentConfig environment;
+        sensorSystem.update(physics, sensors, status, 0.2, 0.01, environment);
+        check(sensors.radarMeasurements.empty(),
+              "radar latency withholds the first scan until delivery");
+
+        sensorSystem.update(physics, sensors, status, 0.4, 0.01, environment);
+        check(sensors.radarMeasurements.size() == 2,
+              "one radar scan produces independent returns for both hostile targets");
+        check(sensors.radarMeasurements[0].sourceEntityId == 0 &&
+                  sensors.radarMeasurements[0].targetEntityId == 1 &&
+                  sensors.radarMeasurements[1].sourceEntityId == 0 &&
+                  sensors.radarMeasurements[1].targetEntityId == 2,
+              "radar returns preserve source and target identity");
+        check(sensors.radarMeasurements[0].rangeM > 990.0 &&
+                  sensors.radarMeasurements[0].rangeM < 1010.0 &&
+                  std::isfinite(sensors.radarMeasurements[0].rangeRateMps),
+              "radar return carries bounded noisy range and finite Doppler rate");
     }
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

@@ -6,6 +6,17 @@
 
 namespace StrikeEngine::Kernel {
 
+    struct RadarMeasurement {
+        int sourceEntityId = -1;
+        int targetEntityId = -1;
+        double timestampSec = 0.0;
+        double rangeM = 0.0;
+        double rangeRateMps = 0.0;
+        double azimuthRad = 0.0;
+        double elevationRad = 0.0;
+        double signalStrengthDb = 0.0;
+    };
+
     struct SensorBlock {
         // IMU Measurements (High Frequency)
         std::vector<double> accelX, accelY, accelZ; // Specific force (m/s^2)
@@ -73,6 +84,24 @@ namespace StrikeEngine::Kernel {
         std::vector<double> maxGyroBiasEstimate;
         std::vector<bool> baroAttitudeCorrectionEnabled;
 
+        // Active fire-control radar configuration and the current scan's
+        // target-specific measurements. The vector is transient output and is
+        // consumed before the next kernel step.
+        std::vector<double> antennaPositionX, antennaPositionY, antennaPositionZ;
+        std::vector<double> antennaScanRateHz;
+        std::vector<bool> radarEnabled;
+        std::vector<double> radarMaxRangeM;
+        std::vector<double> radarFieldOfViewHalfAngleRad;
+        std::vector<double> radarRangeNoiseStdDevM;
+        std::vector<double> radarRangeRateNoiseStdDevMps;
+        std::vector<double> radarAngleNoiseStdDevRad;
+        std::vector<double> radarMeasurementLatencySec;
+        std::vector<bool> radarTerrainMaskingEnabled;
+        std::vector<double> radarTrackCoastTimeoutSec;
+        std::vector<double> radarTrackLossTimeoutSec;
+        std::vector<double> radarTrackQualityTauSec;
+        std::vector<RadarMeasurement> radarMeasurements;
+
         std::size_t size = 0;
 
         /**
@@ -134,6 +163,21 @@ namespace StrikeEngine::Kernel {
             growTo(maxAccelBiasEstimate, n, 0.5);
             growTo(maxGyroBiasEstimate, n, 0.02);
             growTo(baroAttitudeCorrectionEnabled, n, false);
+            growTo(antennaPositionX, n, 0.0);
+            growTo(antennaPositionY, n, 0.0);
+            growTo(antennaPositionZ, n, 0.0);
+            growTo(antennaScanRateHz, n, 0.0);
+            growTo(radarEnabled, n, false);
+            growTo(radarMaxRangeM, n, 0.0);
+            growTo(radarFieldOfViewHalfAngleRad, n, 3.14159265358979323846);
+            growTo(radarRangeNoiseStdDevM, n, 0.0);
+            growTo(radarRangeRateNoiseStdDevMps, n, 0.0);
+            growTo(radarAngleNoiseStdDevRad, n, 0.0);
+            growTo(radarMeasurementLatencySec, n, 0.0);
+            growTo(radarTerrainMaskingEnabled, n, false);
+            growTo(radarTrackCoastTimeoutSec, n, 0.5);
+            growTo(radarTrackLossTimeoutSec, n, 2.0);
+            growTo(radarTrackQualityTauSec, n, 1.0);
             if (n > size) size = n;
         }
     };

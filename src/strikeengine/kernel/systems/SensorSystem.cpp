@@ -6,8 +6,62 @@
 #include <chrono>
 #include <array>
 #include <deque>
+#include <numbers>
 
 namespace StrikeEngine::Kernel {
+
+namespace {
+
+bool terrainBlocksRadar(double fromX, double fromY, double fromZ,
+                        double toX, double toY, double toZ,
+                        const EnvironmentConfig& environment)
+{
+    if (!environment.globalTerrain && !environment.terrainElevation) return false;
+    if (!environment.globalTerrain && environment.earth.useEcefTruth) return false;
+
+    constexpr int kSamples = 12;
+    for (int k = 1; k < kSamples; ++k) {
+        const double t = static_cast<double>(k) / kSamples;
+        const double x = fromX + (toX - fromX) * t;
+        const double y = fromY + (toY - fromY) * t;
+        const double z = fromZ + (toZ - fromZ) * t;
+        double elevation = 0.0;
+        bool known = false;
+        if (environment.earth.useEcefTruth) {
+            const auto geo = Models::ecefToGeodetic({x, y, z});
+            if (environment.globalTerrain) {
+                const auto sample = environment.globalTerrain->sample(
+                    geo.latitudeRad, geo.longitudeRad);
+                if (sample.hasElevation()) {
+                    elevation = sample.elevationM;
+                    known = true;
+                }
+            }
+            if (known && geo.altitudeM < elevation) return true;
+        } else {
+            if (environment.globalTerrain) {
+                const Models::GeodeticCoordinate reference{
+                    environment.earth.referenceLatitudeRad,
+                    environment.earth.referenceLongitudeRad, 0.0};
+                const auto geo = Models::EarthFrames::enuToGeodetic(
+                    {x, y, z}, reference);
+                const auto sample = environment.globalTerrain->sample(
+                    geo.latitudeRad, geo.longitudeRad);
+                if (sample.hasElevation()) {
+                    elevation = sample.elevationM;
+                    known = true;
+                }
+            } else {
+                elevation = environment.terrainElevation(x, y);
+                known = true;
+            }
+            if (known && z < elevation) return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 
     SensorSystem::SensorSystem() {
         unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -38,6 +92,8 @@ namespace StrikeEngine::Kernel {
         lastMagUpdateTime.clear();
         trueBaroBias.clear();
         gpsLatencyQueue.clear();
+        lastRadarScanTime.clear();
+        radarLatencyQueue.clear();
     }
 
     void SensorSystem::resetEntity(std::size_t id) {
@@ -55,6 +111,8 @@ namespace StrikeEngine::Kernel {
         clear(lastBaroUpdateTime);
         clear(lastMagUpdateTime);
         if (gpsLatencyQueue.size() > id) gpsLatencyQueue[id].clear();
+        clear(lastRadarScanTime);
+        if (radarLatencyQueue.size() > id) radarLatencyQueue[id].clear();
     }
 
     void SensorSystem::ensureCapacity(std::size_t size) {
@@ -79,6 +137,12 @@ namespace StrikeEngine::Kernel {
         if (gpsLatencyQueue.size() < size) {
             gpsLatencyQueue.resize(size);
         }
+        if (lastRadarScanTime.size() < size) {
+            lastRadarScanTime.resize(size, 0.0);
+        }
+        if (radarLatencyQueue.size() < size) {
+            radarLatencyQueue.resize(size);
+        }
     }
 
     void SensorSystem::update(
@@ -96,6 +160,7 @@ namespace StrikeEngine::Kernel {
         // Owner of the slot defaults is SensorBlock::ensureSize. Grow-only, so
         // it cannot shrink arrays already holding state.
         sensors.ensureSize(size);
+        sensors.radarMeasurements.clear();
 
         std::normal_distribution<double> stdNorm(0.0, 1.0);
 
@@ -352,6 +417,114 @@ namespace StrikeEngine::Kernel {
                     sensors.magZ[i] = bbz + stdNorm(rng) * sensors.magNoiseStdDev[i];
                     sensors.magUpdated[i] = true;
                 }
+            }
+        }
+
+        // Active radar scan. This is deliberately a separate opt-in path from
+        // the IMU/GPS loop above: legacy scenarios have no radar measurements,
+        // and therefore retain their exact sensor stream and track behavior.
+        for (std::size_t source = 0; source < size; ++source) {
+            if (!physics.active[source] || !sensors.radarEnabled[source] ||
+                (source < status.sensorFailed.size() && status.sensorFailed[source])) {
+                continue;
+            }
+            const double scanRate = sensors.antennaScanRateHz[source];
+            if (!(scanRate > 0.0)) continue;
+            const double scanPeriod = 1.0 / scanRate;
+            if (currentTime - lastRadarScanTime[source] + 1e-12 < scanPeriod) continue;
+            lastRadarScanTime[source] = currentTime;
+
+            double antennaOffsetX = 0.0;
+            double antennaOffsetY = 0.0;
+            double antennaOffsetZ = 0.0;
+            quatRotateToWorld(
+                physics.qw[source], physics.qx[source], physics.qy[source], physics.qz[source],
+                sensors.antennaPositionX[source], sensors.antennaPositionY[source],
+                sensors.antennaPositionZ[source], antennaOffsetX, antennaOffsetY,
+                antennaOffsetZ);
+            const double sensorX = physics.px[source] + antennaOffsetX;
+            const double sensorY = physics.py[source] + antennaOffsetY;
+            const double sensorZ = physics.pz[source] + antennaOffsetZ;
+            const double maxRange = sensors.radarMaxRangeM[source];
+            const double fov = std::clamp(
+                sensors.radarFieldOfViewHalfAngleRad[source], 0.0,
+                std::numbers::pi);
+
+            for (std::size_t target = 0; target < size; ++target) {
+                if (target == source || !physics.active[target] ||
+                    !status.isAlive[target] ||
+                    status.allegiance[source] == status.allegiance[target]) {
+                    continue;
+                }
+
+                const double dx = physics.px[target] - sensorX;
+                const double dy = physics.py[target] - sensorY;
+                const double dz = physics.pz[target] - sensorZ;
+                const double range = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (!(range > 1e-6) || (maxRange > 0.0 && range > maxRange)) continue;
+
+                double bodyX = 0.0;
+                double bodyY = 0.0;
+                double bodyZ = 0.0;
+                quatRotateToBody(
+                    physics.qw[source], physics.qx[source], physics.qy[source], physics.qz[source],
+                    dx / range, dy / range, dz / range, bodyX, bodyY, bodyZ);
+                const double offBoresight = std::acos(std::clamp(bodyX, -1.0, 1.0));
+                if (offBoresight > fov) continue;
+                if (sensors.radarTerrainMaskingEnabled[source] &&
+                    terrainBlocksRadar(sensorX, sensorY, sensorZ,
+                                       physics.px[target], physics.py[target],
+                                       physics.pz[target], environment)) {
+                    continue;
+                }
+
+                RadarMeasurement measurement;
+                measurement.sourceEntityId = static_cast<int>(source);
+                measurement.targetEntityId = static_cast<int>(target);
+                measurement.timestampSec = currentTime;
+                measurement.rangeM = range;
+                measurement.rangeRateMps =
+                    (dx * (physics.vx[target] - physics.vx[source]) +
+                     dy * (physics.vy[target] - physics.vy[source]) +
+                     dz * (physics.vz[target] - physics.vz[source])) / range;
+                measurement.azimuthRad = std::atan2(bodyY, bodyX);
+                measurement.elevationRad = std::asin(std::clamp(-bodyZ, -1.0, 1.0));
+
+                const double rangeNoise = sensors.radarRangeNoiseStdDevM[source];
+                const double rangeRateNoise = sensors.radarRangeRateNoiseStdDevMps[source];
+                const double angleNoise = sensors.radarAngleNoiseStdDevRad[source];
+                if (rangeNoise > 0.0) {
+                    measurement.rangeM += stdNorm(rng) * rangeNoise;
+                    measurement.rangeM = std::max(1.0, measurement.rangeM);
+                }
+                if (rangeRateNoise > 0.0) {
+                    measurement.rangeRateMps += stdNorm(rng) * rangeRateNoise;
+                }
+                if (angleNoise > 0.0) {
+                    measurement.azimuthRad += stdNorm(rng) * angleNoise;
+                    measurement.elevationRad += stdNorm(rng) * angleNoise;
+                }
+                measurement.signalStrengthDb = 20.0 * std::log10(
+                    std::max(1.0, (maxRange > 0.0 ? maxRange : 100000.0) / range));
+
+                const double latency = std::max(
+                    0.0, sensors.radarMeasurementLatencySec[source]);
+                if (latency <= 0.0) {
+                    sensors.radarMeasurements.push_back(measurement);
+                } else {
+                    radarLatencyQueue[source].push_back(measurement);
+                }
+            }
+        }
+
+        for (std::size_t source = 0; source < radarLatencyQueue.size(); ++source) {
+            const double latency = std::max(
+                0.0, sensors.radarMeasurementLatencySec[source]);
+            auto& queue = radarLatencyQueue[source];
+            while (!queue.empty() &&
+                   currentTime - queue.front().timestampSec >= latency - 1e-12) {
+                sensors.radarMeasurements.push_back(queue.front());
+                queue.pop_front();
             }
         }
     }

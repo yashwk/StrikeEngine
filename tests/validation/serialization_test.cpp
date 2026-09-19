@@ -129,6 +129,17 @@ VehicleConfig makeRichConfig()
     cfg.sensor.antennaPositionY = 0.0;
     cfg.sensor.antennaPositionZ = -0.10;
     cfg.sensor.antennaScanRateHz = 12.0;
+    cfg.sensor.radarEnabled = true;
+    cfg.sensor.radarMaxRangeM = 85000.0;
+    cfg.sensor.radarFieldOfViewHalfAngleRad = 0.7;
+    cfg.sensor.radarRangeNoiseStdDevM = 12.0;
+    cfg.sensor.radarRangeRateNoiseStdDevMps = 2.5;
+    cfg.sensor.radarAngleNoiseStdDevRad = 0.0004;
+    cfg.sensor.radarMeasurementLatencySec = 0.15;
+    cfg.sensor.radarTerrainMaskingEnabled = true;
+    cfg.sensor.radarTrackCoastTimeoutSec = 0.6;
+    cfg.sensor.radarTrackLossTimeoutSec = 2.5;
+    cfg.sensor.radarTrackQualityTauSec = 1.2;
 
     cfg.guidanceAutopilot.navigationConstant = 4.0;
     cfg.guidanceAutopilot.waypointGain = 25.0;
@@ -241,6 +252,18 @@ int main()
                   cfg2.sensor.antennaPositionZ == -0.10 &&
                   cfg2.sensor.antennaScanRateHz == 12.0,
               "sensor antenna position and scan rate survive");
+        check(cfg2.sensor.radarEnabled &&
+                  cfg2.sensor.radarMaxRangeM == 85000.0 &&
+                  cfg2.sensor.radarFieldOfViewHalfAngleRad == 0.7 &&
+                  cfg2.sensor.radarRangeNoiseStdDevM == 12.0 &&
+                  cfg2.sensor.radarRangeRateNoiseStdDevMps == 2.5 &&
+                  cfg2.sensor.radarAngleNoiseStdDevRad == 0.0004 &&
+                  cfg2.sensor.radarMeasurementLatencySec == 0.15 &&
+                  cfg2.sensor.radarTerrainMaskingEnabled &&
+                  cfg2.sensor.radarTrackCoastTimeoutSec == 0.6 &&
+                  cfg2.sensor.radarTrackLossTimeoutSec == 2.5 &&
+                  cfg2.sensor.radarTrackQualityTauSec == 1.2,
+              "sensor radar measurement and track fields survive");
         check(cfg2.guidanceAutopilot.navigationConstant == 4.0 &&
                   cfg2.guidanceAutopilot.kAccelP == 0.05 &&
                   cfg2.guidanceAutopilot.maxServoRateRadPerSec == 6.0 &&

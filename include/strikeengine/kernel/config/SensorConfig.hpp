@@ -99,6 +99,22 @@ namespace StrikeEngine::Kernel {
         double antennaPositionY = 0.0;
         double antennaPositionZ = 0.0;
         double antennaScanRateHz = 0.0;
+
+        // --- Active fire-control radar (opt-in; disabled preserves legacy) ---
+        // The radar reports target-specific range/bearing measurements to the
+        // kernel track manager. A zero max range means unlimited range once
+        // radarEnabled is true; scan rate is taken from antennaScanRateHz.
+        bool   radarEnabled = false;
+        double radarMaxRangeM = 0.0;
+        double radarFieldOfViewHalfAngleRad = 3.14159265358979323846;
+        double radarRangeNoiseStdDevM = 0.0;
+        double radarRangeRateNoiseStdDevMps = 0.0;
+        double radarAngleNoiseStdDevRad = 0.0;
+        double radarMeasurementLatencySec = 0.0;
+        bool   radarTerrainMaskingEnabled = false;
+        double radarTrackCoastTimeoutSec = 0.5;
+        double radarTrackLossTimeoutSec = 2.0;
+        double radarTrackQualityTauSec = 1.0;
     };
 
 } // namespace StrikeEngine::Kernel

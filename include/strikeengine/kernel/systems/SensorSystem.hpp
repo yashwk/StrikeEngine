@@ -79,6 +79,9 @@ namespace StrikeEngine::Kernel {
             double vx = 0.0, vy = 0.0, vz = 0.0;
         };
         std::vector<std::deque<DelayedGpsSample>> gpsLatencyQueue;
+
+        std::vector<double> lastRadarScanTime;
+        std::vector<std::deque<RadarMeasurement>> radarLatencyQueue;
         
         // Random walk biases (true biases drifting over time)
         // In a perfectly pure SoA, these true biases would live in another block (e.g. TrueSensorStateBlock),

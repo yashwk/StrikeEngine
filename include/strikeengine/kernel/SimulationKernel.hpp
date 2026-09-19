@@ -144,10 +144,11 @@ namespace StrikeEngine::Kernel {
         // Hold a launch-enabled scenario entity for in-flight spawning
         // (called by ScenarioConfig::loadInto; see LaunchSpec).
         void addPendingLaunch(const ScenarioEntityConfig& entityCfg);
-        // Register a target-specific cooperative relay track. The target
-        // entity's navigation estimate refreshes the record each step, while
-        // the source/target key keeps several missiles from sharing one
-        // source's currently selected seeker track.
+        // Register a target-specific cooperative relay track. An opt-in active
+        // radar on the source refreshes it from delivered measurements;
+        // sources without that model use the target navigation estimate. The
+        // source/target key keeps several missiles from sharing one source's
+        // currently selected seeker track.
         void configureDatalinkTrack(PhysicsId sourceId, PhysicsId targetId,
                                     const VehicleInitState& initialTarget);
         // True while any rail-launched entity is still gating on its

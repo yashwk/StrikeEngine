@@ -465,6 +465,21 @@ namespace StrikeEngine::Kernel {
         sensorBlock.maxAccelBiasEstimate[id] = resolved.sensor.maxAccelBiasEstimate;
         sensorBlock.maxGyroBiasEstimate[id] = resolved.sensor.maxGyroBiasEstimate;
         sensorBlock.baroAttitudeCorrectionEnabled[id] = resolved.sensor.baroAttitudeCorrectionEnabled;
+        sensorBlock.antennaPositionX[id] = resolved.sensor.antennaPositionX;
+        sensorBlock.antennaPositionY[id] = resolved.sensor.antennaPositionY;
+        sensorBlock.antennaPositionZ[id] = resolved.sensor.antennaPositionZ;
+        sensorBlock.antennaScanRateHz[id] = resolved.sensor.antennaScanRateHz;
+        sensorBlock.radarEnabled[id] = resolved.sensor.radarEnabled;
+        sensorBlock.radarMaxRangeM[id] = resolved.sensor.radarMaxRangeM;
+        sensorBlock.radarFieldOfViewHalfAngleRad[id] = resolved.sensor.radarFieldOfViewHalfAngleRad;
+        sensorBlock.radarRangeNoiseStdDevM[id] = resolved.sensor.radarRangeNoiseStdDevM;
+        sensorBlock.radarRangeRateNoiseStdDevMps[id] = resolved.sensor.radarRangeRateNoiseStdDevMps;
+        sensorBlock.radarAngleNoiseStdDevRad[id] = resolved.sensor.radarAngleNoiseStdDevRad;
+        sensorBlock.radarMeasurementLatencySec[id] = resolved.sensor.radarMeasurementLatencySec;
+        sensorBlock.radarTerrainMaskingEnabled[id] = resolved.sensor.radarTerrainMaskingEnabled;
+        sensorBlock.radarTrackCoastTimeoutSec[id] = resolved.sensor.radarTrackCoastTimeoutSec;
+        sensorBlock.radarTrackLossTimeoutSec[id] = resolved.sensor.radarTrackLossTimeoutSec;
+        sensorBlock.radarTrackQualityTauSec[id] = resolved.sensor.radarTrackQualityTauSec;
 
         physicsBlock.px[id] = init.px; physicsBlock.py[id] = init.py; physicsBlock.pz[id] = init.pz;
         physicsBlock.vx[id] = init.vx; physicsBlock.vy[id] = init.vy; physicsBlock.vz[id] = init.vz;
@@ -1288,13 +1303,133 @@ namespace StrikeEngine::Kernel {
                 target < physicsBlock.size && target < navigationBlock.size &&
                 target < physicsBlock.active.size() && physicsBlock.active[target] &&
                 target < statusBlock.isAlive.size() && statusBlock.isAlive[target];
+
+            const auto sourceId = static_cast<std::size_t>(track.sourceEntityId);
+            const bool sensorDriven = track.sourceEntityId >= 0 &&
+                sourceId < sensorBlock.radarEnabled.size() &&
+                sensorBlock.radarEnabled[sourceId];
+
+            if (sensorDriven) {
+                // The source radar owns the measurement cadence. Search from
+                // the newest delivery so a delayed scan cannot apply an older
+                // duplicate when several target returns arrive together.
+                const RadarMeasurement* measurement = nullptr;
+                for (auto it = sensorBlock.radarMeasurements.rbegin();
+                     it != sensorBlock.radarMeasurements.rend(); ++it) {
+                    if (it->sourceEntityId == track.sourceEntityId &&
+                        it->targetEntityId == track.targetEntityId) {
+                        measurement = &*it;
+                        break;
+                    }
+                }
+
+                if (measurement && sourceId < navigationBlock.estPx.size() &&
+                    sourceId < navigationBlock.estQw.size()) {
+                    const double cosEl = std::cos(measurement->elevationRad);
+                    const double bodyX = measurement->rangeM * cosEl *
+                        std::cos(measurement->azimuthRad);
+                    const double bodyY = measurement->rangeM * cosEl *
+                        std::sin(measurement->azimuthRad);
+                    const double bodyZ = -measurement->rangeM *
+                        std::sin(measurement->elevationRad);
+
+                    double antennaX = 0.0;
+                    double antennaY = 0.0;
+                    double antennaZ = 0.0;
+                    quatRotateToWorld(
+                        navigationBlock.estQw[sourceId], navigationBlock.estQx[sourceId],
+                        navigationBlock.estQy[sourceId], navigationBlock.estQz[sourceId],
+                        sensorBlock.antennaPositionX[sourceId],
+                        sensorBlock.antennaPositionY[sourceId],
+                        sensorBlock.antennaPositionZ[sourceId],
+                        antennaX, antennaY, antennaZ);
+
+                    double measuredX = 0.0;
+                    double measuredY = 0.0;
+                    double measuredZ = 0.0;
+                    quatRotateToWorld(
+                        navigationBlock.estQw[sourceId], navigationBlock.estQx[sourceId],
+                        navigationBlock.estQy[sourceId], navigationBlock.estQz[sourceId],
+                        bodyX, bodyY, bodyZ, measuredX, measuredY, measuredZ);
+                    measuredX += navigationBlock.estPx[sourceId] + antennaX;
+                    measuredY += navigationBlock.estPy[sourceId] + antennaY;
+                    measuredZ += navigationBlock.estPz[sourceId] + antennaZ;
+
+                    const double oldTimestamp = track.timestampSec;
+                    const double dtMeasurement = measurement->timestampSec - oldTimestamp;
+                    if (oldTimestamp > 0.0 && dtMeasurement > 1e-9) {
+                        const double rawVx = (measuredX - track.posX) / dtMeasurement;
+                        const double rawVy = (measuredY - track.posY) / dtMeasurement;
+                        const double rawVz = (measuredZ - track.posZ) / dtMeasurement;
+                        constexpr double kVelocityBlend = 0.35;
+                        track.velX = (1.0 - kVelocityBlend) * track.velX +
+                            kVelocityBlend * rawVx;
+                        track.velY = (1.0 - kVelocityBlend) * track.velY +
+                            kVelocityBlend * rawVy;
+                        track.velZ = (1.0 - kVelocityBlend) * track.velZ +
+                            kVelocityBlend * rawVz;
+                    }
+
+                    track.posX = measuredX;
+                    track.posY = measuredY;
+                    track.posZ = measuredZ;
+                    track.accelX = 0.0;
+                    track.accelY = 0.0;
+                    track.accelZ = 0.0;
+                    track.accelAvailable = false;
+                    track.timestampSec = measurement->timestampSec;
+                    track.ageSec = std::max(0.0,
+                                            time.currentTime() - measurement->timestampSec);
+                    track.positionStdM = std::max(
+                        1.0, std::hypot(
+                            sensorBlock.radarRangeNoiseStdDevM[sourceId],
+                            measurement->rangeM * sensorBlock.radarAngleNoiseStdDevRad[sourceId]));
+                    track.velocityStdMs = std::max(
+                        1.0, std::hypot(
+                            sensorBlock.radarRangeRateNoiseStdDevMps[sourceId],
+                            track.positionStdM / std::max(0.1, dtMeasurement)));
+                    track.quality01 = 1.0;
+                    ++track.updateCount;
+                    if (track.state == TrackState::Lost ||
+                        track.state == TrackState::Coast) {
+                        track.state = TrackState::Reacquire;
+                    } else {
+                        track.state = TrackState::Maintain;
+                    }
+                    continue;
+                }
+
+                // No delivered radar return this tick: predict the relay
+                // track forward and let its lifecycle expose coast/loss.
+                if (track.active()) {
+                    track.posX += track.velX * dt;
+                    track.posY += track.velY * dt;
+                    track.posZ += track.velZ * dt;
+                }
+                track.ageSec += dt;
+                const double coastTimeout = sourceId < sensorBlock.radarTrackCoastTimeoutSec.size()
+                    ? std::max(0.0, sensorBlock.radarTrackCoastTimeoutSec[sourceId]) : 0.5;
+                const double lossTimeout = sourceId < sensorBlock.radarTrackLossTimeoutSec.size()
+                    ? std::max(coastTimeout, sensorBlock.radarTrackLossTimeoutSec[sourceId]) : 2.0;
+                const double qualityTau = sourceId < sensorBlock.radarTrackQualityTauSec.size()
+                    ? std::max(1e-9, sensorBlock.radarTrackQualityTauSec[sourceId]) : 1.0;
+                if (track.state == TrackState::Maintain && track.ageSec >= coastTimeout) {
+                    track.state = TrackState::Coast;
+                } else if (track.state == TrackState::Coast && track.ageSec >= lossTimeout) {
+                    track.state = TrackState::Lost;
+                }
+                track.positionStdM += std::max(1.0, track.velocityStdMs) * dt;
+                track.velocityStdMs += 0.5 * dt;
+                track.quality01 = track.active()
+                    ? std::exp(-track.ageSec / qualityTau) : 0.0;
+                continue;
+            }
+
             if (liveTarget && target < navigationBlock.estPx.size() &&
                 target < navigationBlock.estVx.size()) {
-                // A configured cooperative relay represents the source's
-                // fire-control track picture. The target's navigation estimate
-                // supplies the shared position/velocity solution; the relay
-                // deliberately does not export target acceleration, matching
-                // the conservative remote-track policy in guidance.
+                // Legacy source behavior: a configured cooperative relay with
+                // no radar sensor continues to use the target navigation
+                // estimate, preserving existing scenarios and tests.
                 track.state = TrackState::Maintain;
                 track.posX = navigationBlock.estPx[target];
                 track.posY = navigationBlock.estPy[target];
@@ -1866,8 +2001,9 @@ namespace StrikeEngine::Kernel {
         // 3. Compute Navigation estimates (INS + EKF)
         navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt, environment);
 
-        // 3.25 Refresh target-specific cooperative relay tracks from the
-        // target navigation estimates before seeker/guidance consumption.
+        // 3.25 Refresh target-specific cooperative relay tracks from active
+        // source-radar measurements, or the legacy target navigation estimate,
+        // before seeker/guidance consumption.
         updateDatalinkTracks(dt);
         
         // 3.5 Process Seekers
