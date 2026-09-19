@@ -54,9 +54,9 @@ namespace StrikeEngine::Kernel {
     };
 
     // A scenario entity deferred by its LaunchSpec: held by the kernel until
-    // the launch conditions (parent seeker lock hold + range gate) are met,
-    // then spawned with rail-release geometry and its initial guidance
-    // command. See ScenarioEntityConfig::LaunchSpec.
+    // its time gate or parent seeker lock/range conditions are met, then
+    // spawned with rail-release geometry and its initial guidance command.
+    // See ScenarioEntityConfig::LaunchSpec.
     struct PendingLaunch {
         ScenarioEntityConfig cfg;
         double lockSince = -1.0;

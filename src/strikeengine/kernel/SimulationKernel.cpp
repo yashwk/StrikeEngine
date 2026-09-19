@@ -1598,9 +1598,9 @@ namespace StrikeEngine::Kernel {
         }
     }
 
-    // Evaluate pending rail launches: lock-hold on the parent's seeker plus
-    // an optional slant-range gate. Runs before the systems update so the
-    // spawned entity participates in the current step.
+    // Evaluate pending rail launches: an authored time gate or the parent's
+    // seeker lock-hold plus optional slant-range gate. Runs before the
+    // systems update so the spawned entity participates in the current step.
     void SimulationKernel::processPendingLaunches() {
         if (pendingLaunches.empty()) return;
         for (std::size_t i = 0; i < pendingLaunches.size();) {
@@ -1615,6 +1615,24 @@ namespace StrikeEngine::Kernel {
                 continue;
             }
 
+            const double t = time.currentTime();
+            if (spec.launchDelaySec > 0.0 &&
+                t + 1e-9 < spec.launchDelaySec) {
+                ++i;
+                continue;
+            }
+
+            // A zero lock hold is an explicit time-gated launch mode. This
+            // lets one launcher schedule rounds against independently
+            // assigned targets; lock/range gating remains available whenever
+            // either lockHoldSec or rangeGateM is configured.
+            const bool lockRequired = spec.lockHoldSec > 0.0 || spec.rangeGateM > 0.0;
+            if (!lockRequired) {
+                spawnPendingLaunch(pl);
+                pendingLaunches.erase(pendingLaunches.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+
             bool locked = parent < seekerBlock.isLocked.size() && seekerBlock.isLocked[parent];
             if (locked && spec.targetIndex >= 0) {
                 locked = (parent < seekerBlock.lockedTargetId.size() &&
@@ -1625,7 +1643,6 @@ namespace StrikeEngine::Kernel {
                 ++i;
                 continue;
             }
-            const double t = time.currentTime();
             if (pl.lockSince < 0.0) pl.lockSince = t;
             if (t - pl.lockSince < spec.lockHoldSec) {
                 ++i;

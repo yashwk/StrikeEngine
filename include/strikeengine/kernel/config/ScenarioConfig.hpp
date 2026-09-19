@@ -67,6 +67,12 @@ namespace StrikeEngine::Kernel {
             std::int64_t targetIndex = -1;
             double dropM = 0.0;
             double pushMps = 0.0;
+            // Earliest simulation time at which this round may leave the
+            // rail. With lockHoldSec or rangeGateM configured, the legacy
+            // lock/range gate remains authoritative; with both zero,
+            // launchDelaySec is a deterministic time gate and no parent lock
+            // is required.
+            double launchDelaySec = 0.0;
             double lockHoldSec = 0.0;
             double rangeGateM = 0.0;
             // Separation flyout phase (0 = off): after spawn, hold a

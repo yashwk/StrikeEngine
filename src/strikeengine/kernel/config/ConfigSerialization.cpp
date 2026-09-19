@@ -1031,6 +1031,11 @@ void to_json(json& j, const ScenarioEntityConfig& e) {
             {"ejectElevationDeg", e.launch.ejectElevationDeg},
             {"targetEvadeDistanceM", e.launch.targetEvadeDistanceM},
         };
+        // Keep legacy launch specs byte-stable; the optional field is emitted
+        // only when the scenario opts into a deterministic time gate.
+        if (e.launch.launchDelaySec != 0.0) {
+            j["launch"]["launchDelaySec"] = e.launch.launchDelaySec;
+        }
     }
 }
 
@@ -1065,6 +1070,7 @@ void from_json(const json& j, ScenarioEntityConfig& e) {
         e.launch.targetIndex = jl.value("targetIndex", static_cast<std::int64_t>(-1));
         e.launch.dropM = jl.value("dropM", 0.0);
         e.launch.pushMps = jl.value("pushMps", 0.0);
+        e.launch.launchDelaySec = jl.value("launchDelaySec", 0.0);
         e.launch.lockHoldSec = jl.value("lockHoldSec", 0.0);
         e.launch.rangeGateM = jl.value("rangeGateM", 0.0);
         e.launch.flyoutSec = jl.value("flyoutSec", 0.0);
