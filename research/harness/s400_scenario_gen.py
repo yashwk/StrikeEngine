@@ -363,8 +363,9 @@ def awacs_entity(template):
             # Airbreathing turboprop deck, matching the shipped
             # erieye_awacs.entity.json. The old constant 35 kN / 7200 s /
             # Isp 3000 curve was a rocket pretending to be an engine; it
-            # also masked the missing level-flight autopilot. 56 kN static
-            # lapses to the equilibrium cruise thrust at FL200 (~175 m/s).
+            # also masked the missing level-flight autopilot. 70 kN static
+            # lapses (pressure 0.7, Mach 0.4/M) to the equilibrium cruise
+            # thrust at FL200, ~175 m/s.
             "stages": [{
                 "propellant_mass_kg": 3500.0, "dry_mass_kg": 0.0,
                 "vacuum_isp": 3000.0, "sea_level_isp": 3000.0,
@@ -375,10 +376,11 @@ def awacs_entity(template):
                 "engine_position_x": 0.0, "engine_position_y": 0.0, "engine_position_z": 0.0,
                 "aircraft_engine": {
                     "enabled": True,
-                    "sea_level_static_thrust_n": 56000.0,
+                    "sea_level_static_thrust_n": 70000.0,
                     "pressure_lapse_exponent": 0.7,
                     "tsfc_kg_per_n_per_s": 1.0e-5,
                     "throttle": 1.0,
+                    "mach_lapse_per_mach": 0.4,
                 },
             }],
         },
@@ -390,20 +392,18 @@ def awacs_entity(template):
                                               "measurement_noise_enabled": False}),
         "warhead": inert_warhead(),
         "guidance_autopilot": dict(template["guidance_autopilot"], **{
-            # Keep the working aircraft gains from the template; the only
-            # change is the orbit altitude (a heavy turboprop on invented
-            # gains falls out of the sky).
-            # Station flight: straight and level, no maneuvers. The Erieye
-            # holds its track with zero lateral steering demand; the roll
-            # channel is off (its P loop is unstable for this airframe in the
-            # engine today -- see the ponytail note) and the pitch integral
-            # carries the heavy airframe's trim (the small clamp left a steady
-            # sink). ponytail: engine follow-up = a stable roll/level mode with
-            # a proper gain margin; the reproducer is in the handoff report.
+            # Station flight: straight and level, no lateral steering demand.
+            # The roll channel is ON: the earlier "P loop is unstable for this
+            # airframe" workaround predated the c4b4c52 sign fix and is stale -
+            # the loop now recovers a 1.5 rad/s roll-rate disturbance to level.
+            # The altitude loop carries both the inner pitch trim integral and
+            # the outer cruise-altitude integral.
             "cruiseWaypointGain": 0.0,
             "cruiseAltitudeGain": 0.3,
             "cruiseAltitudeDamping": 0.7,
-            "kRollP": 0.0, "kRollD": 0.0,
+            "cruiseAltitudeIntegralGain": 0.002,
+            "cruiseAltitudeIntegralClampMps2": 0.5,
+            "kRollP": 0.10, "kRollD": 0.05,
             "autopilotIntegralEnabled": True,
             "integralClampRad": 0.25,
             "kAlphaP": 0.02,

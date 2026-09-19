@@ -116,6 +116,11 @@ namespace StrikeEngine::Kernel {
         double cruiseAltitudeGain    = 0.05;  // vertical accel per m of altitude error (1/s^2)
         double cruiseAltitudeDamping = 0.30;  // vertical accel per m/s of climb rate (1/s)
         double cruiseWaypointGain    = 0.8;   // horizontal accel toward the waypoint (1/s^2)
+        // Integral trim on the altitude error (m/s^2 per m*s), clamped. 0 = off
+        // (legacy). Cancels the standing altitude error left by a pure P-D
+        // altitude loop.
+        double cruiseAltitudeIntegralGain = 0.0;
+        double cruiseAltitudeIntegralClampMps2 = 0.0;
 
         // Trajectory-core keys (optional with legacy defaults; active only
         // when GuidanceMode::Trajectory is explicitly selected). A seeker lock

@@ -562,6 +562,12 @@ void to_json(json& j, const GuidanceAutopilotConfig& g) {
     j["cruiseAltitudeGain"] = g.cruiseAltitudeGain;
     j["cruiseAltitudeDamping"] = g.cruiseAltitudeDamping;
     j["cruiseWaypointGain"] = g.cruiseWaypointGain;
+    // Emitted only when in use, so a file that does not opt in keeps its exact
+    // previous serialization.
+    if (g.cruiseAltitudeIntegralGain != 0.0) {
+        j["cruiseAltitudeIntegralGain"] = g.cruiseAltitudeIntegralGain;
+        j["cruiseAltitudeIntegralClampMps2"] = g.cruiseAltitudeIntegralClampMps2;
+    }
 }
 
 void from_json(const json& j, GuidanceAutopilotConfig& g) {
@@ -643,6 +649,8 @@ void from_json(const json& j, GuidanceAutopilotConfig& g) {
     g.cruiseAltitudeGain = j.value("cruiseAltitudeGain", 0.05);
     g.cruiseAltitudeDamping = j.value("cruiseAltitudeDamping", 0.30);
     g.cruiseWaypointGain = j.value("cruiseWaypointGain", 0.8);
+    g.cruiseAltitudeIntegralGain = j.value("cruiseAltitudeIntegralGain", 0.0);
+    g.cruiseAltitudeIntegralClampMps2 = j.value("cruiseAltitudeIntegralClampMps2", 0.0);
 }
 
 // --- StageConfig / PropulsionConfig ----------------------------------------
@@ -677,6 +685,8 @@ void to_json(json& j, const StageConfig& s) {
             {"pressure_lapse_exponent", s.aircraftEngine.pressureLapseExponent},
             {"tsfc_kg_per_n_per_s", s.aircraftEngine.tsfcKgPerNPerS},
             {"throttle", s.aircraftEngine.throttle},
+            {"mach_lapse_per_mach", s.aircraftEngine.machLapsePerMach},
+            {"mach_lapse_min_factor", s.aircraftEngine.machLapseMinFactor},
         };
     }
 }
@@ -715,6 +725,8 @@ void from_json(const json& j, StageConfig& s) {
         eng.pressureLapseExponent = e.value("pressure_lapse_exponent", eng.pressureLapseExponent);
         eng.tsfcKgPerNPerS = e.value("tsfc_kg_per_n_per_s", eng.tsfcKgPerNPerS);
         eng.throttle = e.value("throttle", eng.throttle);
+        eng.machLapsePerMach = e.value("mach_lapse_per_mach", eng.machLapsePerMach);
+        eng.machLapseMinFactor = e.value("mach_lapse_min_factor", eng.machLapseMinFactor);
     }
 }
 

@@ -321,6 +321,10 @@ namespace StrikeEngine::Kernel {
         guidanceBlock.cruiseAltitudeGain[id] = resolved.guidanceAutopilot.cruiseAltitudeGain;
         guidanceBlock.cruiseAltitudeDamping[id] = resolved.guidanceAutopilot.cruiseAltitudeDamping;
         guidanceBlock.cruiseWaypointGain[id] = resolved.guidanceAutopilot.cruiseWaypointGain;
+        guidanceBlock.cruiseAltitudeIntegralGain[id] =
+            resolved.guidanceAutopilot.cruiseAltitudeIntegralGain;
+        guidanceBlock.cruiseAltitudeIntegralClampMps2[id] =
+            resolved.guidanceAutopilot.cruiseAltitudeIntegralClampMps2;
         // Phase-manager config (defaults preserve the legacy path).
         guidanceBlock.handoffBlendTimeSec[id] = resolved.guidanceAutopilot.handoffBlendTimeSec;
         guidanceBlock.lockLossRetentionSec[id] = resolved.guidanceAutopilot.lockLossRetentionSec;
@@ -531,7 +535,9 @@ namespace StrikeEngine::Kernel {
                     stage.aircraftEngine.seaLevelStaticThrustN,
                     stage.aircraftEngine.pressureLapseExponent,
                     stage.aircraftEngine.tsfcKgPerNPerS,
-                    stage.aircraftEngine.throttle});
+                    stage.aircraftEngine.throttle,
+                    stage.aircraftEngine.machLapsePerMach,
+                    stage.aircraftEngine.machLapseMinFactor});
             const double burnDuration = prop->burnDuration();
             plan.poolIds.push_back(backend->registerPropulsion(std::move(prop)));
             plan.burnDurations.push_back(burnDuration);

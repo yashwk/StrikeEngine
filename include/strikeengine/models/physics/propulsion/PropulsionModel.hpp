@@ -33,6 +33,13 @@ namespace StrikeEngine::Models {
         double pressureLapseExponent = 0.7;
         double tsfcKgPerNPerS = 1.5e-5;
         double throttle = 1.0;
+        // Thrust lapse with Mach number: fraction of thrust lost per Mach, so
+        // T/T_static = clamp(1 - k*M, minFactor, 1). 0 = no Mach lapse (the
+        // pre-existing behaviour). A monotonic linear decrease is a deliberate
+        // simplification: a real turbofan has a ram rise through the
+        // transonic, which this does not model.
+        double machLapsePerMach = 0.0;
+        double machLapseMinFactor = 0.1;
     };
 
     class PropulsionModel {
@@ -53,7 +60,8 @@ namespace StrikeEngine::Models {
          */
         PropulsionState evaluate(double timeSinceIgnition_s, double ambientPressure_pa,
                                  double gimbalPitchRad = 0.0,
-                                 double gimbalYawRad = 0.0) const {
+                                 double gimbalYawRad = 0.0,
+                                 double mach = 0.0) const {
             const double activeTime = timeSinceIgnition_s - options_.ignitionDelaySec;
             if (activeTime < 0.0) return {};
 
@@ -77,9 +85,14 @@ namespace StrikeEngine::Models {
             if (options_.airbreathing) {
                 // Thrust lapses with ambient pressure (troposphere density),
                 // fuel burns at TSFC. Mach lapse is not modelled yet.
+                const double machSafe = (std::isfinite(mach) && mach > 0.0) ? mach : 0.0;
+                const double machFactor = std::clamp(
+                    1.0 - options_.machLapsePerMach * machSafe,
+                    options_.machLapseMinFactor, 1.0);
                 currentThrust = std::clamp(options_.throttle, 0.0, 1.0) *
                     options_.seaLevelStaticThrustN *
-                    std::pow(pressure_fraction, options_.pressureLapseExponent) * multiplier;
+                    std::pow(pressure_fraction, options_.pressureLapseExponent) *
+                    machFactor * multiplier;
                 massFlowRate = options_.tsfcKgPerNPerS * currentThrust;
             } else {
                 currentThrust = thrustCurve.evaluate(activeTime) * multiplier;

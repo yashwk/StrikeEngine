@@ -295,8 +295,8 @@ namespace StrikeEngine::Kernel {
         // (P + D on altitude error) along the local vertical plus a horizontal
         // demand toward the waypoint.
         LawResult computeCruise(
-            std::size_t id, const NavigationBlock& nav, const GuidanceBlock& g,
-            const EnvironmentConfig& env)
+            std::size_t id, const NavigationBlock& nav, GuidanceBlock& g,
+            const EnvironmentConfig& env, double dt)
         {
             LawResult out;
             const double px = nav.estPx[id], py = nav.estPy[id], pz = nav.estPz[id];
@@ -331,9 +331,30 @@ namespace StrikeEngine::Kernel {
                 }
             }
 
-            // Altitude-hold vertical demand (m/s^2 along the local up).
-            const double aVert = g.cruiseAltitudeGain[id] * (altRef - alt)
-                               - g.cruiseAltitudeDamping[id] * climbRate;
+            // Altitude-hold vertical demand (m/s^2 along the local up):
+            // proportional on altitude error, damping on climb rate, plus an
+            // optional clamped integral trim. The P-D pair alone leaves a
+            // standing altitude error wherever a persistent imbalance (net
+            // thrust/weight, a trim bias) demands a non-zero vertical force;
+            // the integral removes it. Anti-windup: the accumulator is clamped
+            // to the configured band and its contribution is skipped while the
+            // altitude error is inside a small deadband, so it cannot wind up
+            // during a climb-out.
+            double& altIntegral = g.cruiseAltitudeIntegral[id];
+            const double altErr = altRef - alt;
+            const double ki = g.cruiseAltitudeIntegralGain[id];
+            const double kiClamp = g.cruiseAltitudeIntegralClampMps2[id];
+            if (ki > 0.0 && kiClamp > 0.0) {
+                if (dt > 0.0 && std::abs(altErr) > 0.5) {
+                    altIntegral += ki * altErr * dt;
+                }
+                altIntegral = std::clamp(altIntegral, -kiClamp, kiClamp);
+            } else {
+                altIntegral = 0.0;
+            }
+            const double aVert = g.cruiseAltitudeGain[id] * altErr
+                               - g.cruiseAltitudeDamping[id] * climbRate
+                               + altIntegral;
 
             // Horizontal direction toward the waypoint (remove vertical comp).
             const double dx = g.targetX[id] - px, dy = g.targetY[id] - py, dz = g.targetZ[id] - pz;
@@ -1261,7 +1282,7 @@ namespace StrikeEngine::Kernel {
             } else if (mode == GuidanceMode::Cruise) {
                 if (!terminalLost) phase = GuidancePhase::Midcourse;
                 law = GuidanceLaw::Cruise;
-                applyDemand(i, computeCruise(i, nav, guidance, environment), guidance, dt, authorityScale);
+                applyDemand(i, computeCruise(i, nav, guidance, environment, dt), guidance, dt, authorityScale);
             } else {
                 zeroDemand(i, guidance);
                 phase = GuidancePhase::None;

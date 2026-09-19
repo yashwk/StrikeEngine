@@ -92,6 +92,14 @@ namespace StrikeEngine::Kernel {
         std::vector<double> cruiseAltitudeGain;    // vertical accel per m of altitude error (1/s^2)
         std::vector<double> cruiseAltitudeDamping; // vertical accel per m/s of climb rate (1/s)
         std::vector<double> cruiseWaypointGain;    // horizontal accel toward the waypoint (1/s^2)
+        // Integral trim on the altitude error (m/s^2 per m*s), clamped. Without
+        // it a straight-flying aircraft holds altitude only to within a slow
+        // residual sink, because the proportional term has no steady-state
+        // authority against a persistent thrust/weight or trim imbalance.
+        std::vector<double> cruiseAltitudeIntegralGain;
+        std::vector<double> cruiseAltitudeIntegralClampMps2;
+        // State: accumulated vertical trim (m/s^2).
+        std::vector<double> cruiseAltitudeIntegral;
 
         // Phase/track configuration (defaults keep the legacy path).
         std::vector<double> handoffBlendTimeSec;   // acquisition->terminal ramp; 0 = instant
@@ -202,6 +210,9 @@ namespace StrikeEngine::Kernel {
             growTo(cruiseAltitudeGain, n, 0.05);
             growTo(cruiseAltitudeDamping, n, 0.30);
             growTo(cruiseWaypointGain, n, 0.8);
+            growTo(cruiseAltitudeIntegralGain, n, 0.0);
+            growTo(cruiseAltitudeIntegralClampMps2, n, 0.0);
+            growTo(cruiseAltitudeIntegral, n, 0.0);
             growTo(handoffBlendTimeSec, n, 0.0);
             growTo(lockLossRetentionSec, n, 0.0);
             growTo(apnFeedforwardEnabled, n, false);

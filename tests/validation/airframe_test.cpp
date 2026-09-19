@@ -4,6 +4,7 @@
 // authority with the right polarity, induced+parasite drag, and that a powered
 // aircraft holds altitude (which the axisymmetric "fat missile" path does not).
 #include <strikeengine/models/physics/aerodynamics/AeroModel.hpp>
+#include <strikeengine/models/physics/propulsion/PropulsionModel.hpp>
 #include <strikeengine/models/physics/aerodynamics/AirframeModel.hpp>
 #include <strikeengine/kernel/config/VehicleConfig.hpp>
 #include <strikeengine/kernel/config/ConfigSerialization.hpp>
@@ -141,6 +142,26 @@ static void serializationChecks()
     check(jetRt.propulsion.stages.size() == 1 &&
               jetRt.propulsion.stages[0].aircraftEngine.enabled,
           "airbreathing engine round-trips enabled");
+    // Mach lapse is a config field: assert its VALUE, not just that the block
+    // survived (a key the serializer never writes is invisible to text==text2).
+    check(std::abs(jetRt.propulsion.stages[0].aircraftEngine.machLapsePerMach -
+                   jetStage.aircraftEngine.machLapsePerMach) < 1e-12,
+          "airbreathing Mach lapse round-trips");
+
+    // Cruise altitude integral (aircraft altitude-hold trim) round-trips only
+    // when set, so a non-opt-in file keeps its previous serialization.
+    VehicleConfig cruiseCfg;
+    cruiseCfg.guidanceAutopilot.cruiseAltitudeIntegralGain = 0.002;
+    cruiseCfg.guidanceAutopilot.cruiseAltitudeIntegralClampMps2 = 0.5;
+    const VehicleConfig cruiseRt =
+        deserializeVehicleConfig(serializeVehicleConfig(cruiseCfg));
+    check(std::abs(cruiseRt.guidanceAutopilot.cruiseAltitudeIntegralGain - 0.002) < 1e-12 &&
+              std::abs(cruiseRt.guidanceAutopilot.cruiseAltitudeIntegralClampMps2 - 0.5) < 1e-12,
+          "cruise altitude integral round-trips when enabled");
+    VehicleConfig plainCfg;
+    const std::string plainText = serializeVehicleConfig(plainCfg);
+    check(plainText.find("cruiseAltitudeIntegralGain") == std::string::npos,
+          "a non-opt-in design does not emit the cruise integral keys");
     check(std::abs(jetRt.propulsion.stages[0].aircraftEngine.seaLevelStaticThrustN - 56000.0) < 1e-9 &&
               std::abs(jetRt.propulsion.stages[0].aircraftEngine.tsfcKgPerNPerS - 1.0e-5) < 1e-15,
           "airbreathing deck parameters preserved");
@@ -339,11 +360,46 @@ static void controlPowerChecks()
     }
 }
 
+static void airbreathingDeckChecks()
+{
+    std::printf("-- airbreathing engine deck --\n");
+    PropulsionModelOptions opt;
+    opt.airbreathing = true;
+    opt.seaLevelStaticThrustN = 100000.0;
+    opt.pressureLapseExponent = 0.0;   // isolate the Mach term
+    opt.machLapsePerMach = 0.5;
+    opt.machLapseMinFactor = 0.1;
+    PropulsionModel model(ThrustCurve{}, 250.0, 220.0, opt);
+
+    const double p0 = 101325.0;
+    const auto lo = model.evaluate(0.0, p0, 0.0, 0.0, 0.0);
+    const auto hi = model.evaluate(0.0, p0, 0.0, 0.0, 1.0);
+    check(std::abs(lo.thrustBodyX - 100000.0) < 1.0,
+          "M0 thrust equals the sea-level static rating");
+    check(std::abs(hi.thrustBodyX - 50000.0) < 1.0,
+          "M1 thrust is lapsed by the per-Mach coefficient");
+    check(hi.massFlowRate_kg_s < lo.massFlowRate_kg_s,
+          "TSFC fuel flow falls with the lapsed thrust");
+
+    // The floor bounds the lapse rather than letting it go negative.
+    PropulsionModel steep(ThrustCurve{}, 250.0, 220.0, [&] {
+        PropulsionModelOptions o = opt; o.machLapsePerMach = 5.0; return o; }());
+    const auto floored = steep.evaluate(0.0, p0, 0.0, 0.0, 1.0);
+    check(floored.thrustBodyX > 0.0 &&
+              std::abs(floored.thrustBodyX - 10000.0) < 1.0,
+          "Mach lapse is floored, never negative");
+
+    // An airbreathing stage has no thrust-curve end: it runs to its fuel floor.
+    check(model.burnDuration() > 1.0e11,
+          "airbreathing stage reports no curve-limited burn end");
+}
+
 int main()
 {
     std::printf("=== airframe: aircraft wing-body-tail aero model ===\n");
     aeroChecks();
     serializationChecks();
+    airbreathingDeckChecks();
     levelFlightChecks();
     controlPowerChecks();
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

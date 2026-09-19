@@ -219,7 +219,7 @@ namespace StrikeEngine::Kernel
             {
                 const auto prop = propulsionPool[static_cast<std::size_t>(pid)]->evaluate(
                     t - s.ignitionTime[i], atm.pressure,
-                    s.gimbalPitch[i], s.gimbalYaw[i]);
+                    s.gimbalPitch[i], s.gimbalYaw[i], d.mach[i]);
                 thrustBodyX = prop.thrustBodyX;
                 thrustBodyY = prop.thrustBodyY;
                 thrustBodyZ = prop.thrustBodyZ;

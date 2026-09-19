@@ -22,6 +22,9 @@ namespace StrikeEngine::Kernel {
         double pressureLapseExponent = 0.7;
         double tsfcKgPerNPerS = 1.5e-5;  // ~0.53 lb/(lbf*h)
         double throttle = 1.0;
+        // Thrust lapse with Mach: fraction of thrust lost per Mach (0 = none).
+        double machLapsePerMach = 0.0;
+        double machLapseMinFactor = 0.1;
     };
 
     struct StageConfig {
@@ -83,6 +86,13 @@ namespace StrikeEngine::Kernel {
                 }
                 if (!std::isfinite(eng.throttle) || eng.throttle < 0.0 || eng.throttle > 1.0) {
                     return fail("airbreathing throttle must be within [0, 1]");
+                }
+                if (!std::isfinite(eng.machLapsePerMach) || eng.machLapsePerMach < 0.0) {
+                    return fail("airbreathing Mach lapse must be finite and non-negative");
+                }
+                if (!std::isfinite(eng.machLapseMinFactor) ||
+                    eng.machLapseMinFactor < 0.0 || eng.machLapseMinFactor > 1.0) {
+                    return fail("airbreathing Mach-lapse floor must be within [0, 1]");
                 }
                 if (!stage.thrustCurve.empty()) {
                     return fail("an airbreathing stage cannot also declare a rocket thrust curve");
