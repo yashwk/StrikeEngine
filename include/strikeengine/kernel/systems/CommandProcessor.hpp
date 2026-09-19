@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <strikeengine/kernel/data/GuidanceBlock.hpp>
 #include <strikeengine/kernel/data/TrackBlock.hpp>
+#include <strikeengine/kernel/data/SeekerBlock.hpp>
 
 namespace StrikeEngine::Kernel {
 
@@ -68,6 +69,10 @@ namespace StrikeEngine::Kernel {
         // Process all queued commands, applying them to the data blocks and
         // seeding the persistent target track.
         void process(GuidanceBlock& guidance, TrackBlock& tracks, double simTimeSec);
+        // Kernel path variant that also updates the terminal seeker
+        // designation when a live datalink handoff is applied.
+        void process(GuidanceBlock& guidance, TrackBlock& tracks,
+                     SeekerBlock& seekers, double simTimeSec);
 
         // Drop queued (not yet applied) commands for an entity, e.g. when its
         // slot is freed: applying them later would silently re-arm whatever
@@ -80,6 +85,8 @@ namespace StrikeEngine::Kernel {
         void reset() { commandQueue.clear(); }
 
     private:
+        void processImpl(GuidanceBlock& guidance, TrackBlock& tracks,
+                         SeekerBlock* seekers, double simTimeSec);
         std::vector<SimulationCommand> commandQueue;
     };
 

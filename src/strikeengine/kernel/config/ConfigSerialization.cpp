@@ -1086,6 +1086,15 @@ void from_json(const json& j, ScenarioEntityConfig& e) {
     } else {
         e.vehicleConfig = j.at("vehicle_config").get<VehicleConfig>();
     }
+    // Scenario-authored salvo assignments are per-round overrides of the
+    // design's default datalink target. Without this step every round that
+    // references the same Astra manifest inherits the manifest's first
+    // target, even though its launch spec names another target.
+    if (e.launch.enabled && e.launch.targetIndex >= 0 &&
+        e.vehicleConfig.guidanceAutopilot.datalinkSourceId >= 0) {
+        e.vehicleConfig.guidanceAutopilot.datalinkTargetId =
+            static_cast<int>(e.launch.targetIndex);
+    }
 }
 
 void to_json(json& j, const ScenarioConfig& s) {
@@ -1145,35 +1154,67 @@ void ScenarioConfig::loadInto(SimulationKernel& kernel) const {
     kernel.setEnvironment(environment);
 
     for (const auto& entityCfg : entities) {
+        // A design manifest supplies the vehicle defaults, while a salvo
+        // assignment supplies the round-specific datalink target. Apply the
+        // latter before the pending entity is copied into the kernel so three
+        // rounds sharing one Astra design can select three distinct relay
+        // records.
+        ScenarioEntityConfig effectiveCfg = entityCfg;
+        if (effectiveCfg.launch.enabled &&
+            effectiveCfg.launch.targetIndex >= 0 &&
+            effectiveCfg.vehicleConfig.guidanceAutopilot.datalinkSourceId >= 0) {
+            effectiveCfg.vehicleConfig.guidanceAutopilot.datalinkTargetId =
+                static_cast<int>(effectiveCfg.launch.targetIndex);
+        }
         // Rail-launched entities are held by the kernel and spawned
         // in-flight when their launch conditions are met.
-        if (entityCfg.launch.enabled) {
-            kernel.addPendingLaunch(entityCfg);
+        if (effectiveCfg.launch.enabled) {
+            kernel.addPendingLaunch(effectiveCfg);
             continue;
         }
-        VehicleInitState init = entityCfg.initState;
-        if (init.name.empty()) init.name = entityCfg.name;
-        if (init.role.empty()) init.role = entityCfg.role;
-        PhysicsId id = kernel.createVehicle(init, entityCfg.vehicleConfig);
+        VehicleInitState init = effectiveCfg.initState;
+        if (init.name.empty()) init.name = effectiveCfg.name;
+        if (init.role.empty()) init.role = effectiveCfg.role;
+        PhysicsId id = kernel.createVehicle(init, effectiveCfg.vehicleConfig);
 
-        if (entityCfg.initialGuidanceMode != GuidanceMode::None) {
+        if (effectiveCfg.initialGuidanceMode != GuidanceMode::None) {
             SimulationCommand cmd;
             cmd.entityId = id;
-            cmd.mode = entityCfg.initialGuidanceMode;
-            cmd.targetX = entityCfg.initialTargetX;
-            cmd.targetY = entityCfg.initialTargetY;
-            cmd.targetZ = entityCfg.initialTargetZ;
-            cmd.targetVx = entityCfg.initialTargetVx;
-            cmd.targetVy = entityCfg.initialTargetVy;
-            cmd.targetVz = entityCfg.initialTargetVz;
-            cmd.maxAccel = entityCfg.initialMaxAccel;
-            cmd.targetAccelX = entityCfg.initialTargetAccelX;
-            cmd.targetAccelY = entityCfg.initialTargetAccelY;
-            cmd.targetAccelZ = entityCfg.initialTargetAccelZ;
-            cmd.targetAccelAvailable = entityCfg.initialTargetAccelAvailable;
-            cmd.targetId = entityCfg.initialTargetId;
+            cmd.mode = effectiveCfg.initialGuidanceMode;
+            cmd.targetX = effectiveCfg.initialTargetX;
+            cmd.targetY = effectiveCfg.initialTargetY;
+            cmd.targetZ = effectiveCfg.initialTargetZ;
+            cmd.targetVx = effectiveCfg.initialTargetVx;
+            cmd.targetVy = effectiveCfg.initialTargetVy;
+            cmd.targetVz = effectiveCfg.initialTargetVz;
+            cmd.maxAccel = effectiveCfg.initialMaxAccel;
+            cmd.targetAccelX = effectiveCfg.initialTargetAccelX;
+            cmd.targetAccelY = effectiveCfg.initialTargetAccelY;
+            cmd.targetAccelZ = effectiveCfg.initialTargetAccelZ;
+            cmd.targetAccelAvailable = effectiveCfg.initialTargetAccelAvailable;
+            cmd.targetId = effectiveCfg.initialTargetId;
             kernel.queueCommand(cmd);
         }
+    }
+
+    // The scenario's source/target relationship is explicit even when the
+    // target round itself is still pending on a rail. Each authored target
+    // gets a separate relay record; the kernel refreshes those records from
+    // the target navigation estimates during the run.
+    for (const auto& entityCfg : entities) {
+        const int sourceId = entityCfg.vehicleConfig.guidanceAutopilot.datalinkSourceId;
+        int targetId = entityCfg.vehicleConfig.guidanceAutopilot.datalinkTargetId;
+        if (entityCfg.launch.enabled && entityCfg.launch.targetIndex >= 0) {
+            targetId = static_cast<int>(entityCfg.launch.targetIndex);
+        }
+        if (sourceId < 0 || targetId < 0 ||
+            static_cast<std::size_t>(sourceId) >= kernel.getPhysics().size ||
+            static_cast<std::size_t>(targetId) >= kernel.getPhysics().size) {
+            continue;
+        }
+        kernel.configureDatalinkTrack(
+            static_cast<PhysicsId>(sourceId), static_cast<PhysicsId>(targetId),
+            entities[static_cast<std::size_t>(targetId)].initState);
     }
 
     // Single fan-out point: the scenario seed becomes the kernel

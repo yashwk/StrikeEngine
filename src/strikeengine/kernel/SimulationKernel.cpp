@@ -704,6 +704,8 @@ namespace StrikeEngine::Kernel {
 
         // Per-entity seeker configuration (public SeekerConfig surface).
         seekerBlock.type[id] = resolved.seeker.type;
+        seekerBlock.designatedTargetId[id] =
+            static_cast<std::int64_t>(resolved.guidanceAutopilot.datalinkTargetId);
         seekerBlock.transmitterPowerW[id] = resolved.seeker.transmitterPowerW;
         seekerBlock.antennaGainDb[id] = resolved.seeker.antennaGainDb;
         seekerBlock.wavelengthM[id] = resolved.seeker.wavelengthM;
@@ -1252,6 +1254,81 @@ namespace StrikeEngine::Kernel {
         pendingLaunches.push_back(std::move(pl));
     }
 
+    void SimulationKernel::configureDatalinkTrack(
+        PhysicsId sourceId, PhysicsId targetId,
+        const VehicleInitState& initialTarget)
+    {
+        auto& track = trackBlock.ensureDatalinkTrack(
+            static_cast<int>(sourceId), static_cast<int>(targetId));
+        track.state = TrackState::Maintain;
+        track.trackId = static_cast<std::int64_t>(targetId);
+        track.posX = initialTarget.px;
+        track.posY = initialTarget.py;
+        track.posZ = initialTarget.pz;
+        track.velX = initialTarget.vx;
+        track.velY = initialTarget.vy;
+        track.velZ = initialTarget.vz;
+        track.accelX = 0.0;
+        track.accelY = 0.0;
+        track.accelZ = 0.0;
+        track.accelAvailable = false;
+        track.timestampSec = time.currentTime();
+        track.ageSec = 0.0;
+        track.positionStdM = 5.0;
+        track.velocityStdMs = 25.0;
+        track.quality01 = 1.0;
+        track.updateCount = std::max<std::uint32_t>(1u, track.updateCount);
+    }
+
+    void SimulationKernel::updateDatalinkTracks(double dt)
+    {
+        for (auto& track : trackBlock.datalinkTracks) {
+            const auto target = static_cast<std::size_t>(track.targetEntityId);
+            const bool liveTarget = track.targetEntityId >= 0 &&
+                target < physicsBlock.size && target < navigationBlock.size &&
+                target < physicsBlock.active.size() && physicsBlock.active[target] &&
+                target < statusBlock.isAlive.size() && statusBlock.isAlive[target];
+            if (liveTarget && target < navigationBlock.estPx.size() &&
+                target < navigationBlock.estVx.size()) {
+                // A configured cooperative relay represents the source's
+                // fire-control track picture. The target's navigation estimate
+                // supplies the shared position/velocity solution; the relay
+                // deliberately does not export target acceleration, matching
+                // the conservative remote-track policy in guidance.
+                track.state = TrackState::Maintain;
+                track.posX = navigationBlock.estPx[target];
+                track.posY = navigationBlock.estPy[target];
+                track.posZ = navigationBlock.estPz[target];
+                track.velX = navigationBlock.estVx[target];
+                track.velY = navigationBlock.estVy[target];
+                track.velZ = navigationBlock.estVz[target];
+                track.accelX = 0.0;
+                track.accelY = 0.0;
+                track.accelZ = 0.0;
+                track.accelAvailable = false;
+                track.timestampSec = time.currentTime();
+                track.ageSec = 0.0;
+                track.positionStdM = 5.0;
+                track.velocityStdMs = 25.0;
+                track.quality01 = 1.0;
+                ++track.updateCount;
+                continue;
+            }
+
+            track.ageSec += dt;
+            if (track.state == TrackState::Maintain && track.ageSec >= 0.5) {
+                track.state = TrackState::Coast;
+            } else if (track.state == TrackState::Coast && track.ageSec >= 2.0) {
+                track.state = TrackState::Lost;
+            }
+            if (track.active()) {
+                track.quality01 = std::exp(-track.ageSec);
+            } else {
+                track.quality01 = 0.0;
+            }
+        }
+    }
+
     void SimulationKernel::queueInitialGuidance(PhysicsId id, const ScenarioEntityConfig& cfg) {
         if (cfg.initialGuidanceMode == GuidanceMode::None) return;
         SimulationCommand cmd;
@@ -1260,47 +1337,58 @@ namespace StrikeEngine::Kernel {
         // Seed the aim from the launcher's relayed datalink track when one
         // exists (its solution is strictly better than the stale pre-launch
         // seed); fall back to the entity's configured seed.
-        const std::size_t src = static_cast<std::size_t>(
-            cfg.vehicleConfig.guidanceAutopilot.datalinkSourceId);
         bool seeded = false;
-        if (cfg.vehicleConfig.guidanceAutopilot.datalinkSourceId >= 0 &&
-            src < trackBlock.size && trackBlock.updateCount[src] > 0) {
-            cmd.targetX = trackBlock.posX[src];
-            cmd.targetY = trackBlock.posY[src];
-            cmd.targetZ = trackBlock.posZ[src];
-            // Lead: the scenario's own fire-control solution when it provides
-            // one (the launching platform knows the target before the shot),
-            // otherwise the live track's velocity. A remote track's velocity
-            // state is only as good as its angular geometry: at long range it
-            // is dominated by the nav-attitude term and reads km/s -- the S-400
-            // battery's track of a 175 m/s transport peaked at 2.4 km/s, and
-            // that lead threw the midcourse off by tens of kilometres.
-            const double cfgSpeedSq =
-                cfg.initialTargetVx * cfg.initialTargetVx +
-                cfg.initialTargetVy * cfg.initialTargetVy +
-                cfg.initialTargetVz * cfg.initialTargetVz;
-            if (cfgSpeedSq > 1.0) {
-                cmd.targetVx = cfg.initialTargetVx;
-                cmd.targetVy = cfg.initialTargetVy;
-                cmd.targetVz = cfg.initialTargetVz;
-            } else {
-                cmd.targetVx = trackBlock.velX[src];
-                cmd.targetVy = trackBlock.velY[src];
-                cmd.targetVz = trackBlock.velZ[src];
+        if (cfg.vehicleConfig.guidanceAutopilot.datalinkSourceId >= 0) {
+            const int sourceId = cfg.vehicleConfig.guidanceAutopilot.datalinkSourceId;
+            const std::size_t src = static_cast<std::size_t>(sourceId);
+            const auto* relay = trackBlock.datalinkTrackCount(sourceId) > 1
+                ? trackBlock.findDatalinkTrack(
+                    sourceId, cfg.vehicleConfig.guidanceAutopilot.datalinkTargetId)
+                : nullptr;
+            const bool relayUsable = relay && relay->active() && relay->updateCount > 0;
+            const bool legacyUsable = src < trackBlock.size &&
+                trackBlock.updateCount[src] > 0;
+            if (relayUsable || legacyUsable) {
+                // Lead: the scenario's own fire-control solution when it
+                // provides one (the launching platform knows the target before
+                // the shot), otherwise the live track's velocity. A remote
+                // track's velocity is only used by the multi-track relay when
+                // no launch solution is available.
+                if (relayUsable) {
+                    cmd.targetX = relay->posX;
+                    cmd.targetY = relay->posY;
+                    cmd.targetZ = relay->posZ;
+                } else {
+                    cmd.targetX = trackBlock.posX[src];
+                    cmd.targetY = trackBlock.posY[src];
+                    cmd.targetZ = trackBlock.posZ[src];
+                }
+                const double cfgSpeedSq =
+                    cfg.initialTargetVx * cfg.initialTargetVx +
+                    cfg.initialTargetVy * cfg.initialTargetVy +
+                    cfg.initialTargetVz * cfg.initialTargetVz;
+                if (cfgSpeedSq > 1.0) {
+                    cmd.targetVx = cfg.initialTargetVx;
+                    cmd.targetVy = cfg.initialTargetVy;
+                    cmd.targetVz = cfg.initialTargetVz;
+                } else if (relayUsable) {
+                    cmd.targetVx = relay->velX;
+                    cmd.targetVy = relay->velY;
+                    cmd.targetVz = relay->velZ;
+                } else {
+                    cmd.targetVx = trackBlock.velX[src];
+                    cmd.targetVy = trackBlock.velY[src];
+                    cmd.targetVz = trackBlock.velZ[src];
+                }
+                // Position and velocity only. A launch-time acceleration
+                // snapshot is not guidance-grade and the command state must
+                // not fake one from a remote radar track.
+                cmd.targetAccelX = 0.0;
+                cmd.targetAccelY = 0.0;
+                cmd.targetAccelZ = 0.0;
+                cmd.targetAccelAvailable = false;
+                seeded = true;
             }
-            // Position and velocity only. A launch-time acceleration snapshot
-            // is not guidance-grade and, taken from a remote radar track, it
-            // rails at the track filter's acceleration bound: on the S-400
-            // shot the seed carried (-30,-30,-30) m/s^2, whose APN
-            // feed-forward (~0.5*N*|a| = 45-80 m/s^2) dwarfed the real 3 m/s^2
-            // demand and threw the whole midcourse off. The seeker's own track
-            // publishes a trustworthy acceleration later; the command state
-            // must not fake one.
-            cmd.targetAccelX = 0.0;
-            cmd.targetAccelY = 0.0;
-            cmd.targetAccelZ = 0.0;
-            cmd.targetAccelAvailable = false;
-            seeded = true;
         }
         if (!seeded) {
             cmd.targetX = cfg.initialTargetX;
@@ -1759,7 +1847,8 @@ namespace StrikeEngine::Kernel {
         processPitchOvers();
         processActiveFlyouts();
         time.advance(dt);
-        commandProcessor.process(guidanceBlock, trackBlock, time.currentTime());
+        commandProcessor.process(guidanceBlock, trackBlock, seekerBlock,
+                                 time.currentTime());
         
         // 1. Advance true physics
         backend->step(physicsBlock, controlBlock, time.currentTime(), dt);
@@ -1776,6 +1865,10 @@ namespace StrikeEngine::Kernel {
         
         // 3. Compute Navigation estimates (INS + EKF)
         navigationSystem.update(sensorBlock, physicsBlock, navigationBlock, dt, environment);
+
+        // 3.25 Refresh target-specific cooperative relay tracks from the
+        // target navigation estimates before seeker/guidance consumption.
+        updateDatalinkTracks(dt);
         
         // 3.5 Process Seekers
         seekerSystem.update(physicsBlock, statusBlock, seekerBlock, navigationBlock, dt, environment);

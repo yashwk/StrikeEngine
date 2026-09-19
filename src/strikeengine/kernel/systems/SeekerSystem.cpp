@@ -792,6 +792,34 @@ bool terrainBlocks(const glm::dvec3& from, const glm::dvec3& to,
             clearTrack();
             setReason(SeekerRejectReason::NoTarget);
 
+            // A cooperative round carries a fire-control designation through
+            // the datalink handoff. Keep the terminal seeker on that contact;
+            // otherwise the strongest-signal scan can make several nearby
+            // rounds collapse onto the same target after launch.
+            const std::int64_t designated = i < seeker.designatedTargetId.size()
+                ? seeker.designatedTargetId[i] : -1;
+            if (designated >= 0) {
+                const auto target = static_cast<std::size_t>(designated);
+                if (target < physics.size && target != i && physics.active[target] &&
+                    status.isAlive[target] &&
+                    status.allegiance[i] != status.allegiance[target]) {
+                    const Candidate candidate = evaluateTarget(
+                        target, /*useServo=*/false, 0.0, 0.0);
+                    if (candidate.acquisitionValid) {
+                        seeker.gimbalAzimuthRad[i] = candidate.azimuth;
+                        seeker.gimbalElevationRad[i] = candidate.elevation;
+                        commitTrack(target, candidate, /*newLock=*/true);
+                    } else {
+                        setReason(candidate.reject);
+                    }
+                } else {
+                    setReason(SeekerRejectReason::NoTarget);
+                }
+                publishAvailable();
+                refreshLockState();
+                continue;
+            }
+
             // Iterate through all potential targets and acquire the strongest
             // signal (single-track lock). Friendly targets are rejected.
             // ponytail: O(N) full signature evaluations per unlocked entity per

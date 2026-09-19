@@ -21,6 +21,35 @@ namespace StrikeEngine::Kernel {
     enum class TrackState : uint8_t { None, Acquire, Maintain, Coast, Lost, Reacquire };
 
     /**
+     * @brief Target-specific track relayed by a cooperative source.
+     *
+     * The ordinary TrackBlock state is one seeker track per entity. A
+     * fire-control source can carry several independent tracks, so datalink
+     * consumers address these records by (sourceEntityId, targetEntityId)
+     * instead of accidentally sharing the source's currently locked target.
+     */
+    struct DatalinkTrack {
+        int sourceEntityId = -1;
+        int targetEntityId = -1;
+        TrackState state = TrackState::None;
+        std::int64_t trackId = -1;
+        double posX = 0.0, posY = 0.0, posZ = 0.0;
+        double velX = 0.0, velY = 0.0, velZ = 0.0;
+        double accelX = 0.0, accelY = 0.0, accelZ = 0.0;
+        bool accelAvailable = false;
+        double timestampSec = 0.0;
+        double ageSec = 0.0;
+        double positionStdM = 5.0;
+        double velocityStdMs = 25.0;
+        double quality01 = 0.0;
+        std::uint32_t updateCount = 0;
+
+        bool active() const {
+            return state != TrackState::None && state != TrackState::Lost;
+        }
+    };
+
+    /**
      * @brief Per-entity persistent target-track state.
      *
      * The track manager fuses external command seeds (SimulationCommand) and
@@ -29,6 +58,10 @@ namespace StrikeEngine::Kernel {
      * guidance layer reads ONLY these estimates (never physics truth).
      */
     struct TrackBlock {
+        // Target-specific cooperative relay tracks. These are runtime state;
+        // the ordinary per-entity arrays below remain the seeker track API.
+        std::vector<DatalinkTrack> datalinkTracks;
+
         // --- Per-entity track configuration (from GuidanceAutopilotConfig) ---
         std::vector<int>    confirmations;     // measurement updates to promote to Maintain
         std::vector<double> coastTimeoutSec;   // no measurement: Maintain/Acquire -> Coast
@@ -81,6 +114,48 @@ namespace StrikeEngine::Kernel {
         std::vector<std::uint32_t> residualRejectCount;
 
         std::size_t size = 0;
+
+        const DatalinkTrack* findDatalinkTrack(int sourceEntityId,
+                                                int targetEntityId) const {
+            for (const auto& track : datalinkTracks) {
+                if (track.sourceEntityId == sourceEntityId &&
+                    track.targetEntityId == targetEntityId) {
+                    return &track;
+                }
+            }
+            return nullptr;
+        }
+
+        DatalinkTrack* findDatalinkTrack(int sourceEntityId, int targetEntityId) {
+            for (auto& track : datalinkTracks) {
+                if (track.sourceEntityId == sourceEntityId &&
+                    track.targetEntityId == targetEntityId) {
+                    return &track;
+                }
+            }
+            return nullptr;
+        }
+
+        std::size_t datalinkTrackCount(int sourceEntityId) const {
+            std::size_t count = 0;
+            for (const auto& track : datalinkTracks) {
+                if (track.sourceEntityId == sourceEntityId) ++count;
+            }
+            return count;
+        }
+
+        DatalinkTrack& ensureDatalinkTrack(int sourceEntityId,
+                                            int targetEntityId) {
+            if (auto* existing = findDatalinkTrack(sourceEntityId, targetEntityId)) {
+                return *existing;
+            }
+            datalinkTracks.push_back({});
+            auto& track = datalinkTracks.back();
+            track.sourceEntityId = sourceEntityId;
+            track.targetEntityId = targetEntityId;
+            track.trackId = targetEntityId;
+            return track;
+        }
 
         bool active(std::size_t i) const {
             if (i >= size || state[i] == TrackState::None ||

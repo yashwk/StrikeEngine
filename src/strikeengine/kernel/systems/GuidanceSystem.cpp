@@ -386,6 +386,19 @@ namespace StrikeEngine::Kernel {
             }
             vx = tracks.velX[src]; vy = tracks.velY[src]; vz = tracks.velZ[src];
         }
+        inline void remoteAimVelocity(
+            const GuidanceBlock& g, const DatalinkTrack& track, std::size_t id,
+            double& vx, double& vy, double& vz)
+        {
+            const bool commandHasSpeed = id < g.targetVx.size() &&
+                (g.targetVx[id] * g.targetVx[id] + g.targetVy[id] * g.targetVy[id] +
+                 g.targetVz[id] * g.targetVz[id]) > 1.0;
+            if (commandHasSpeed) {
+                vx = g.targetVx[id]; vy = g.targetVy[id]; vz = g.targetVz[id];
+                return;
+            }
+            vx = track.velX; vy = track.velY; vz = track.velZ;
+        }
         inline bool aimVelocityTrusted(const TrackBlock& t, std::size_t i) {
             if (i >= t.velocityStdMs.size()) return true;   // hand-built blocks
             const double vStd = t.velocityStdMs[i];
@@ -456,19 +469,34 @@ namespace StrikeEngine::Kernel {
                     tracks->updateCount[id] > 0 &&
                     qualityAbove(tracks, id, guidance.trackAimMinQuality01);
             };
-            auto datalinkUsable = [&](std::size_t& src) -> bool {
+            auto datalinkUsable = [&](std::size_t& src,
+                                      const DatalinkTrack*& relay) -> bool {
                 const int dl = (id < guidance.datalinkSourceId.size())
                     ? guidance.datalinkSourceId[id] : -1;
                 if (dl < 0 || !tracks) return false;
                 src = static_cast<std::size_t>(dl);
+                const int target = (id < guidance.datalinkTargetId.size())
+                    ? guidance.datalinkTargetId[id] : -1;
+                relay = target >= 0 && tracks->datalinkTrackCount(dl) > 1
+                    ? tracks->findDatalinkTrack(dl, target) : nullptr;
+                if (relay) {
+                    return relay->active() && relay->updateCount > 0 &&
+                        relay->quality01 >= (id < guidance.trackAimMinQuality01.size()
+                            ? guidance.trackAimMinQuality01[id] : 0.0);
+                }
+                // Legacy source tracks remain valid when their identity agrees
+                // with the requested datalink target. A mismatched source
+                // track must never be silently reused for another round.
                 return src < tracks->size && tracks->active(src) &&
                     tracks->updateCount[src] > 0 &&
+                    (target < 0 || tracks->trackId[src] == target) &&
                     qualityAbove(tracks, src, guidance.trackAimMinQuality01);
             };
             double tx, ty, tz, tvx, tvy, tvz;
             bool trackAim = false;
             bool datalinkAim = false;
             std::size_t datalinkSrc = 0;
+            const DatalinkTrack* datalinkRelay = nullptr;
             const bool ownFirst = seekerLocked && ownPosUsable() &&
                 (commandHasSpeed() || ownTrackUsable());
             if (ownFirst) {
@@ -487,11 +515,18 @@ namespace StrikeEngine::Kernel {
                     tvx = tracks->velX[id]; tvy = tracks->velY[id]; tvz = tracks->velZ[id];
                 }
             }
-            if (!trackAim && datalinkUsable(datalinkSrc)) {
+            if (!trackAim && datalinkUsable(datalinkSrc, datalinkRelay)) {
                 datalinkAim = true;
-                const std::size_t src = datalinkSrc;
-                tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
-                remoteAimVelocity(guidance, *tracks, id, src, tvx, tvy, tvz);
+                if (datalinkRelay) {
+                    tx = datalinkRelay->posX;
+                    ty = datalinkRelay->posY;
+                    tz = datalinkRelay->posZ;
+                    remoteAimVelocity(guidance, *datalinkRelay, id, tvx, tvy, tvz);
+                } else {
+                    const std::size_t src = datalinkSrc;
+                    tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
+                    remoteAimVelocity(guidance, *tracks, id, src, tvx, tvy, tvz);
+                }
             }
             if (!datalinkAim && !trackAim && ownTrackUsable()) {
                 trackAim = true;
@@ -513,14 +548,26 @@ namespace StrikeEngine::Kernel {
                 static int tick = 0;
                 if ((tick++ % 500) == 0) {
                     const double aimV = std::sqrt(tvx * tvx + tvy * tvy + tvz * tvz);
-                    const int srcId = (datalinkAim && tracks && datalinkSrc < tracks->size)
-                        ? tracks->trackId[datalinkSrc] : -1;
-                    const double srcUpd = (datalinkAim && tracks && datalinkSrc < tracks->size)
-                        ? static_cast<double>(tracks->updateCount[datalinkSrc]) : -1.0;
-                    const double srcVel = (datalinkAim && tracks && datalinkSrc < tracks->size)
-                        ? std::sqrt(tracks->velX[datalinkSrc] * tracks->velX[datalinkSrc] +
-                                    tracks->velY[datalinkSrc] * tracks->velY[datalinkSrc] +
-                                    tracks->velZ[datalinkSrc] * tracks->velZ[datalinkSrc])
+                    const int srcId = datalinkAim
+                        ? (datalinkRelay ? datalinkRelay->targetEntityId
+                                         : (tracks && datalinkSrc < tracks->size
+                                                ? static_cast<int>(tracks->trackId[datalinkSrc]) : -1))
+                        : -1;
+                    const double srcUpd = datalinkAim
+                        ? (datalinkRelay ? static_cast<double>(datalinkRelay->updateCount)
+                                         : (tracks && datalinkSrc < tracks->size
+                                                ? static_cast<double>(tracks->updateCount[datalinkSrc]) : -1.0))
+                        : -1.0;
+                    const double srcVel = datalinkAim
+                        ? (datalinkRelay
+                            ? std::sqrt(datalinkRelay->velX * datalinkRelay->velX +
+                                        datalinkRelay->velY * datalinkRelay->velY +
+                                        datalinkRelay->velZ * datalinkRelay->velZ)
+                            : (tracks && datalinkSrc < tracks->size
+                                ? std::sqrt(tracks->velX[datalinkSrc] * tracks->velX[datalinkSrc] +
+                                            tracks->velY[datalinkSrc] * tracks->velY[datalinkSrc] +
+                                            tracks->velZ[datalinkSrc] * tracks->velZ[datalinkSrc])
+                                : -1.0))
                         : -1.0;
                     const double rng = std::sqrt(rx * rx + ry * ry + rz * rz);
                     std::fprintf(stderr,
@@ -559,7 +606,11 @@ namespace StrikeEngine::Kernel {
                 ffAvailable = isFinite3(tracks->accelX[id], tracks->accelY[id],
                                         tracks->accelZ[id]);
                 atx = tracks->accelX[id]; aty = tracks->accelY[id]; atz = tracks->accelZ[id];
-            } else if (datalinkAim && datalinkSrc < tracks->size &&
+            } else if (datalinkAim && datalinkRelay) {
+                // Cooperative relay tracks intentionally do not carry
+                // acceleration feed-forward; the source exports position and
+                // velocity only, as with the conservative remote-track path.
+            } else if (datalinkAim && tracks && datalinkSrc < tracks->size &&
                        datalinkSrc < tracks->accelAvailable.size() &&
                        tracks->accelAvailable[datalinkSrc] &&
                        qualityAbove(tracks, datalinkSrc, guidance.apnFeedforwardMinQuality01)) {
@@ -629,16 +680,34 @@ namespace StrikeEngine::Kernel {
             bool datalinkAim = false;
             const int dlSrc = (id < g.datalinkSourceId.size())
                 ? g.datalinkSourceId[id] : -1;
+            const int dlTarget = (id < g.datalinkTargetId.size())
+                ? g.datalinkTargetId[id] : -1;
+            const DatalinkTrack* datalinkRelay = nullptr;
             if (dlSrc >= 0 && tracks) {
                 const std::size_t src = static_cast<std::size_t>(dlSrc);
-                if (src < tracks->size && tracks->active(src) &&
+                if (dlTarget >= 0 && tracks->datalinkTrackCount(dlSrc) > 1) {
+                    datalinkRelay = tracks->findDatalinkTrack(dlSrc, dlTarget);
+                }
+                const bool relayUsable = datalinkRelay && datalinkRelay->active() &&
+                    datalinkRelay->updateCount > 0 &&
+                    datalinkRelay->quality01 >= (id < g.trackAimMinQuality01.size()
+                        ? g.trackAimMinQuality01[id] : 0.0);
+                const bool legacyUsable = src < tracks->size && tracks->active(src) &&
                     tracks->updateCount[src] > 0 &&
-                    qualityAbove(tracks, src, g.trackAimMinQuality01))
-                {
+                    (dlTarget < 0 || tracks->trackId[src] == dlTarget) &&
+                    qualityAbove(tracks, src, g.trackAimMinQuality01);
+                if (relayUsable || legacyUsable) {
                     datalinkAim = true;
                     g.trajectoryAimSource[id] = GuidanceAimSource::Track;
-                    tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
-                    remoteAimVelocity(g, *tracks, id, src, tvx, tvy, tvz);
+                    if (relayUsable) {
+                        tx = datalinkRelay->posX;
+                        ty = datalinkRelay->posY;
+                        tz = datalinkRelay->posZ;
+                        remoteAimVelocity(g, *datalinkRelay, id, tvx, tvy, tvz);
+                    } else {
+                        tx = tracks->posX[src]; ty = tracks->posY[src]; tz = tracks->posZ[src];
+                        remoteAimVelocity(g, *tracks, id, src, tvx, tvy, tvz);
+                    }
                     // A remote (datalink) track's acceleration estimate is never
                     // guidance-grade: it is differentiated from range/angle
                     // measurements and rails to the filter's acceleration bound

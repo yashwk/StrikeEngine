@@ -18,6 +18,16 @@ namespace StrikeEngine::Kernel {
 
     void CommandProcessor::process(GuidanceBlock& guidance, TrackBlock& tracks,
                                    double simTimeSec) {
+        processImpl(guidance, tracks, nullptr, simTimeSec);
+    }
+
+    void CommandProcessor::process(GuidanceBlock& guidance, TrackBlock& tracks,
+                                   SeekerBlock& seekers, double simTimeSec) {
+        processImpl(guidance, tracks, &seekers, simTimeSec);
+    }
+
+    void CommandProcessor::processImpl(GuidanceBlock& guidance, TrackBlock& tracks,
+                                       SeekerBlock* seekers, double simTimeSec) {
         for (const auto& cmd : commandQueue) {
             if (cmd.entityId >= guidance.mode.size()) continue;
             const std::size_t id = cmd.entityId;
@@ -47,6 +57,9 @@ namespace StrikeEngine::Kernel {
                 }
                 if (id < guidance.datalinkTargetId.size()) {
                     guidance.datalinkTargetId[id] = cmd.datalinkTargetId;
+                }
+                if (seekers && id < seekers->designatedTargetId.size()) {
+                    seekers->designatedTargetId[id] = cmd.datalinkTargetId;
                 }
             }
 

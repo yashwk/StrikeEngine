@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace StrikeEngine::Kernel {
@@ -32,6 +33,12 @@ namespace StrikeEngine::Kernel {
     struct SeekerBlock {
         // Configuration
         std::vector<SeekerType> type;
+
+        // Optional fire-control designation carried into terminal handoff.
+        // A negative value preserves autonomous strongest-signal scanning;
+        // cooperative rounds use their datalink target so nearby targets do
+        // not cause the three seekers to collapse onto one contact.
+        std::vector<std::int64_t> designatedTargetId;
         
         // RF specific params
         std::vector<double> transmitterPowerW;
@@ -209,6 +216,7 @@ namespace StrikeEngine::Kernel {
          */
         void ensureSize(std::size_t n) {
             growTo(type, n, SeekerType::None);
+            growTo(designatedTargetId, n, -1);
             growTo(transmitterPowerW, n, 1000.0);
             growTo(antennaGainDb, n, 30.0);
             growTo(wavelengthM, n, 0.03);
