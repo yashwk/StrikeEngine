@@ -24,6 +24,15 @@ namespace StrikeEngine::Models {
         double shutdownRampSec = 0.0;
         double maxGimbalPitchRad = 0.0;
         double maxGimbalYawRad = 0.0;
+
+        // Airbreathing engine: when enabled, thrust comes from the deck below
+        // instead of the rocket thrust curve, and fuel burns at TSFC rather
+        // than by Isp. The stage runs until its fuel floor, not a burn time.
+        bool airbreathing = false;
+        double seaLevelStaticThrustN = 0.0;
+        double pressureLapseExponent = 0.7;
+        double tsfcKgPerNPerS = 1.5e-5;
+        double throttle = 1.0;
     };
 
     class PropulsionModel {
@@ -59,20 +68,33 @@ namespace StrikeEngine::Models {
                     0.0, 1.0);
             }
 
-            const double currentThrust = thrustCurve.evaluate(activeTime) * multiplier;
+            constexpr double sea_level_pressure_pa = 101325.0;
+            const double pressure_fraction =
+                std::clamp(ambientPressure_pa / sea_level_pressure_pa, 0.0, 1.0);
+
+            double currentThrust = 0.0;
+            double massFlowRate = 0.0;
+            if (options_.airbreathing) {
+                // Thrust lapses with ambient pressure (troposphere density),
+                // fuel burns at TSFC. Mach lapse is not modelled yet.
+                currentThrust = std::clamp(options_.throttle, 0.0, 1.0) *
+                    options_.seaLevelStaticThrustN *
+                    std::pow(pressure_fraction, options_.pressureLapseExponent) * multiplier;
+                massFlowRate = options_.tsfcKgPerNPerS * currentThrust;
+            } else {
+                currentThrust = thrustCurve.evaluate(activeTime) * multiplier;
+                if (currentThrust > 0.0) {
+                    const double current_isp =
+                        isp_vacuum_s + (isp_sl_s - isp_vacuum_s) * pressure_fraction;
+                    constexpr double g0 = 9.80665;
+                    if (current_isp > 0.0) {
+                        massFlowRate = currentThrust / (current_isp * g0);
+                    }
+                }
+            }
 
             if (currentThrust <= 0.0) {
                 return {0.0, 0.0, 0.0, 0.0};
-            }
-
-            constexpr double sea_level_pressure_pa = 101325.0;
-            const double pressure_fraction = std::clamp(ambientPressure_pa / sea_level_pressure_pa, 0.0, 1.0);
-            const double current_isp = isp_vacuum_s + (isp_sl_s - isp_vacuum_s) * pressure_fraction;
-
-            constexpr double g0 = 9.80665;
-            double massFlowRate = 0.0;
-            if (current_isp > 0.0) {
-                massFlowRate = currentThrust / (current_isp * g0);
             }
 
             // Sanitize the gimbal envelope: std::clamp requires lo <= hi, so a
@@ -92,6 +114,10 @@ namespace StrikeEngine::Models {
         }
 
         double burnDuration() const {
+            // An airbreathing stage has no thrust-curve end: it runs until its
+            // fuel floor, which the kernel's propellant-exhaustion check owns.
+            // A huge sentinel keeps the staging curve-elapsed test from firing.
+            if (options_.airbreathing) return 1.0e12;
             double duration = thrustCurve.lastPositiveTime();
             if (options_.shutdownTimeSec >= 0.0) {
                 duration = std::min(duration,

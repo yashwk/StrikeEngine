@@ -8,8 +8,25 @@
 
 namespace StrikeEngine::Kernel {
 
+    // Airbreathing (aircraft) engine. When enabled the stage produces thrust
+    // from this deck instead of a rocket thrust curve, so an aircraft no longer
+    // fakes endurance with an implausible Isp. Thrust lapses with ambient
+    // pressure and fuel burns at TSFC. Mach lapse is not modelled yet (the same
+    // honesty as the swept-wing caveat in AirframeModel). The stage's
+    // propellantMassKg is the fuel load and dryMassKg the empty mass; throttle
+    // is fixed until a throttle command path exists.
+    struct AircraftEngineConfig {
+        bool enabled = false;
+        double seaLevelStaticThrustN = 0.0;
+        // T/T0 = (P/P0)^exponent. 0.7 approximates the troposphere density lapse.
+        double pressureLapseExponent = 0.7;
+        double tsfcKgPerNPerS = 1.5e-5;  // ~0.53 lb/(lbf*h)
+        double throttle = 1.0;
+    };
+
     struct StageConfig {
         std::vector<Models::ThrustDataPoint> thrustCurve;  // empty => inactive/coast stage
+        AircraftEngineConfig aircraftEngine;  // when enabled, replaces thrustCurve
         double vacuumIsp = 250.0;   // s
         double seaLevelIsp = 220.0; // s
         double propellantMassKg = 0.0;
@@ -51,19 +68,39 @@ namespace StrikeEngine::Kernel {
                 if (error) *error = "stage " + std::to_string(i) + ": " + message;
                 return false;
             };
-            if (stage.thrustCurve.empty()) {
+            if (stage.aircraftEngine.enabled) {
+                // An airbreathing stage carries fuel and empty mass but no
+                // rocket thrust curve; it burns to the fuel floor instead.
+                const auto& eng = stage.aircraftEngine;
+                if (!std::isfinite(eng.seaLevelStaticThrustN) || eng.seaLevelStaticThrustN <= 0.0) {
+                    return fail("airbreathing engine needs a positive sea-level static thrust");
+                }
+                if (!std::isfinite(eng.pressureLapseExponent) || eng.pressureLapseExponent < 0.0) {
+                    return fail("airbreathing pressure lapse exponent must be finite and non-negative");
+                }
+                if (!std::isfinite(eng.tsfcKgPerNPerS) || eng.tsfcKgPerNPerS <= 0.0) {
+                    return fail("airbreathing TSFC must be finite and positive");
+                }
+                if (!std::isfinite(eng.throttle) || eng.throttle < 0.0 || eng.throttle > 1.0) {
+                    return fail("airbreathing throttle must be within [0, 1]");
+                }
+                if (!stage.thrustCurve.empty()) {
+                    return fail("an airbreathing stage cannot also declare a rocket thrust curve");
+                }
+            } else if (stage.thrustCurve.empty()) {
                 if (stage.propellantMassKg != 0.0 || stage.dryMassKg != 0.0) {
                     return fail("an inactive stage cannot declare propellant or dry mass");
                 }
                 continue;
-            }
-            std::string curveError;
-            if (!Models::ThrustCurve(stage.thrustCurve).validate(&curveError)) {
-                return fail(curveError);
-            }
-            if (!std::isfinite(stage.vacuumIsp) || stage.vacuumIsp <= 0.0 ||
-                !std::isfinite(stage.seaLevelIsp) || stage.seaLevelIsp <= 0.0) {
-                return fail("vacuum and sea-level Isp must be finite and positive");
+            } else {
+                std::string curveError;
+                if (!Models::ThrustCurve(stage.thrustCurve).validate(&curveError)) {
+                    return fail(curveError);
+                }
+                if (!std::isfinite(stage.vacuumIsp) || stage.vacuumIsp <= 0.0 ||
+                    !std::isfinite(stage.seaLevelIsp) || stage.seaLevelIsp <= 0.0) {
+                    return fail("vacuum and sea-level Isp must be finite and positive");
+                }
             }
             if (!std::isfinite(stage.propellantMassKg) || stage.propellantMassKg < 0.0 ||
                 !std::isfinite(stage.dryMassKg) || stage.dryMassKg < 0.0) {

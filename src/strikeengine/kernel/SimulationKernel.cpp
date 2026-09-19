@@ -517,14 +517,21 @@ namespace StrikeEngine::Kernel {
         // processStaging() drops them and advances the active stage.
         StagePlan plan;
         for (const auto& stage : resolved.propulsion.stages) {
-            if (stage.thrustCurve.empty()) continue;
+            // A stage is live if it has a rocket curve or an airbreathing
+            // engine; anything else is an inactive/coast stage.
+            if (stage.thrustCurve.empty() && !stage.aircraftEngine.enabled) continue;
             auto prop = std::make_shared<Models::PropulsionModel>(
                 Models::ThrustCurve(stage.thrustCurve),
                 stage.vacuumIsp, stage.seaLevelIsp,
                 Models::PropulsionModelOptions{
                     stage.ignitionDelaySec, stage.ignitionRampSec,
                     stage.shutdownTimeSec, stage.shutdownRampSec,
-                    stage.maxGimbalPitchRad, stage.maxGimbalYawRad});
+                    stage.maxGimbalPitchRad, stage.maxGimbalYawRad,
+                    stage.aircraftEngine.enabled,
+                    stage.aircraftEngine.seaLevelStaticThrustN,
+                    stage.aircraftEngine.pressureLapseExponent,
+                    stage.aircraftEngine.tsfcKgPerNPerS,
+                    stage.aircraftEngine.throttle});
             const double burnDuration = prop->burnDuration();
             plan.poolIds.push_back(backend->registerPropulsion(std::move(prop)));
             plan.burnDurations.push_back(burnDuration);

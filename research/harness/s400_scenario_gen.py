@@ -360,6 +360,11 @@ def awacs_entity(template):
             "cd": 0.020, "cl_alpha": 4.2, "cl_fin": 0.0, "cl_max": 1.45,
         }),
         "propulsion": {
+            # Airbreathing turboprop deck, matching the shipped
+            # erieye_awacs.entity.json. The old constant 35 kN / 7200 s /
+            # Isp 3000 curve was a rocket pretending to be an engine; it
+            # also masked the missing level-flight autopilot. 56 kN static
+            # lapses to the equilibrium cruise thrust at FL200 (~175 m/s).
             "stages": [{
                 "propellant_mass_kg": 3500.0, "dry_mass_kg": 0.0,
                 "vacuum_isp": 3000.0, "sea_level_isp": 3000.0,
@@ -368,8 +373,13 @@ def awacs_entity(template):
                 "max_gimbal_pitch_rad": 0.0, "max_gimbal_yaw_rad": 0.0,
                 "max_gimbal_rate_rad_per_sec": 0.0, "gimbal_time_constant_sec": 0.02,
                 "engine_position_x": 0.0, "engine_position_y": 0.0, "engine_position_z": 0.0,
-                "thrust_curve": [{"time_s": 0.0, "thrust_n": 35000.0},
-                                 {"time_s": 7200.0, "thrust_n": 35000.0}],
+                "aircraft_engine": {
+                    "enabled": True,
+                    "sea_level_static_thrust_n": 56000.0,
+                    "pressure_lapse_exponent": 0.7,
+                    "tsfc_kg_per_n_per_s": 1.0e-5,
+                    "throttle": 1.0,
+                },
             }],
         },
         "seeker": dict(template["seeker"], **{"type": "none", "transmitter_power_w": 0.0,

@@ -668,10 +668,26 @@ void to_json(json& j, const StageConfig& s) {
     if (!s.nozzlePositions.empty()) {
         j["nozzle_positions"] = s.nozzlePositions;
     }
+    // Emitted only when enabled: an absent block keeps a rocket stage's file
+    // byte-identical to before this feature existed.
+    if (s.aircraftEngine.enabled) {
+        j["aircraft_engine"] = {
+            {"enabled", s.aircraftEngine.enabled},
+            {"sea_level_static_thrust_n", s.aircraftEngine.seaLevelStaticThrustN},
+            {"pressure_lapse_exponent", s.aircraftEngine.pressureLapseExponent},
+            {"tsfc_kg_per_n_per_s", s.aircraftEngine.tsfcKgPerNPerS},
+            {"throttle", s.aircraftEngine.throttle},
+        };
+    }
 }
 
 void from_json(const json& j, StageConfig& s) {
-    s.thrustCurve = j.at("thrust_curve").get<std::vector<Models::ThrustDataPoint>>();
+    // thrust_curve is optional: an airbreathing (aircraft) stage declares its
+    // engine instead and carries an empty curve.
+    s.thrustCurve.clear();
+    if (j.contains("thrust_curve") && j.at("thrust_curve").is_array()) {
+        s.thrustCurve = j.at("thrust_curve").get<std::vector<Models::ThrustDataPoint>>();
+    }
     s.vacuumIsp = j.at("vacuum_isp").get<double>();
     s.seaLevelIsp = j.at("sea_level_isp").get<double>();
     s.propellantMassKg = j.at("propellant_mass_kg").get<double>();
@@ -689,6 +705,16 @@ void from_json(const json& j, StageConfig& s) {
     s.enginePositionZ = j.value("engine_position_z", s.enginePositionZ);
     if (j.contains("nozzle_positions") && j.at("nozzle_positions").is_array()) {
         s.nozzlePositions = j.at("nozzle_positions").get<std::vector<std::array<double, 3>>>();
+    }
+    s.aircraftEngine = AircraftEngineConfig{};
+    if (j.contains("aircraft_engine") && j.at("aircraft_engine").is_object()) {
+        const auto& e = j.at("aircraft_engine");
+        auto& eng = s.aircraftEngine;
+        eng.enabled = e.value("enabled", eng.enabled);
+        eng.seaLevelStaticThrustN = e.value("sea_level_static_thrust_n", eng.seaLevelStaticThrustN);
+        eng.pressureLapseExponent = e.value("pressure_lapse_exponent", eng.pressureLapseExponent);
+        eng.tsfcKgPerNPerS = e.value("tsfc_kg_per_n_per_s", eng.tsfcKgPerNPerS);
+        eng.throttle = e.value("throttle", eng.throttle);
     }
 }
 

@@ -127,6 +127,34 @@ static void serializationChecks()
     const std::string ms = serializeVehicleConfig(missileCfg);
     VehicleConfig mrt = deserializeVehicleConfig(ms);
     check(!mrt.aero.airframe.enabled(), "missile (no wing) stays non-aircraft");
+
+    // Airbreathing engine deck round-trips, and a plain rocket stage does NOT
+    // pick one up (it must stay byte-identical for existing scenarios).
+    VehicleConfig jetCfg;
+    jetCfg.propulsion.stages.emplace_back();
+    auto& jetStage = jetCfg.propulsion.stages.back();
+    jetStage.propellantMassKg = 3500.0;
+    jetStage.aircraftEngine.enabled = true;
+    jetStage.aircraftEngine.seaLevelStaticThrustN = 56000.0;
+    jetStage.aircraftEngine.tsfcKgPerNPerS = 1.0e-5;
+    const VehicleConfig jetRt = deserializeVehicleConfig(serializeVehicleConfig(jetCfg));
+    check(jetRt.propulsion.stages.size() == 1 &&
+              jetRt.propulsion.stages[0].aircraftEngine.enabled,
+          "airbreathing engine round-trips enabled");
+    check(std::abs(jetRt.propulsion.stages[0].aircraftEngine.seaLevelStaticThrustN - 56000.0) < 1e-9 &&
+              std::abs(jetRt.propulsion.stages[0].aircraftEngine.tsfcKgPerNPerS - 1.0e-5) < 1e-15,
+          "airbreathing deck parameters preserved");
+
+    // A rocket stage (no airbreathing deck) must come back with the feature
+    // off, so existing scenarios keep their exact behaviour.
+    VehicleConfig rocketCfg;
+    rocketCfg.propulsion.stages.emplace_back();
+    rocketCfg.propulsion.stages[0].thrustCurve = {
+        {0.0, 1000.0}, {1.0, 900.0}, {1.5, 0.0}};
+    const VehicleConfig rocketRt =
+        deserializeVehicleConfig(serializeVehicleConfig(rocketCfg));
+    check(!rocketRt.propulsion.stages[0].aircraftEngine.enabled,
+          "a rocket stage defaults to no airbreathing engine");
 }
 
 // Longish flight on a powered aircraft; asserts it holds altitude (does not
